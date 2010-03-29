@@ -682,9 +682,9 @@ print_symbol (void *args)
       switch (SYMBOL_CLASS (symbol))
 	{
 	case LOC_CONST:
-	  fprintf_filtered (outfile, "const %d (0x%x)",
+	  fprintf_filtered (outfile, "const %d (0x%s)",
 			    SYMBOL_VALUE (symbol),
-			    SYMBOL_VALUE (symbol));
+			    paddr_nz (SYMBOL_VALUE (symbol)));
 	  break;
 
 	case LOC_CONST_BYTES:
@@ -720,17 +720,18 @@ print_symbol (void *args)
 	  break;
 
 	case LOC_ARG:
-	  fprintf_filtered (outfile, "arg at offset 0x%x",
-			    SYMBOL_VALUE (symbol));
+	  fprintf_filtered (outfile, "arg at offset 0x%s",
+			    paddr_nz (SYMBOL_VALUE (symbol)));
 	  break;
 
 	case LOC_LOCAL_ARG:
-	  fprintf_filtered (outfile, "arg at offset 0x%x from fp",
-			    SYMBOL_VALUE (symbol));
+	  fprintf_filtered (outfile, "arg at offset 0x%s from fp",
+			    paddr_nz (SYMBOL_VALUE (symbol)));
 	  break;
 
 	case LOC_REF_ARG:
-	  fprintf_filtered (outfile, "reference arg at 0x%x", SYMBOL_VALUE (symbol));
+	  fprintf_filtered (outfile, "reference arg at 0x%s", 
+                            paddr_nz (SYMBOL_VALUE (symbol)));
 	  break;
 
 	case LOC_REGPARM:
@@ -742,18 +743,18 @@ print_symbol (void *args)
 	  break;
 
 	case LOC_LOCAL:
-	  fprintf_filtered (outfile, "local at offset 0x%x",
-			    SYMBOL_VALUE (symbol));
+	  fprintf_filtered (outfile, "local at offset 0x%s",
+			    paddr_nz (SYMBOL_VALUE (symbol)));
 	  break;
 
 	case LOC_BASEREG:
-	  fprintf_filtered (outfile, "local at 0x%x from register %d",
-			    SYMBOL_VALUE (symbol), SYMBOL_BASEREG (symbol));
+	  fprintf_filtered (outfile, "local at 0x%s from register %d",
+			    paddr_nz (SYMBOL_VALUE (symbol)), SYMBOL_BASEREG (symbol));
 	  break;
 
 	case LOC_BASEREG_ARG:
-	  fprintf_filtered (outfile, "arg at 0x%x from register %d",
-			    SYMBOL_VALUE (symbol), SYMBOL_BASEREG (symbol));
+	  fprintf_filtered (outfile, "arg at 0x%s from register %d",
+			    paddr_nz (SYMBOL_VALUE (symbol)), SYMBOL_BASEREG (symbol));
 	  break;
 
 	case LOC_TYPEDEF:

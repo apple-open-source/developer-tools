@@ -1,23 +1,24 @@
-/* -*- c-file-style: "java"; indent-tabs-mode: nil; fill-column: 78 -*-
- * 
+/* -*- c-file-style: "java"; indent-tabs-mode: nil; tab-width: 4; fill-column: 78 -*-
+ *
  * distcc -- A simple distributed compiler system
  *
  * Copyright (C) 2002, 2003, 2004 by Martin Pool
+ * Copyright 2008 Google Inc.
  *
  * This program is free software; you can redistribute it and/or
- * modify it under the terms of the GNU General Public License as
- * published by the Free Software Foundation; either version 2 of the
- * License, or (at your option) any later version.
+ * modify it under the terms of the GNU General Public License
+ * as published by the Free Software Foundation; either version 2
+ * of the License, or (at your option) any later version.
  *
- * This program is distributed in the hope that it will be useful, but
- * WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
- * General Public License for more details.
- * 
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ *
  * You should have received a copy of the GNU General Public License
  * along with this program; if not, write to the Free Software
- * Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA 02111-1307
- * USA
+ * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301,
+ * USA.
  */
 
 
@@ -25,7 +26,7 @@
                          * never had a reason until now"
                          *              -- mbp                        */
 
-#include "config.h"
+#include <config.h>
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -81,12 +82,12 @@
  **/
 
 
-#if defined(__FreeBSD__) 
+#if defined(__FreeBSD__)
 static ssize_t sys_sendfile(int ofd, int ifd, off_t *offset, size_t size)
 {
     off_t sent_bytes;
     int ret;
-    
+
     /* According to the manual, this can never partially complete on a
      * socket open for blocking IO. */
     ret = sendfile(ifd, ofd, *offset, size, 0, &sent_bytes, 0);
@@ -115,36 +116,6 @@ static ssize_t sys_sendfile(int ofd, int ifd, off_t *offset, size_t size)
         return -1;
     }
 }
-#elif defined(__APPLE__)
-static ssize_t sys_sendfile(int ofd, int ifd, off_t *offset, size_t size) 
-{ 
-    off_t sent_bytes = size;
-
-    int ret = sendfile(ifd, ofd, *offset, &sent_bytes, NULL, 0);
-    if (ret == -1) { 
-        if (errno == EAGAIN) { 
-            if (sent_bytes == 0) { 
-                return -1;
-            }
-            else { 
-                *offset += sent_bytes;
-                return sent_bytes;
-            }
-        }
-        else { 
-            return -1;
-        }
-    }
-    else if (ret == 0) { 
-        *offset += size;
-        return size;
-    }
-    else { 
-        rs_log_error("don't know how to handle return %d from Darwin sendfile",
-                     ret);
-        return -1;
-    }
-}
 #elif defined(linux)
 static ssize_t sys_sendfile(int ofd, int ifd, off_t *offset, size_t size)
 {
@@ -155,7 +126,7 @@ static ssize_t sys_sendfile(int ofd, int ifd, off_t *offset, size_t size)
 static ssize_t sys_sendfile(int ofd, int ifd, off_t *offset, size_t size)
 {
     ssize_t ret;
-    
+
     ret = sendfile(ofd, ifd, *offset, size, NULL, 0);
     if (ret == -1) {
         return -1;
@@ -168,15 +139,47 @@ static ssize_t sys_sendfile(int ofd, int ifd, off_t *offset, size_t size)
         return -1;
     }
 }
-#else
-#warning "Please write a sendfile implementation for this system"
+#elif defined(__MACH__) && defined(__APPLE__)
 static ssize_t sys_sendfile(int ofd, int ifd, off_t *offset, size_t size)
+{
+    off_t sent_bytes = size;
+    int ret;
+
+    ret = sendfile(ofd, ifd, *offset, &sent_bytes, NULL, 0);
+    if (ret == -1) {
+        if (errno == EAGAIN) {
+            if (sent_bytes == 0) {
+                /* Didn't send anything. Return error with errno == EAGAIN. */
+                return -1;
+            } else {
+                /* We sent some bytes, but they we would block.  Treat this as
+                 * success for now. */
+                *offset += sent_bytes;
+                return sent_bytes;
+            }
+        } else {
+            /* some other error */
+            return -1;
+        }
+    } else if (ret == 0) {
+        *offset += size;
+        return size;
+    } else {
+        rs_log_error("don't know how to handle return %d from OS X sendfile",
+                     ret);
+        return -1;
+    }
+}
+#else
+/* Please write a sendfile implementation for your system! */
+static ssize_t sys_sendfile(int UNUSED(ofd), int UNUSED(ifd),
+                            off_t *UNUSED(offset), size_t UNUSED(size))
 {
     rs_log_warning("no sendfile implementation on this platform");
     errno = ENOSYS;
     return -1;
 }
-#endif /* !(__FreeBSD__) && !def(linux) */
+#endif /* !(__FreeBSD__) && !def(linux) && ... */
 
 
 /*
@@ -201,24 +204,24 @@ dcc_pump_sendfile(int ofd, int ifd, size_t size)
 
         sent = sys_sendfile(ofd, ifd, &offset, size);
         if (sent == -1) {
-            if ((errno == ENOSYS || errno == EINVAL) && offset == 0) {
-                /* The offset==0 tests is because we may be part way through
-                 * the file.  We can't just naively go back to read/write
-                 * because sendfile() does not update the file pointer: we
-                 * would need to lseek() first.  That case is not handled at
-                 * the moment because it's unlikely that sendfile() would
-                 * suddenly be unsupported while we're using it.  A failure
-                 * halfway through probably indicates a genuine error.*/
-
-                rs_log_info("decided to use read/write rather than sendfile");
-                return dcc_pump_readwrite(ofd, ifd, size);
-            } else if (errno == EAGAIN) {
+            if (errno == EAGAIN) {
                 /* Sleep until we're able to write out more data. */
                 if ((ret = dcc_select_for_write(ofd, dcc_io_timeout)) != 0)
                     return ret;
                 rs_trace("select() returned, continuing to write");
             } else if (errno == EINTR) {
                 rs_trace("sendfile() interrupted, continuing");
+            } else if (offset == 0) {
+                /* The offset==0 tests is because we may be part way through
+                 * the file.  We can't just naively go back to read/write
+                 * because sendfile() does not update the file pointer: we
+                 * would need to lseek() first.  That case is not handled at
+                 * the moment because it's unlikely that sendfile() would
+                 * suddenly be unsupported while we're using it.  A failure
+                 * halfway through probably indicates a genuine error.
+                 */
+                rs_log_info("decided to use read/write rather than sendfile");
+                return dcc_pump_readwrite(ofd, ifd, size);
             } else {
                 rs_log_error("sendfile failed: %s", strerror(errno));
                 return EXIT_IO_ERROR;
@@ -239,4 +242,3 @@ dcc_pump_sendfile(int ofd, int ifd, size_t size)
     return 0;
 }
 #endif /* def HAVE_SENDFILE */
-

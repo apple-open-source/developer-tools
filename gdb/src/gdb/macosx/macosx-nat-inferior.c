@@ -42,6 +42,8 @@
 #include "checkpoint.h"
 #include "value.h"
 #include "gdb_regex.h"
+#include "osabi.h"
+#include "gdb_assert.h"
 #include "objc-lang.h"
 
 #include "bfd.h"
@@ -58,6 +60,7 @@
 #include <sys/sysctl.h>
 #include <sys/proc.h>
 #include <mach/mach_error.h>
+#include <spawn.h>
 
 #include <semaphore.h>
 
@@ -99,8 +102,9 @@
 #elif defined (TARGET_POWERPC)
 #define SINGLE_STEP 5
 #elif defined (TARGET_ARM)
-#define SINGLE_STEP 5  /* ARM HACK - the system doesn't support 
-			  hardware single stepping...  */
+#define SINGLE_STEP 1
+#define SINGLE_STEP_2 0
+#include "arm-macosx-tdep.h"
 #else
 #error "unknown architecture"
 #endif
@@ -139,6 +143,8 @@ extern void init_exec_ops (void);
 extern int inferior_auto_start_dyld_flag;
 
 int macosx_fake_resume = 0;
+
+static int announce_attach = 1;
 
 enum macosx_source_type
 {
@@ -695,7 +701,12 @@ get_exception_type (struct macosx_exception_thread_message *msg)
   if (msg->exception_type == EXC_BREAKPOINT)
     {
       if (msg->data_count == 2
+#ifdef SINGLE_STEP_2
+	  && msg->exception_data[0] == SINGLE_STEP
+	  && msg->exception_data[1] == SINGLE_STEP_2)
+#else
 	  && msg->exception_data[0] == SINGLE_STEP)
+#endif
 	return ss_event;
       else
 	return bp_event;
@@ -1778,12 +1789,15 @@ macosx_child_attach (char *args, int from_tty)
   macosx_inferior_destroy (macosx_status);
 
   exec_file = get_exec_file (0);
-  if (exec_file)
-    printf_filtered ("Attaching to program: `%s', %s.\n",
-                     exec_file, target_pid_to_str (pid_to_ptid (pid)));
-  else
-    printf_filtered ("Attaching to %s.\n",
-                     target_pid_to_str (pid_to_ptid (pid)));
+  if (announce_attach)
+    {
+      if (exec_file)
+        printf_filtered ("Attaching to program: `%s', %s.\n",
+                         exec_file, target_pid_to_str (pid_to_ptid (pid)));
+      else
+        printf_filtered ("Attaching to %s.\n",
+                         target_pid_to_str (pid_to_ptid (pid)));
+    }
 
   /* classic-inferior-support
      A bit of a hack:  Despite being in the middle of macosx_child_attach(), 
@@ -2303,6 +2317,160 @@ macosx_ptrace_him (int pid)
     }
 }
 
+#if defined (TARGET_ARM)
+
+/* On the phone task_for_pid() rights are marshalled done by the kernel.  */
+int
+macosx_get_task_for_pid_rights (void)
+{
+  return 1;
+}
+
+/* This version of macosx_child_create_inferior is needed to work
+   around the fact that the task port doesn't persist across a
+   fork/exec.  It would be nice if we could just switch to the new
+   task after the exec, but that is currently buggy, and the
+   PT_THUPDATE stops working.  So instead, this code just lets
+   posix_spawn launch the app (with the POSIX_SPAWN_START_SUSPENDED
+   argument telling the target to stop on the first instruction.)
+   Then we attach, and continue.
+   This version silently ignores the "start-with-shell" setting.  */
+
+static void
+macosx_child_create_inferior (char *exec_file, char *allargs, char **env,
+			      int from_tty)
+{  
+  pid_t new_pid;
+  char pid_str[32];
+  static int debug_setpgrp = 657473;
+  unsigned int i;
+  char **argt = NULL;
+  static char **argv;
+  char *fileptr;
+  posix_spawnattr_t attr;
+  int retval;
+  cpu_type_t cpu = 0;
+  const char *osabi_name = gdbarch_osabi_name (gdbarch_osabi (current_gdbarch));
+  struct gdb_exception e;
+
+  /* These comes from fork_child.c:  */
+  extern char *exec_pathname;
+  extern char *exec_argv0;
+
+  /* If no exec file handed to us, get it from the exec-file command
+     -- with a good, common error message if none is specified.  */
+  if (exec_file == 0)
+    exec_file = get_exec_file (1);
+  
+  if (exec_pathname[0] != '\0')
+    fileptr = exec_pathname;
+  else
+    fileptr = exec_file;
+  
+  argt = buildargv (allargs);
+  if (argt == NULL)
+    {
+      error ("unable to build argument vector for inferior process (out of memory)");
+    }
+
+  if ((allargs == NULL) || (allargs[0] == '\0'))
+    argt[0] = NULL;
+  for (i = 0; argt[i] != NULL; i++);
+  argv = (char **) xmalloc ((i + 1 + 1) * (sizeof *argt));
+  argv[0] = exec_file;
+  if (exec_argv0[0] != '\0')
+    argv[0] = exec_argv0;
+  memcpy (&argv[1], argt, (i + 1) * sizeof (*argt));
+  /* freeargv (argt); */
+  
+#if defined (TARGET_POWERPC)
+  if (strcmp (osabi_name, "Darwin") == 0)
+    {
+      cpu = CPU_TYPE_POWERPC;
+    }
+  else if (strcmp (osabi_name, "Darwin64") == 0)
+    {
+      cpu = CPU_TYPE_POWERPC64;
+    }
+#elif defined (TARGET_I386)
+  if (strcmp (osabi_name, "Darwin") == 0)
+    {
+      cpu = CPU_TYPE_I386;
+    }
+  else if (strcmp (osabi_name, "Darwin64") == 0)
+    {
+      cpu = CPU_TYPE_X86_64;
+    }
+#elif defined (TARGET_ARM)
+
+#if 0
+  /* Don't set the CPU type for ARM as we currently can't reliably set
+     the CPU type with posix_spawnattr_setbinpref_np as it will pick the 
+     first CPU type that matches CPU_TYPE_ARM which isn't necessarily the
+     one that we want to run. If we ever want to use 
+     posix_spawnattr_setbinpref_np for ARM, we will also need a way to set
+     the CPU subtype.  */
+  if (strcmp (osabi_name, "Darwin") == 0)
+    {
+      cpu = CPU_TYPE_ARM;
+    }
+  else if (strcmp (osabi_name, "DarwinV6") == 0)
+    {
+      cpu = CPU_TYPE_ARM;
+    }
+  else if (strcmp (osabi_name, "DarwinV7") == 0)
+    {
+      cpu = CPU_TYPE_ARM;
+    }
+#endif
+#endif
+
+  retval = posix_spawnattr_init (&attr);
+  if (retval != 0)
+    error ("Couldn't initialize attributes for posix_spawn, error: %d", retval);
+
+  retval = posix_spawnattr_setflags(&attr, POSIX_SPAWN_START_SUSPENDED);
+  if (retval != 0)
+    error ("Couldn't add POSIX_SPAWN_SETEXEC to attributes, error: %d", retval);
+
+  if (cpu != 0)
+    {
+      size_t copied = 0;	
+      retval = posix_spawnattr_setbinpref_np(&attr, 1, &cpu, &copied);
+      if (retval != 0 || copied != 1)
+	  error ("Couldn't set the binary preferences, error: %d", retval);
+    }
+  retval = posix_spawnattr_setpgroup (&attr, debug_setpgrp);
+  if (retval != 0)
+    error ("Couldn't set the process group, error: %d", retval);
+
+  retval = posix_spawnp (&new_pid, fileptr, NULL,  &attr, argv, env);
+
+  snprintf (pid_str, 31, "%d", new_pid);
+
+  announce_attach = 0;
+  TRY_CATCH (e, RETURN_MASK_ERROR)
+    {
+      macosx_child_attach (pid_str, from_tty);
+    }
+  announce_attach = 1;
+  /* Clear the attach flag that was set by calling macosx_child_attach() so
+     if/when gdb is quit it won't keep the child process around and 
+     running.  */
+  attach_flag = 0;
+
+  if (e.reason != NO_ERROR)
+    throw_exception (e);
+
+  if (target_can_async_p ())
+    target_async (inferior_event_handler, 0);
+
+  clear_proceed_status ();
+  proceed ((CORE_ADDR) - 1, TARGET_SIGNAL_0, 0);
+
+}
+#else /* #if defined (TARGET_ARM)  */
+
 #include <Security/Security.h>
 
 int
@@ -2414,6 +2582,7 @@ macosx_get_task_for_pid_rights (void)
   return retval;
 }
 
+
 static void
 macosx_child_create_inferior (char *exec_file, char *allargs, char **env,
 			      int from_tty)
@@ -2435,7 +2604,7 @@ macosx_child_create_inferior (char *exec_file, char *allargs, char **env,
   if (ptid_equal (inferior_ptid, null_ptid))
     return;
 
-  macosx_dyld_create_inferior_hook ();
+  macosx_dyld_create_inferior_hook ((CORE_ADDR) - 1);
 
   attach_flag = 0;
 
@@ -2445,6 +2614,7 @@ macosx_child_create_inferior (char *exec_file, char *allargs, char **env,
   clear_proceed_status ();
   proceed ((CORE_ADDR) - 1, TARGET_SIGNAL_0, 0);
 }
+#endif
 
 static void
 macosx_child_files_info (struct target_ops *ops)
@@ -2711,287 +2881,6 @@ macosx_async (void (*callback) (enum inferior_event_type event_type,
     }
 }
 
-/* This flag tells us whether we've determined that malloc
-   is unsafe since the last time we stopped (excepting hand_call_functions.)
-   -1 means we haven't checked yet.
-   0 means it is safe
-   1 means it is unsafe.
-   If you set this, be sure to add a hand_call_cleanup to restore it.  */
-
-static int malloc_unsafe_flag = -1;
-
-static void
-do_reset_malloc_unsafe_flag (void *unused)
-{
-  malloc_unsafe_flag = -1;
-}
-
-/* macosx_check_malloc_is_unsafe calls into LibC to see if the malloc lock is taken
-   by any thread.  It returns 1 if malloc is locked, 0 if malloc is unlocked, and
-   -1 if LibC doesn't support the malloc lock check function. */
-
-static int
-macosx_check_malloc_is_unsafe ()
-{
-  static struct cached_value *malloc_check_fn = NULL;
-  struct cleanup *scheduler_cleanup;
-  struct value *tmp_value;
-  struct gdb_exception e;
-  int success;
-
-  if (malloc_unsafe_flag != -1)
-      return malloc_unsafe_flag;
-
-  if (malloc_check_fn == NULL)
-    {
-      if (lookup_minimal_symbol("malloc_gdb_po_unsafe", 0, 0))
-        {
-          struct type *func_type;
-          func_type = builtin_type_int;
-          func_type = lookup_function_type (func_type);
-          func_type = lookup_pointer_type (func_type);
-          malloc_check_fn = create_cached_function ("malloc_gdb_po_unsafe",
-						   func_type);
-        }
-      else
-	return -1;
-    }
-
-  scheduler_cleanup = make_cleanup_set_restore_scheduler_locking_mode
-    (scheduler_locking_on);
-  /* Suppress the objc runtime mode checking here.  */
-  make_cleanup_set_restore_debugger_mode (NULL, -1);
-
-  make_cleanup_set_restore_unwind_on_signal (1);
-
-  TRY_CATCH (e, RETURN_MASK_ALL)
-    {
-      tmp_value = call_function_by_hand (lookup_cached_function (malloc_check_fn),
-                                         0, NULL);
-    }
-
-  do_cleanups (scheduler_cleanup);
-
-  /* If we got an error calling the malloc_check_fn, assume it is not
-     safe to call... */
-
-  if (e.reason != NO_ERROR)
-    return 1;
-
-  success = value_as_long (tmp_value);
-  if (success == 0 || success == 1)
-    {
-      malloc_unsafe_flag = success;
-      make_hand_call_cleanup (do_reset_malloc_unsafe_flag, 0);
-      return success;
-    }
-  else
-    {
-      warning ("Got unexpected value from malloc_gdb_po_unsafe: %d.", success);
-      return 1;
-    }
-
-  return -1;
-}
-
-/* This code implements the Mac OS X side of the safety checks given
-   in target_check_safe_call.  The list of modules is defined in
-   defs.h.  */
-
-enum {
-  MALLOC_SUBSYSTEM_INDEX = 0,
-  LOADER_SUBSYSTEM_INDEX = 1,
-  OBJC_SUBSYSTEM_INDEX = 2,
-  SPINLOCK_SUBSYSTEM_INDEX = 3,
-  LAST_SUBSYSTEM_INDEX = 4,
-};
-
-static char *macosx_unsafe_regexes[] = {"(^(m|c|re|v)?alloca*)|(::[^ ]*allocator)|(^szone_)",
-					 "(^dlopen)|(^__dyld)|(^dyld)|(NSBundle load)|"
-					"(NSBundle unload)|(CFBundleLoad)|(CFBundleUnload)",
-					"(_class_lookup)|(^objc_lookUpClass)|(^look_up_class)",
-                                        "(^__spin_lock)|(^pthread_mutex_lock)|(^pthread_mutex_unlock)|(^__spin_unlock)"};
-
-/* This is the Mac OS X implementation of target_check_safe_call.  */
-int
-macosx_check_safe_call (int which, enum check_which_threads thread_mode)
-{
-  int retval = 1;
-  regex_t unsafe_patterns[LAST_SUBSYSTEM_INDEX];
-  int num_unsafe_patterns = 0;
-  int depth = 0;
-
-  static regex_t macosx_unsafe_patterns[LAST_SUBSYSTEM_INDEX];
-  static int patterns_initialized = 0;
-  
-  if (!patterns_initialized)
-    {
-      int i;
-      patterns_initialized = 1;
-
-      for (i = 0; i < LAST_SUBSYSTEM_INDEX; i++)
-	{
-	  int err_code;
-	  err_code = regcomp (&(macosx_unsafe_patterns[i]), 
-			      macosx_unsafe_regexes[i],
-			      REG_EXTENDED|REG_NOSUB);
-	  if (err_code != 0)
-	    {
-	      char err_str[512];
-	      regerror (err_code, &(macosx_unsafe_patterns[i]),
-			err_str, 512);
-	      internal_error (__FILE__, __LINE__,
-			      "Couldn't compile unsafe call pattern %s, error %s", 
-			      macosx_unsafe_regexes[i], err_str);
-	    }
-	}
-
-    }
-
-  /* Because check_safe_call will potentially scan all threads, which can be
-     time consuming, we accumulate all the regexp patterns we are going to
-     apply into UNSAFE_PATTERNS and pass them at one go to check_safe_call.  */
-
-  if (which & MALLOC_SUBSYSTEM)
-    {
-      int malloc_unsafe;
-      if (macosx_get_malloc_inited () == 0)
-	{
-	  ui_out_text (uiout, "Unsafe to run code: ");
-	  ui_out_field_string (uiout, "problem", "malloc library is not initialized yet");
-	  ui_out_text (uiout, ".\n");
-	  return 0;
-	}
-
-      /* macosx_check_malloc_is_unsafe doesn't tell us about the current thread.
-	 So if the caller has asked explicitly about the current thread only, try
-	 the patterns.  */
-      if (thread_mode == CHECK_CURRENT_THREAD)
-	malloc_unsafe = -1;
-      else
-	malloc_unsafe = macosx_check_malloc_is_unsafe ();
-
-      if (malloc_unsafe == 1)
-	{
-	  ui_out_text (uiout, "Unsafe to run code: ");
-	  ui_out_field_string (uiout, "problem", "malloc zone lock is held for some zone.");
-	  ui_out_text (uiout, ".\n");
-	  return 0;
-	}
-      else if (malloc_unsafe == -1)
-	{
-	  unsafe_patterns[num_unsafe_patterns] 
-	    = macosx_unsafe_patterns[MALLOC_SUBSYSTEM_INDEX];
-	  num_unsafe_patterns++;
-	  if (depth < 5)
-	    depth = 5;
-	}
-    }
-
-  if (which & OBJC_SUBSYSTEM)
-    {
-      struct cleanup *runtime_cleanup;
-      enum objc_debugger_mode_result objc_retval;
-      
-      /* Again, the debugger mode requires you only run the current thread.  If the
-	 caller requested information about the current thread, that means she will
-	 be running the all threads - just with code on the current thread.  So we
-	 shouldn't use the debugger mode.  */
-
-      if (thread_mode != CHECK_CURRENT_THREAD)
-	{
-	  objc_retval = make_cleanup_set_restore_debugger_mode (&runtime_cleanup, 0);
-	  do_cleanups (runtime_cleanup);
-	  if (objc_retval == objc_debugger_mode_success)
-	    {
-	      return 1;
-	    }
-	}
-
-      if (thread_mode == CHECK_CURRENT_THREAD
-	  || objc_retval == objc_debugger_mode_fail_objc_api_unavailable)
-        {
-          unsafe_patterns[num_unsafe_patterns]
-            = macosx_unsafe_patterns[OBJC_SUBSYSTEM_INDEX];
-          num_unsafe_patterns++;
-          if (depth < 5)
-            depth = 5;
-        }
-      else
-        {
-          ui_out_text (uiout, "Unsafe to run code: ");
-          ui_out_field_string (uiout, "problem", "objc runtime lock is held");
-          ui_out_text (uiout, ".\n");
-          return 0;
-        }
-    }
-
-  if (which & LOADER_SUBSYSTEM)
-    {
-      /* FIXME - There's a better way to do this in SL. */
-      struct minimal_symbol *dyld_lock_p;
-      int got_it_easy = 0;
-      dyld_lock_p = lookup_minimal_symbol ("_dyld_global_lock_held", 0, 0);
-      if (dyld_lock_p != NULL)
-	{
-	  ULONGEST locked;
-
-	  if (safe_read_memory_unsigned_integer (SYMBOL_VALUE_ADDRESS (dyld_lock_p), 
-						 4, &locked))
-	    {
-	      got_it_easy = 1;
-	      if (locked == 1)
-		return 0;
-	    }
-	}
-	    
-      if (!got_it_easy)
-	{
-	  unsafe_patterns[num_unsafe_patterns] 
-	    = macosx_unsafe_patterns[LOADER_SUBSYSTEM_INDEX];
-	  num_unsafe_patterns++;
-	  if (depth < 5)
-	    depth = 5;
-	}
-    }
-  
-  if (which & SPINLOCK_SUBSYSTEM)
-    {
-      unsafe_patterns[num_unsafe_patterns] 
-	= macosx_unsafe_patterns[SPINLOCK_SUBSYSTEM_INDEX];
-      num_unsafe_patterns++;
-      if (depth < 1)
-	depth = 1;
-    }      
-
-  if (num_unsafe_patterns > 0)
-    { 
-      retval = check_safe_call (unsafe_patterns, num_unsafe_patterns, depth, 
-				thread_mode);
-    }
-
-  return retval;
-}
-
-void
-macosx_print_extra_stop_info (int code, CORE_ADDR address)
-{
-  ui_out_text (uiout, "Reason: ");
-  switch (code)
-    {
-    case KERN_PROTECTION_FAILURE:
-      ui_out_field_string (uiout, "access-reason", "KERN_PROTECTION_FAILURE");
-      break;
-    case KERN_INVALID_ADDRESS:
-      ui_out_field_string (uiout, "access-reason", "KERN_INVALID_ADDRESS");
-      break;
-    default:
-      ui_out_field_int (uiout, "access-reason", code);
-    }
-  ui_out_text (uiout, " at address: ");
-  ui_out_field_core_addr (uiout, "address", address);
-  ui_out_text (uiout, "\n");
-}
 
 /* Info for a random fork (actually a random process). When fork-based checkpoints
    are fully functional, this can go away.  */
@@ -3200,153 +3089,6 @@ fork_memcache_put (struct checkpoint *cp)
     }
 }
 
-static struct cached_value *dlerror_function;
-
-static struct value *
-macosx_load_dylib (char *name, char *flags)
-{
-  /* We're basically just going to call dlopen, and return the
-     cookie that it returns.  BUT, we also have to make sure that
-     we can get the unlimited mode of the ObjC debugger mode, since
-     if the runtime is present, it is very likely that the new library
-     will change the runtime...  */
-
-  struct cleanup *debugger_mode_cleanup;
-  struct cleanup *sched_cleanup;
-  static struct cached_value *dlopen_function = NULL; 
-  struct value *arg_val[2];
-  struct value *ret_val;
-  int int_flags;
-  enum objc_debugger_mode_result objc_retval;
-
-  if (!macosx_check_safe_call (LOADER_SUBSYSTEM, CHECK_ALL_THREADS))
-    error ("Cannot call into the loader at present, it is locked.");
-
-  if (dlopen_function == NULL)
-    {
-      if (lookup_minimal_symbol ("dlopen", 0, 0))
-	{
-	  dlopen_function = create_cached_function ("dlopen", 
-						    builtin_type_voidptrfuncptr);
-	}
-    }
-
-  if (dlopen_function == NULL)
-    error ("Can't find dlopen function, so it is not possible to load shared libraries.");
-
-  if (dlerror_function == NULL)
-    {
-      if (lookup_minimal_symbol ("dlerror", 0, 0))
-	{
-	  dlerror_function = create_cached_function ("dlerror", 
-						    builtin_type_voidptrfuncptr);
-	}
-    }
-
-  /* Decode the flags:  */
-  int_flags = 0;
-  if (flags != NULL)
-    {
-      /* The list of flags should be in the form A|B|C, but I'm actually going to
-         do an even cheesier job of parsing, and just look for the elements I want.  */
-      if (strstr (flags, "RTLD_LAZY") != NULL)
-	int_flags |= RTLD_LAZY;
-      if (strstr (flags, "RTLD_NOW") != NULL)
-	int_flags |= RTLD_NOW;
-      if (strstr (flags, "RTLD_LOCAL") != NULL)
-	int_flags |= RTLD_LOCAL;
-      if (strstr (flags, "RTLD_GLOBAL") != NULL)
-	int_flags |= RTLD_GLOBAL;
-      if (strstr (flags, "RTLD_NOLOAD") != NULL)
-	int_flags |= RTLD_NOLOAD;
-      if (strstr (flags, "RTLD_NODELETE") != NULL)
-	int_flags |= RTLD_NODELETE;
-      if (strstr (flags, "RTLD_FIRST") != NULL)
-	int_flags |= RTLD_FIRST;
-    }
-
-  /* If the user didn't pass in anything, set some sensible defaults.  */
-  if (int_flags == 0)
-    int_flags = RTLD_GLOBAL|RTLD_NOW;
-
-  arg_val[1] = value_from_longest (builtin_type_int, int_flags);
-
-  /* Have to do the hand_call function cleanups here, since if the debugger mode is
-     already turned on, it may be turned on more permissively than we want.  */
-  do_hand_call_cleanups (ALL_CLEANUPS);
-
-  sched_cleanup = make_cleanup_set_restore_scheduler_locking_mode (scheduler_locking_on);
-
-  arg_val[0] = value_coerce_array (value_string (name, strlen (name) + 1));
-
-  objc_retval = make_cleanup_set_restore_debugger_mode (&debugger_mode_cleanup, 1);
-
-  if (objc_retval == objc_debugger_mode_fail_objc_api_unavailable)
-    if (target_check_safe_call (OBJC_SUBSYSTEM, CHECK_SCHEDULER_VALUE))
-      objc_retval = objc_debugger_mode_success;
-
-  if (objc_retval != objc_debugger_mode_success)
-    error ("Not safe to call dlopen at this time.");
-
-  ret_val = call_function_by_hand (lookup_cached_function (dlopen_function),
-				   2, arg_val);
-  do_cleanups (debugger_mode_cleanup);
-  do_cleanups (sched_cleanup);
-
-  /* Again we have to clear this out, since we don't want to preserve
-     this version of the debugger mode.  */
-
-  do_hand_call_cleanups (ALL_CLEANUPS);
-  if (ret_val != NULL)
-    {
-      CORE_ADDR dlopen_token;
-      dlopen_token = value_as_address (ret_val);
-      if (dlopen_token == 0)
-	{
-	  /* This indicates an error in the attempt to
-	     call dlopen.  Call dlerror to get a pointer 
-	     to the error message.  */
-
-	  char *error_str;
-	  int error_str_len;
-	  int read_error;
-	  CORE_ADDR error_addr;
-
-	  struct cleanup *scheduler_cleanup;
-
-	  if (dlerror_function == NULL)
-	    error ("dlopen got an error, but dlerror isn't available to report the error.");
-
-	  scheduler_cleanup =
-	    make_cleanup_set_restore_scheduler_locking_mode (scheduler_locking_on);
-
-	  ret_val = call_function_by_hand (lookup_cached_function (dlerror_function),
-								   0, NULL);
-	  /* Now read the string out of the target.  */
-	  error_addr = value_as_address (ret_val);
-	  error_str_len = target_read_string (error_addr, &error_str, INT_MAX,
-					      &read_error);
-	  if (read_error == 0)
-	    {
-	      make_cleanup (xfree, error_str);
-	      error ("Error calling dlopen for: \"%s\": \"%s\"", name, error_str);
-	    }
-	  else
-	    error ("Error calling dlopen for \"%s\", could not fetch error string.",
-		   name);
-	  
-	}
-      else
-	{
-	  ui_out_field_core_addr (uiout, "handle", value_as_address (ret_val));
-	  inferior_debug (1, "Return token was: %s.\n", paddr_nz (value_as_address (ret_val)));
-	}
-    }
-  else
-    inferior_debug (1, "Return value was NULL.\n");
-
-  return ret_val;
-}
 
 void
 _initialize_macosx_inferior ()
@@ -3427,6 +3169,12 @@ _initialize_macosx_inferior ()
   macosx_child_ops.to_check_safe_call = macosx_check_safe_call;
   macosx_child_ops.to_allocate_memory = macosx_allocate_space_in_inferior;
   macosx_child_ops.to_check_is_objfile_loaded = dyld_is_objfile_loaded;
+#if defined (TARGET_ARM)
+  macosx_child_ops.to_keep_going = arm_macosx_keep_going;
+  macosx_child_ops.to_save_thread_inferior_status = arm_macosx_save_thread_inferior_status;
+  macosx_child_ops.to_restore_thread_inferior_status = arm_macosx_restore_thread_inferior_status;
+  macosx_child_ops.to_free_thread_inferior_status = arm_macosx_free_thread_inferior_status;
+#endif
   macosx_child_ops.to_has_thread_control = tc_schedlock | tc_switch;
 
   macosx_child_ops.to_find_exception_catchpoints

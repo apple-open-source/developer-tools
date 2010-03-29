@@ -227,11 +227,12 @@ foo (int i, int i1, int i2, unsigned int u, double d, char *s, void *p,
   printf ("\0"); /* { dg-warning "embedded" "warning for embedded NUL" } */
   printf ("%d\0", i); /* { dg-warning "embedded" "warning for embedded NUL" } */
   printf ("%d\0%d", i, i); /* { dg-warning "embedded|too many" "warning for embedded NUL" } */
-  printf (NULL); /* { dg-warning "null" "null format string warning" } */
+  /* APPLE LOCAL 6821124 string arg is not non-null */
+  /* removed line */
   printf ("%"); /* { dg-warning "trailing" "trailing % warning" } */
   printf ("%++d", i); /* { dg-warning "repeated" "repeated flag warning" } */
   printf ("%n", cn); /* { dg-warning "constant" "%n with const" } */
   printf ((const char *)L"foo"); /* { dg-warning "wide" "wide string" } */
-  printf ("%n", (int *)0); /* { dg-warning "null" "%n with NULL" } */
-  printf ("%s", (char *)0); /* { dg-warning "null" "%s with NULL" } */
+  /* APPLE LOCAL 6821124 begin string arg is not non-null */
+  /* removed lines */
 }

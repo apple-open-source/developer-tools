@@ -3702,9 +3702,6 @@ parse_partial_symbols (struct objfile *objfile)
 	}
     }
 
-  /* APPLE LOCAL fix-and-continue */
-  PSYMTAB_OBSOLETED (pst) = 50;
-
   /* Remove the dummy psymtab created for -O3 images above, if it is
      still empty, to enable the detection of stripped executables.  */
   if (objfile->psymtabs->next == NULL

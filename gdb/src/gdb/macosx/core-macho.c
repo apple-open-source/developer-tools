@@ -342,7 +342,8 @@ struct core_cached_registers_raw
 struct core_cached_registers_raw
 {
       gdb_arm_thread_state_t *arm_gp_regs;
-      gdb_arm_thread_fpstate_t *arm_fp_regs;
+      gdb_arm_thread_vfpv1_state_t *arm_vfpv1_regs;
+      gdb_arm_thread_vfpv3_state_t *arm_vfpv3_regs;
 };
 
 #else
@@ -404,8 +405,11 @@ core_fetch_cached_thread_registers ()
   if (cached_regs_raw->arm_gp_regs)
     arm_macosx_fetch_gp_registers_raw (cached_regs_raw->arm_gp_regs);
 
-  if (cached_regs_raw->arm_fp_regs)
-    arm_macosx_fetch_vfp_registers_raw (cached_regs_raw->arm_fp_regs);
+  if (cached_regs_raw->arm_vfpv1_regs)
+    arm_macosx_fetch_vfpv1_regs_raw (cached_regs_raw->arm_vfpv1_regs);
+
+  if (cached_regs_raw->arm_vfpv3_regs)
+    arm_macosx_fetch_vfpv3_regs_raw (cached_regs_raw->arm_vfpv3_regs);
 
 #else
 
@@ -553,8 +557,16 @@ core_cache_section_registers (asection *sec, int flavour,
       break;
       
     case BFD_MACH_O_ARM_VFP_STATE:
-      cached_regs_raw->arm_fp_regs = (gdb_arm_thread_fpstate_t *) regs;
+      if (size/4 == GDB_ARM_THREAD_FPSTATE_VFPV1_COUNT)
+	{
+	  cached_regs_raw->arm_vfpv1_regs = (gdb_arm_thread_vfpv1_state_t *) regs;
       regs = NULL;
+	}
+      else if (size/4 == GDB_ARM_THREAD_FPSTATE_VFPV3_COUNT)
+	{
+	  cached_regs_raw->arm_vfpv3_regs = (gdb_arm_thread_vfpv3_state_t *) regs;
+	  regs = NULL;
+	}
       break;
     }
 #else
@@ -683,8 +695,11 @@ delete_core_thread_state_cache (struct thread_info *thrd_info)
       if (cached_regs_raw->arm_gp_regs) 
 	xfree (cached_regs_raw->arm_gp_regs);
 	
-      if (cached_regs_raw->arm_fp_regs) 
-	xfree (cached_regs_raw->arm_fp_regs);
+      if (cached_regs_raw->arm_vfpv1_regs) 
+	xfree (cached_regs_raw->arm_vfpv1_regs);
+	
+      if (cached_regs_raw->arm_vfpv3_regs) 
+	xfree (cached_regs_raw->arm_vfpv3_regs);
 	
 #else
 #error "unsupported architecture"
@@ -705,7 +720,7 @@ core_fetch_registers (int regno)
      index will hold the thread's first flavour of registers -- the GPRs
      -- and subsequent sections will contain other registers for this
      thread.  */
-  long tid = ptid_get_tid (inferior_ptid);
+  long tid;
   
   asection *sec;
   const char *thread_index_str = NULL;
@@ -856,8 +871,11 @@ core_store_registers (int regno)
   if (cached_regs_raw->arm_gp_regs)
     arm_macosx_store_gp_registers_raw (cached_regs_raw->arm_gp_regs);
 
-  if (cached_regs_raw->arm_fp_regs)
-    arm_macosx_store_vfp_registers_raw (cached_regs_raw->arm_fp_regs);
+  if (cached_regs_raw->arm_vfpv1_regs)
+    arm_macosx_store_vfpv1_regs_raw (cached_regs_raw->arm_vfpv1_regs);
+    
+  if (cached_regs_raw->arm_vfpv3_regs)
+    arm_macosx_store_vfpv3_regs_raw (cached_regs_raw->arm_vfpv3_regs);
     
 #else
 #error "unsupported architecture"

@@ -1,3 +1,36 @@
+2008-09-18  Greg Clayton  <gclayton@apple.com>
+
+	* arm-tdep.h (ARM_FPSCR_REGNUM): Renamed to ARM_VFP_REGNUM_FPSCR.
+	(ARM_VFP_PSEUDO_REGNUM_D0): Renamed to ARM_VFPV1_PSEUDO_REGNUM_D0.
+	(ARM_VFP_PSEUDO_REGNUM_D15): Renamed to ARM_VFPV1_PSEUDO_REGNUM_D15.
+	(ARM_NUM_VFP_PSEUDO_REGS): Renamed to ARM_NUM_VFPV1_PSEUDO_REGS.
+	(ARM_VFPV3_PSEUDO_REGNUM_D0): New value.
+	(ARM_VFPV3_PSEUDO_REGNUM_D15): New value.
+	(ARM_NUM_VFPV3_PSEUDO_REGS): New value.
+	(NUM_VFPV3_REGS): New define.
+	(enum arm_vfp_version): New enum that qualifies which VFP version
+	is being used in the gdbarch.
+ 	(struct gdbarch_tdep): Added a vfp_version member.
+	(struct register_info): Moved definition from arm-tdep.c.
+	(register_info_t): Moved typedef to header.
+	* arm-tdep.c (builtin_type_arm_psr): Removed.
+	(builtin_type_arm_fpscr): Removed.
+	(struct register_info): Moved to arm-tdep.h.
+	(register_info_t): Moved to arm-tdep.h.
+	(g_register_info): Defaults to the standard arm registers and all
+	offsets are now calculated in _initialize_arm_tdep function.
+	(arm_print_float_info): Revert to FSF version.
+	(build_builtin_type_arm_psr_mode_enum): Relocated to 
+	(build_builtin_type_arm_psr): Ditto.
+	(build_builtin_type_arm_fpscr): Ditto.
+	(thumb_get_next_pc): Fixed warning.
+	(set_disassembly_style): Removed reference to FPSCR. 
+	(arm_gdbarch_init): Initialize vfp_version in arch specific tdep
+	info to a valid value for each osabi.
+	(_initialize_arm_tdep): Init all register offsets in g_register_info
+	struct.
+	* gdbtypes.c (build_builtin_bitfield): Set type name properly.
+
 2008-05-23  Jason Molenda  (jmolenda@apple.com)
 
 	* configure.in (host_configargs): Add --disable-werror to configure

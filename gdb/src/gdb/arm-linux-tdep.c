@@ -181,7 +181,7 @@ arm_linux_push_arguments (int nargs, struct value **args, CORE_ADDR sp,
       if (TYPE_CODE_PTR == typecode
 	  && NULL != target_type
 	  && TYPE_CODE_FUNC == TYPE_CODE (target_type))
-	{
+	    {
 	  CORE_ADDR regval = extract_unsigned_integer (val, len);
 	  if (arm_pc_is_thumb (regval))
 	    store_unsigned_integer (val, len, MAKE_THUMB_ADDR (regval));

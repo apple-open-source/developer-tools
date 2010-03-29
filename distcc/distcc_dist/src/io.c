@@ -1,23 +1,24 @@
-/* -*- c-file-style: "java"; indent-tabs-mode: nil; fill-column: 78 -*-
- * 
+/* -*- c-file-style: "java"; indent-tabs-mode: nil; tab-width: 4; fill-column: 78 -*-
+ *
  * distcc -- A simple distributed compiler system
  *
  * Copyright (C) 2002, 2003, 2004 by Martin Pool
+ * Copyright 2007 Google Inc.
  *
  * This program is free software; you can redistribute it and/or
- * modify it under the terms of the GNU General Public License as
- * published by the Free Software Foundation; either version 2 of the
- * License, or (at your option) any later version.
+ * modify it under the terms of the GNU General Public License
+ * as published by the Free Software Foundation; either version 2
+ * of the License, or (at your option) any later version.
  *
- * This program is distributed in the hope that it will be useful, but
- * WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
- * General Public License for more details.
- * 
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ *
  * You should have received a copy of the GNU General Public License
  * along with this program; if not, write to the Free Software
- * Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA 02111-1307
- * USA
+ * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301,
+ * USA.
  */
 
 
@@ -34,7 +35,7 @@
  * TCP_CORK.
  */
 
-#include "config.h"
+#include <config.h>
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -112,10 +113,14 @@ int dcc_select_for_read(int fd,
 }
 
 
-
+/*
+ * Calls select() to block until the specified fd becomes writeable
+ * or has an error condition, or the timeout expires.
+ */
 int dcc_select_for_write(int fd, int timeout)
 {
-    fd_set fds;
+    fd_set write_fds;
+    fd_set except_fds;
     int rs;
 
     struct timeval tv;
@@ -124,11 +129,13 @@ int dcc_select_for_write(int fd, int timeout)
     tv.tv_usec = 0;
 
     while (1) {
-        FD_ZERO(&fds);
-        FD_SET(fd, &fds);
+        FD_ZERO(&write_fds);
+        FD_ZERO(&except_fds);
+        FD_SET(fd, &write_fds);
+        FD_SET(fd, &except_fds);
         rs_trace("select for write on fd%d", fd);
-        
-        rs = select(fd + 1, NULL, &fds, &fds, &tv);
+
+        rs = select(fd + 1, NULL, &write_fds, &except_fds, &tv);
 
         if (rs == -1 && errno == EINTR) {
             rs_trace("select was interrupted");
@@ -136,7 +143,22 @@ int dcc_select_for_write(int fd, int timeout)
         } else if (rs == -1) {
             rs_log_error("select failed: %s", strerror(errno));
             return EXIT_IO_ERROR;
+        } else if (rs == 0) {
+            rs_log_error("IO timeout");
+            return EXIT_IO_ERROR;
         } else {
+            if (FD_ISSET(fd, &except_fds)) {
+              rs_trace("error condition on fd%d", fd);
+              /*
+               * Don't fail here; we couldn't give a good error
+               * message, because we don't know what the error
+               * condition is.  Instead just return 0 (success),
+               * indicating that the select has successfully finished.
+               * The next call to write() for that fd will fail but
+               * will also set errno properly so that we can give a
+               * good error message at that point.
+               */
+            }
             return 0;
         }
     }
@@ -153,25 +175,25 @@ int dcc_readx(int fd, void *buf, size_t len)
     int ret;
 
     while (len > 0) {
-	r = read(fd, buf, len);
+        r = read(fd, buf, len);
 
         if (r == -1 && errno == EAGAIN) {
             if ((ret = dcc_select_for_read(fd, dcc_io_timeout)))
                 return ret;
             else
                 continue;
-        } else if (r == -1 && errno == EAGAIN) {
+        } else if (r == -1 && errno == EINTR) {
             continue;
         } else if (r == -1) {
-	    rs_log_error("failed to read: %s", strerror(errno));
-	    return EXIT_IO_ERROR;
-	} else if (r == 0) {
-	    rs_log_error("unexpected eof on fd%d", fd);
-	    return EXIT_TRUNCATED;
-	} else {
-	    buf = &((char *) buf)[r];
-	    len -= r;
-	}
+            rs_log_error("failed to read: %s", strerror(errno));
+            return EXIT_IO_ERROR;
+        } else if (r == 0) {
+            rs_log_error("unexpected eof on fd%d", fd);
+            return EXIT_TRUNCATED;
+        } else {
+            buf = &((char *) buf)[r];
+            len -= r;
+        }
     }
 
     return 0;
@@ -188,7 +210,7 @@ int dcc_writex(int fd, const void *buf, size_t len)
 {
     ssize_t r;
     int ret;
-	
+
     while (len > 0) {
         r = write(fd, buf, len);
 
@@ -202,9 +224,6 @@ int dcc_writex(int fd, const void *buf, size_t len)
         } else if (r == -1) {
             rs_log_error("failed to write: %s", strerror(errno));
             return EXIT_IO_ERROR;
-        } else if (r == 0) {
-            rs_log_error("unexpected eof on fd%d", fd);
-            return EXIT_TRUNCATED;
         } else {
             buf = &((char *) buf)[r];
             len -= r;
@@ -221,12 +240,12 @@ int dcc_writex(int fd, const void *buf, size_t len)
  *
  * This is a no-op if we don't think this platform has corks.
  **/
-int tcp_cork_sock(int fd, int corked)
+int tcp_cork_sock(int POSSIBLY_UNUSED(fd), int POSSIBLY_UNUSED(corked))
 {
-#ifdef TCP_CORK 
+#ifdef TCP_CORK
     if (!dcc_getenv_bool("DISTCC_TCP_CORK", 1))
         return 0;
-    
+
     if (setsockopt(fd, SOL_TCP, TCP_CORK, &corked, sizeof corked) == -1) {
         if (errno == ENOSYS || errno == ENOTSUP) {
             if (corked)

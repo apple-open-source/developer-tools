@@ -296,6 +296,13 @@ static void rb_print_tree (struct rb_tree_node *, int);
 int dwarf2_allow_inlined_stepping = 1;
 int dwarf2_debug_inlined_stepping = 0;
 
+/* APPLE LOCAL begin Inform users about debugging optimized code  */
+/* Flag controlling whether or not to inform users that they are
+   debugging optimized code; controlled by set/show inform-optimized.  */
+
+int dwarf2_inform_debugging_optimized_code = 0;
+/* APPLE LOCAL end Inform users about debugging optimized code  */
+
 /* APPLE LOCAL inlined function symbols & blocks  */
 struct pending *inlined_subroutine_symbols = NULL;
 
@@ -340,6 +347,15 @@ asection *dwarf_eh_frame_section;
 #define FRAME_SECTION    "LC_SEGMENT.__DWARF.__debug_frame"
 #define RANGES_SECTION   "LC_SEGMENT.__DWARF.__debug_ranges"
 #define EH_FRAME_SECTION "LC_SEGMENT.__TEXT.__eh_frame"
+
+/* APPLE LOCAL: We don't handle the macro information from
+   gcc correctly, e.g. v. <rdar://problem/7237783>, so until
+   that works we should ignore the macinfo section.  No one
+   is using it intentionally -- it just gets pulled in when
+   someone uses "-g3" on their compile line thinking it will
+   provide a better debug experience.  */
+#undef MACINFO_SECTION
+#define MACINFO_SECTION "debug_macinfo_do_not_use"
 
 /* local data types */
 
@@ -491,6 +507,13 @@ struct dwarf2_cu
      DIEs for namespaces, we don't need to try to infer them
      from mangled names.  */
   unsigned int has_namespace_info : 1;
+
+  /* APPLE LOCAL begin Inform users about debugging optimized code  */
+  /* This flag will be set if the compilation unit die has the
+     DW_AT_APPLE_optimized attribute.  It means the entire compilation
+     unit was compiled with optimizations turned on.  */
+  unsigned int cu_is_optimized : 1;
+  /* APPLE LOCAL end Inform users about debugging optimized code  */
 
   /* APPLE LOCAL begin dwarf repository  */
   sqlite3 *repository;
@@ -4193,7 +4216,8 @@ dwarf2_kext_psymtab_to_symtab (struct partial_symtab *pst)
   if (PSYMTAB_OSO_NAME (pst) == NULL || pst->readin)
     return;
 
-  oso_bfd = symfile_bfd_open (pst->objfile->not_loaded_kext_filename, 0);
+  oso_bfd = symfile_bfd_open (pst->objfile->not_loaded_kext_filename, 0, 
+			      GDB_OSABI_UNKNOWN);
   if (oso_bfd == NULL)
     error ("Couldn't unloaded kext file '%s'", 
            pst->objfile->not_loaded_kext_filename);
@@ -4952,6 +4976,12 @@ read_file_scope (struct die_info *die, struct dwarf2_cu *cu)
   attr = dwarf2_attr (die, DW_AT_producer, cu);
   if (attr) 
     cu->producer = DW_STRING (attr);
+
+  /* APPLE LOCAL begin Inform users about debugging optimized code  */
+  attr = dwarf2_attr (die, DW_AT_APPLE_optimized, cu);
+  if (attr)
+    cu->cu_is_optimized = 1;
+  /* APPLE LOCAL end Inform users about debugging optimized code  */
   
   /* We assume that we're processing GCC output. */
   processing_gcc_compilation = 2;
@@ -6431,7 +6461,7 @@ read_structure_type (struct die_info *die, struct dwarf2_cu *cu)
     objc_invalidate_objc_class (type);
 
   /* APPLE LOCAL: See if this is a Closure struct.  */
-  attr = dwarf2_attr (die, DW_AT_APPLE_closure, cu);
+  attr = dwarf2_attr (die, DW_AT_APPLE_block, cu);
   if (attr)
     TYPE_FLAGS (type) |= TYPE_FLAG_APPLE_CLOSURE;
   
@@ -7235,6 +7265,8 @@ read_subroutine_type (struct die_info *die, struct dwarf2_cu *cu)
   struct type *type;		/* Type that this function returns */
   struct type *ftype;		/* Function that returns above type */
   struct attribute *attr;
+  /* APPLE LOCAL Inform users about debugging optimized code  */
+  int optimized = 0;
 
   /* Decode the type that this subroutine returns */
   if (die->type)
@@ -7242,7 +7274,19 @@ read_subroutine_type (struct die_info *die, struct dwarf2_cu *cu)
       return;
     }
   type = die_type (die, cu);
-  ftype = make_function_type (type, (struct type **) 0);
+
+  /* APPLE LOCAL begin Inform users about debugging optimized code  */
+  if (cu->cu_is_optimized)
+    optimized = 1;
+  else
+    {
+      attr = dwarf2_attr (die, DW_AT_APPLE_optimized, cu);
+      if (attr)
+	optimized = 1;
+    }
+
+  ftype = make_function_type (type, (struct type **) 0, optimized);
+  /* APPLE LOCAL end Inform users about debugging optimized code  */
 
   /* All functions in C++ and Java have prototypes.  */
   attr = dwarf2_attr (die, DW_AT_prototyped, cu);
@@ -13395,6 +13439,14 @@ caching, which can slow down startup."),
 	      _("Show the extra information for debugging gdb's maneuvering through inlined function calls."),
 			   NULL, NULL, NULL, &setdebuglist, &showdebuglist);
   /* APPLE LOCAL end subroutine inlining  */
+
+  /* APPLE LOCAL begin Inform users about debugging optimized code  */
+  add_setshow_boolean_cmd ("inform-optimized", class_support,
+			   &dwarf2_inform_debugging_optimized_code,
+			   _("Set gdb informing you when you are debugging optimized code."),
+			   _("Show gdb informing you when you are debugging optimized code."),
+			   NULL, NULL, NULL, &setlist, &showlist);
+  /* APPLE LOCAL end Inform users about debugging optimized code  */
 }
 
 /* APPLE LOCAL begin dwarf repository  */
@@ -14406,7 +14458,7 @@ int
 close_dwarf_repositories (struct objfile *objfile)
 {
   sqlite3 *db;
-  int db_status;
+  int db_status = 0;
   int i;
 
   for (i = 0; i < num_open_dbs; i++)
@@ -14550,8 +14602,8 @@ read_in_db_abbrev_table (struct abbrev_info **abbrev_table, sqlite3 *db)
   *abbrev_table = (struct abbrev_info *) xmalloc (cur_table_size 
 						 * sizeof (struct abbrev_info));
 
-  db_status = sqlite3_prepare (db, select_string, strlen (select_string),
-			       &dbStmt15, &pzTail);
+  db_status = sqlite3_prepare_v2 (db, select_string, strlen (select_string),
+				  &dbStmt15, &pzTail);
   if (db_status == SQLITE_OK)
     {
       db_status = sqlite3_step (dbStmt15);
@@ -14621,7 +14673,7 @@ read_in_db_abbrev_table (struct abbrev_info **abbrev_table, sqlite3 *db)
 	db_error ("read_in_abbrev_table", "sqlite3_step failed", db);
     }
   else
-    db_error ("read_in_abbrev_table", "sqlite3_prepare failed", db);
+    db_error ("read_in_abbrev_table", "sqlite3_prepare_v2 failed", db);
 
   db_status = sqlite3_finalize (dbStmt15);
   if (db_status != SQLITE_OK)
@@ -14691,8 +14743,8 @@ db_lookup_type (int type_id, sqlite3 *db, struct abbrev_info *abbrev_table)
   const char *pzTail;
   struct die_info *new_die = NULL;
 
-  db_status = sqlite3_prepare (db, SELECT_DIE_STR,
-                               strlen (SELECT_DIE_STR), &db_stmt1, &pzTail);
+  db_status = sqlite3_prepare_v2 (db, SELECT_DIE_STR,
+				  strlen (SELECT_DIE_STR), &db_stmt1, &pzTail);
   if (db_status == SQLITE_OK)
     {
       db_status = sqlite3_bind_int (db_stmt1, 1, type_id);
@@ -14732,7 +14784,8 @@ db_lookup_type (int type_id, sqlite3 *db, struct abbrev_info *abbrev_table)
     }
   else
     db_error ("db_lookup_type", 
-	      db_stmt1 ? "sqlite3_reset failed" : "sqlite3_prepare failed", db);
+	      db_stmt1 ? "sqlite3_reset failed" : "sqlite3_prepare_v2 failed",
+	      db);
 
   return new_die;
 }
@@ -15046,19 +15099,19 @@ get_repository_name (struct attribute *attr, struct dwarf2_cu *cu)
   int db_status;
   struct attribute *name_attribute = NULL;
   const char *pzTail;
-  char *name;
+  char *name = NULL;
 
   string_id = DW_UNSND (attr);
 
   if (db)
     {
-	db_status = sqlite3_prepare (db, FIND_STRING_STR, 
-				     strlen (FIND_STRING_STR), &db_stmt2,
-				     &pzTail);
+	db_status = sqlite3_prepare_v2 (db, FIND_STRING_STR, 
+					strlen (FIND_STRING_STR), &db_stmt2,
+					&pzTail);
 
       if (db_status != SQLITE_OK)
 	db_error ("get_repository_name",
-		  (db_stmt2 ? "sqlite3_reset failed" : "sqlite_prepare3 failed"),
+		  (db_stmt2 ? "sqlite3_reset failed" : "sqlite3_prepare_v2 failed"),
 		  db);
 
       db_status = sqlite3_bind_int (db_stmt2, 1, string_id);

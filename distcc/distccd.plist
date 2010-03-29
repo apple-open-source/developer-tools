@@ -19,8 +19,9 @@
 		<string>--daemon</string>
 		<string>--priority</string>
 		<string>10</string>
-		<string>--min-disk-free</string>
-		<string>512</string>
+		<string>--zeroconf</string>
+		<string>--allow</string>
+		<string>0.0.0.0/0</string>
 	</array>
 	<key>SHAuthorizationRight</key>
 	<string>com.apple.Xcode.distcc.admin</string>
@@ -30,10 +31,5 @@
 	<string>Distributed compilation daemon (distccd)</string>
 	<key>UserName</key>
 	<string>nobody</string>
-	<key>EnvironmentVariables</key>
-	<dict>
-		<key>USE_XCODE_SELECT_PATH</key>
-		<string>1</string>
-	</dict>
 </dict>
 </plist>

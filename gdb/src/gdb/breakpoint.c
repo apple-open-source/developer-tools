@@ -1824,7 +1824,6 @@ remove_breakpoint (struct bp_location *b, insertion_state_t is)
 		  val = target_remove_watchpoint (addr, len, type);
 		  if (val == -1)
 		    b->inserted = 1;
-		  val = 0;
 		}
 	    }
 	}
@@ -2480,10 +2479,10 @@ async_breakpoint_command_continuation (struct continuation_arg *arg)
 static enum print_stop_action
 print_it_typical (bpstat bs)
 {
-  struct cleanup *old_chain, *ui_out_chain;
+  struct cleanup *ui_out_chain;
   struct ui_stream *stb;
   stb = ui_out_stream_new (uiout);
-  old_chain = make_cleanup_ui_out_stream_delete (stb);
+  make_cleanup_ui_out_stream_delete (stb);
   /* bs->breakpoint_at can be NULL if it was a momentary breakpoint
      which has since been deleted.  */
   if (bs->breakpoint_at == NULL)
@@ -2708,12 +2707,6 @@ print_it_typical (bpstat bs)
 static void
 print_catch_info (struct breakpoint *b)
 {
-  char * event_type;
-
-  if (CURRENT_EXCEPTION_KIND == EX_EVENT_THROW)
-    event_type = "throw";
-  else
-    event_type = "catch";
 
   ui_out_text (uiout, "\nCatchpoint ");
   ui_out_field_int (uiout, "breakpoint", 
@@ -3357,7 +3350,7 @@ bpstat_stop_status (CORE_ADDR bp_addr, ptid_t ptid, int stopped_by_watchpoint)
 	    if (b->addr_string)
 	      {
 		char *cptr =  strrchr (b->addr_string, ':');
-		char *cptr2 = cptr;
+		char *cptr2;
 		
 		tmp_line = 0;
 		if (cptr)
@@ -10170,7 +10163,7 @@ do_enable_breakpoint (struct breakpoint *bpt, enum bpdisp disposition)
 	  if (bpt->exp_valid_block != NULL)
 	    {
 	      struct frame_info *fr =
-		fr = frame_find_by_id (bpt->watchpoint_frame);
+		frame_find_by_id (bpt->watchpoint_frame);
 	      if (fr == NULL)
 		{
 		  printf_filtered (_("\
@@ -10896,6 +10889,11 @@ If function is specified, break at start of code for that function.\n\
 If an address is specified, break at that exact address.\n\
 With no arg, uses current execution address of selected stack frame.\n\
 This is useful for breaking on return to a stack frame.\n\
+\n\
+If the first argument to the break command is \"-shlib\", the next argument\n\
+will be the used as the name of the shared library in which to set the\n\
+breakpoint.  The name can either be a full path or just the file name.\n\
+The match is exact in either case.  Library names with spaces must be quoted.\n\
 \n\
 Multiple breakpoints at one place are permitted, and useful if conditional.\n\
 \n\

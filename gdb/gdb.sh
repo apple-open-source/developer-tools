@@ -53,7 +53,14 @@ unset DYLD_INSERT_LIBRARIES
 
 host_arch=`/usr/bin/arch 2>/dev/null` || host_arch=""
 
-if [ -z "$host_arch" ]; then
+if [ "$host_arch" == "arm" ]; then
+  host_cpusubtype=`sysctl hw.cpusubtype | awk '{ print $NF }'` || host_cputype=""
+  case "$host_cpusubtype" in
+    6) host_arch="armv6" ;;
+    7) host_arch="armv5" ;;
+    9) host_arch="armv7" ;;
+  esac
+elif [ -z "$host_arch" ]; then
     echo "There was an error executing 'arch(1)'; assuming 'i386'.";
     host_arch="i386";
 fi
@@ -74,8 +81,8 @@ fi
 
 case "$1" in
  --help)
-    echo "  --translate        Debug applications running under translation."
-    echo "  -arch i386|armv6|x86_64|ppc     Specify a gdb targetting a specific architecture"
+    echo "  --translate        Debug applications running under translation." >&2
+    echo "  -arch i386|arm|armv6|armv7|x86_64|ppc     Specify a gdb targetting a specific architecture" >&2
     ;;
   -arch=* | -a=* | --arch=*)
     requested_arch=`echo "$1" | sed 's,^[^=]*=,,'`
@@ -131,9 +138,99 @@ then
   esac
 fi
 
+
+# Determine if we're debugging a core file or an
+# executable file.
+
+# Then get the list of architectures contained in
+# that executable/core file.
+
+exec_file=
+core_file=
+file_archs=
+
+for arg in "$@"
+do
+  case "$arg" in
+    -*)
+      # Skip all option arguments
+      ;;
+    *)
+      # Call file to determine the file type of the argument
+      [ ! -f "$arg" ] && continue
+      file_result=`file "$arg"`
+      case "$file_result" in
+        *\ Mach-O\ core\ *|*\ Mach-O\ 64-bit\ core\ *)
+          core_file=$arg
+          ;;
+        *\ Mach-O\ *)
+          exec_file=$arg
+          ;;
+        *)
+          if [ -x "$arg" ]; then
+            exec_file="$arg"
+          fi
+          ;;
+      esac
+      ;;
+  esac
+done
+if [ -n "$core_file" ]
+then
+  core_file_tmp=`file "$core_file" 2>/dev/null | tail -1`
+fi
+if [ -n "$core_file" -a -n "$core_file_tmp" ]
+then
+  # file(1) has a weird way of identifying x86_64 core files; they have
+  # a magic of MH_MAGIC_64 but a cputype of CPU_TYPE_I386.  Probably a bug.
+  if echo "$core_file_tmp" | grep 'Mach-O 64-bit core i386' >/dev/null
+  then
+    file_archs=x86_64
+  else
+    file_archs=`echo "$core_file_tmp" | awk '{print $NF}'`
+  fi
+else
+  if [ -n "$exec_file" ]
+  then
+    file_archs=`file "$exec_file" | grep -v universal | awk '{ print $NF }'`
+    # file(1) says "arm" instead of specifying WHICH arm architecture - 
+    # lipo -info can provide specifics.
+    if echo "$file_archs" | grep 'arm' >/dev/null
+    then
+      if lipo -info "$exec_file" | egrep "^Architectures in the fat file|^Non-fat file" >/dev/null
+      then
+        lipo_archs=`lipo -info "$exec_file" | 
+                    sed -e 's,^Archi.* are: ,,' -e 's,^Non-fat.*ture: ,,' | 
+                    tr  ' ' '\n' | grep arm`
+        file_archs="$file_archs $lipo_archs"
+        file_archs=`echo $file_archs | tr ' ' '\n' | sort | uniq | grep -v '^arm$'`
+      fi
+    fi
+  fi
+fi
+
 if [ -n "$requested_arch" ]
 then
   architecture_to_use="$requested_arch"
+
+# arm is a tricky one because file(1) still reports "arm" for files but
+# you really need to specify armv6 or armv7 or whatever.  So if the user
+# invoked us with '-arch arm' and there is only one arm fork present in
+# the file, replace the user's arch spec with the correct one.
+
+  if [ $requested_arch = arm ]
+  then
+    file_arm_archs=`echo $file_archs | tr ' ' '\n' |grep arm`
+    if [ -n "$file_arm_archs" ]
+    then
+      arm_arch_count=`echo "$file_arm_archs" | wc -w`
+      if [ "$arm_arch_count" -eq 1 ]
+      then
+        architecture_to_use=$file_arm_archs
+        requested_arch=$file_arm_archs
+      fi
+    fi
+  fi
 else
   # No architecture was specified. We will try to find the executable
   # or a core file in the list of arguments, and launch the correct
@@ -142,59 +239,6 @@ else
   # If all this searching doesn't produce a match, we will use a gdb that
   # matches the host architecture by default.
   best_arch=
-  exec_file=
-  core_file=
-  for arg in "$@"
-  do
-    case "$arg" in
-      -*)
-        # Skip all option arguments
-        ;;
-      *)
-        # Call file to determine the file type of the argument
-        file_result=`file "$arg"`;
-        case "$file_result" in
-          *\ Mach-O\ core\ *|*\ Mach-O\ 64-bit\ core\ *)
-            core_file=$arg
-            ;;
-          *\ Mach-O\ *)
-            exec_file=$arg
-            ;;
-          *)
-            if [ -x "$arg" ]; then
-              exec_file="$arg"
-            fi
-            ;;
-        esac
-        ;;
-    esac
-  done
-
-  # Get a list of possible architectures in FILE_ARCHS.
-  # If we have a core file, we must use it to determine the architecture,
-  # else we use the architectures in the executable file.
-  file_archs=
-  if [ -n "$core_file" ]
-  then
-    core_file_tmp=`file "$core_file" 2>/dev/null | tail -1`
-  fi
-  if [ -n "$core_file" -a -n "$core_file_tmp" ]
-  then
-    # file(1) has a weird way of identifying x86_64 core files; they have
-    # a magic of MH_MAGIC_64 but a cputype of CPU_TYPE_I386.  Probably a bug.
-    if echo "$core_file_tmp" | grep 'Mach-O 64-bit core i386' >/dev/null
-    then
-      file_archs=x86_64
-    else
-      file_archs=`echo "$core_file_tmp" | awk '{print $NF}'`
-    fi
-  else
-    if [ -n "$exec_file" ]
-    then
-      file_archs=`file "$exec_file" | grep -v universal | awk '{ print $NF }'`
-    fi
-  fi
-
   # Iterate through the architectures and try and find the best match.
   for file_arch in $file_archs 
   do
@@ -255,6 +299,9 @@ case "$architecture_to_use" in
       case "$architecture_to_use" in
         armv6) 
           osabiopts="--osabi DarwinV6" 
+          ;;
+        armv7) 
+          osabiopts="--osabi DarwinV7" 
           ;;
         *)
           # Make the REQUESTED_ARCHITECTURE the empty string so

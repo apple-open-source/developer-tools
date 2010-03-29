@@ -2,6 +2,8 @@
 #define __GDB_MACOSX_NAT_DYLD_INFO_H__
 
 #include "defs.h"
+#include <mach/machine.h>       /* cpu_type_t, cpu_subtype_t */
+#include <mach-o/loader.h>      /* struct mach_header, struct load_command */
 
 struct _bfd;
 
@@ -38,6 +40,10 @@ struct dyld_objfile_entry
 {
   const char *prefix;  /* "__dyld_" for the dyld image file by default */
 
+  /* The mach header as found in inferior memory gets stored with each dyld
+     entry so we always will know if the entry is in the shared cache, and
+     the exact slice that was laoded (cputype and cpusubtype).  */
+  struct mach_header mem_header;  
   CORE_ADDR dyld_addr;
   CORE_ADDR dyld_slide;
   CORE_ADDR dyld_length;
@@ -114,13 +120,6 @@ struct dyld_objfile_entry
   int load_flag;
 
   enum dyld_objfile_reason reason;
-
-  /* As of Leopard, dyld makes up a "shared cache" of commonly used dylibs.
-     All the dylibs in this shared cache are "prebound" into the cache, so 
-     the copy in memory looks like it's loaded at it's intended address.
-     But that address is NOT the same as the load address of the disk file.  
-     This tells us whether the library is in the cache  */
-  int in_shared_cache;
 
   /* The array of dyld_objfile_entry's for the inferior process is a little
      sparse -- some of the entries will be used, others will be allocated but
@@ -221,6 +220,10 @@ int dyld_entry_shlib_num (struct dyld_objfile_info *s,
 int dyld_entry_shlib_num_matches (int shlibnum, char *args, int verbose);
 
 int dyld_next_allocated_shlib (struct dyld_objfile_info *info, int n);
+
+int dyld_objfile_entry_in_shared_cache (struct dyld_objfile_entry *e);
+
+enum gdb_osabi dyld_objfile_entry_osabi (const struct dyld_objfile_entry *e);
 
 
 /* The one-per-inferior INFO structure has an array of dyld_objfile_entry

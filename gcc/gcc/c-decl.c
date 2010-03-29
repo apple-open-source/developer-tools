@@ -3574,8 +3574,9 @@ c_maybe_initialize_eh (void)
 }
 
 /* APPLE LOCAL begin radar 5932809 - copyable byref blocks (C++ cr) */
-static tree block_byref_id_object_copy;
-static tree block_byref_id_object_dispose;
+#define BLOCK_ALIGN_MAX 18
+static tree block_byref_id_object_copy[BLOCK_BYREF_CURRENT_MAX*(BLOCK_ALIGN_MAX+1)];
+static tree block_byref_id_object_dispose[BLOCK_BYREF_CURRENT_MAX*(BLOCK_ALIGN_MAX+1)];
 
 /**
  This routine builds:
@@ -3586,14 +3587,14 @@ static tree block_byref_id_object_dispose;
    _Block_object_assign(&_dest->object, _src->object, BLOCK_FIELD_IS_BLOCK[|BLOCK_FIELD_IS_WEAK])  // blocks
  }  */
 static void
-synth_block_byref_id_object_copy_func (int flag)
+synth_block_byref_id_object_copy_func (int flag, int kind)
 {
   tree stmt, fnbody;
   tree dst_arg, src_arg;
   tree dst_obj, src_obj;
   struct c_arg_info * arg_info;
   tree call_exp;
-  gcc_assert (block_byref_id_object_copy);
+  gcc_assert (block_byref_id_object_copy[kind]);
   /* Set up: (void* _dest, void*_src) parameters. */
   dst_arg = build_decl (PARM_DECL, get_identifier ("_dst"),
                         ptr_type_node);
@@ -3612,7 +3613,7 @@ synth_block_byref_id_object_copy_func (int flag)
                                           NULL_TREE));
   /* function header synthesis. */
   push_function_context ();
-  start_block_helper_function (block_byref_id_object_copy);
+  start_block_helper_function (block_byref_id_object_copy[kind]);
   store_parm_decls_from (arg_info);
 
   /* Body of the function. */
@@ -3651,12 +3652,12 @@ synth_block_byref_id_object_copy_func (int flag)
     _Block_object_dispose(_src->object, BLOCK_FIELD_IS_BLOCK[|BLOCK_FIELD_IS_WEAK]) // block
   }  */
 static void
-synth_block_byref_id_object_dispose_func (int flag)
+synth_block_byref_id_object_dispose_func (int flag, int kind)
 {
   tree stmt, fnbody;
   tree src_arg, src_obj, rel_exp;
   struct c_arg_info * arg_info;
-  gcc_assert (block_byref_id_object_dispose);
+  gcc_assert (block_byref_id_object_dispose[kind]);
   /* Set up: (void *_src) parameter. */
   src_arg = build_decl (PARM_DECL, get_identifier ("_src"),
                         ptr_type_node);
@@ -3668,7 +3669,7 @@ synth_block_byref_id_object_dispose_func (int flag)
                                NULL_TREE);
   /* function header synthesis. */
   push_function_context ();
-  start_block_helper_function (block_byref_id_object_dispose);
+  start_block_helper_function (block_byref_id_object_dispose[kind]);
   store_parm_decls_from (arg_info);
 
   /* Body of the function. */
@@ -3830,10 +3831,17 @@ init_byref_decl (tree decl, tree init, int flag)
 
   if (COPYABLE_BYREF_LOCAL_NONPOD (decl))
     {
-      char name [64];
+      char name[64];
+      int align = exact_log2 ((DECL_ALIGN (decl)+TYPE_ALIGN (ptr_type_node)-1) / TYPE_ALIGN (ptr_type_node));
+      int kind;
+      if (align == -1 || align > BLOCK_ALIGN_MAX) {
+	error ("invalid alignment for __block variable");
+	kind = 0;
+      } else
+	kind = align*BLOCK_BYREF_CURRENT_MAX + flag;
       /* Add &__Block_byref_id_object_copy, &__Block_byref_id_object_dispose
 	 initializers. */
-      if (!block_byref_id_object_copy)
+      if (!block_byref_id_object_copy[kind])
 	{
 	  /* Build a void __Block_byref_id_object_copy(void*, void*) type. */
 	  tree func_type =
@@ -3841,32 +3849,32 @@ init_byref_decl (tree decl, tree init, int flag)
 				 tree_cons (NULL_TREE, ptr_type_node,
 					    tree_cons (NULL_TREE, ptr_type_node,
 						       void_list_node)));
-	  strcpy (name, "__Block_byref_id_object_copy");
-	  block_byref_id_object_copy = build_helper_func_decl (get_identifier (name),
-							       func_type);
+	  sprintf (name, "__Block_byref_id_object_copy%d", kind);
+	  block_byref_id_object_copy[kind] = build_helper_func_decl (get_identifier (name),
+								     func_type);
 	  /* Synthesize function definition. */
-	  synth_block_byref_id_object_copy_func (flag);
+	  synth_block_byref_id_object_copy_func (flag, kind);
 	}
       initlist = tree_cons (fields,
-			    build_fold_addr_expr (block_byref_id_object_copy),
+			    build_fold_addr_expr (block_byref_id_object_copy[kind]),
 			    initlist);
       fields = TREE_CHAIN (fields);
 
-      if (!block_byref_id_object_dispose)
+      if (!block_byref_id_object_dispose[kind])
 	{
 	  /* Synthesize void __Block_byref_id_object_dispose (void*) and
 	     build &__Block_byref_id_object_dispose. */
 	  tree func_type =
 	    build_function_type (void_type_node,
 				 tree_cons (NULL_TREE, ptr_type_node, void_list_node));
-	  strcpy (name, "__Block_byref_id_object_dispose");
-	  block_byref_id_object_dispose = build_helper_func_decl (get_identifier (name),
-								  func_type);
+	  sprintf (name, "__Block_byref_id_object_dispose%d", kind);
+	  block_byref_id_object_dispose[kind] = build_helper_func_decl (get_identifier (name),
+									func_type);
 	  /* Synthesize function definition. */
-	  synth_block_byref_id_object_dispose_func (flag);
+	  synth_block_byref_id_object_dispose_func (flag, kind);
 	}
       initlist = tree_cons (fields,
-			    build_fold_addr_expr (block_byref_id_object_dispose),
+			    build_fold_addr_expr (block_byref_id_object_dispose[kind]),
 			    initlist);
       fields = TREE_CHAIN (fields);
     }

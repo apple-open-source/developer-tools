@@ -120,7 +120,7 @@ kdp_transmit_fd (kdp_connection *c, kdp_pkt_t * packet, int fd)
 kdp_return_t
 kdp_receive_fd (kdp_connection *c, kdp_pkt_t * packet, int fd, int timeout)
 {
-  int fromlen = sizeof (c->target_sin);
+  socklen_t fromlen = sizeof (c->target_sin);
   int ret = -1, rlen = -1;
   kdp_return_t kret;
   char buf[KDP_MAX_PACKET_SIZE];
@@ -270,7 +270,7 @@ kdp_bind_socket (kdp_connection *c,
                  unsigned short port, unsigned short *pret, int *fd)
 {
   struct sockaddr_in local_sin;
-  int retsize;
+  socklen_t retsize;
   int retfd;
   int ret;
 

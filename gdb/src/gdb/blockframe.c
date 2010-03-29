@@ -230,7 +230,6 @@ get_frame_function_inlined (struct frame_info * frame)
 {
   struct block *bl = get_frame_block (frame, 0);
   struct bfd_section *sect;
-  struct symbol *func_sym;
   if (bl == 0)
     return 0;
   
@@ -572,15 +571,10 @@ struct frame_info *
 block_innermost_frame (struct block *block)
 {
   struct frame_info *frame;
-  CORE_ADDR start;
-  CORE_ADDR end;
   CORE_ADDR calling_pc;
 
   if (block == NULL)
     return NULL;
-
-  start = BLOCK_START (block);
-  end = BLOCK_END (block);
 
   frame = NULL;
   while (1)

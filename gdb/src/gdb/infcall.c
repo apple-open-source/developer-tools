@@ -251,7 +251,7 @@ find_function_addr (struct value *function, struct type **retval_type)
   struct type *ftype = check_typedef (value_type (function));
   enum type_code code = TYPE_CODE (ftype);
   struct type *value_type;
-  CORE_ADDR funaddr;
+  CORE_ADDR funaddr = 0;
 
   /* If it's a member function, just look at the function
      part of it.  */
@@ -495,11 +495,15 @@ hand_function_call (struct value *function, struct type *expect_type,
 	  if  (retval == objc_debugger_mode_fail_spinlock_held
                    || retval == objc_debugger_mode_fail_malloc_lock_held)
 	    error ("Cancelling call as the malloc lock is held so it isn't safe to call the runtime.\n"
-	         "Set objc-non-blocking-mode to off to override this check if you are sure your call doesn't use the ObjC runtime.");
+	         "Issue the command:\n"
+                 "    set objc-non-blocking-mode off \n"
+                 "to override this check if you are sure your call doesn't use the malloc libraries or the ObjC runtime.");
 
          else
 	    error ("Cancelling call as the ObjC runtime would deadlock.\n"
-	         "Set objc-non-blocking-mode to off to override this check if you are sure your call doesn't use the ObjC runtime.");
+	         "Issue the command:\n"
+                 "    set objc-non-blocking-mode off \n"
+	         "to override this check if you are sure your call doesn't use the ObjC runtime.");
         }
     }
   else
@@ -1021,7 +1025,7 @@ You must use a pointer to function type variable. Command ignored."), arg_name);
       if (stopped_by_random_signal 
 	  || objc_pc_at_fail_point (stop_pc) != objc_no_fail)
 	{
-	  char *errstr;
+	  char *errstr = "";
 
 	  if (stopped_by_random_signal)
 	    errstr = "The program being debugged was signaled while in a function called from GDB.";

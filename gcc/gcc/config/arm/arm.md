@@ -51,6 +51,8 @@
 
 ;; UNSPEC Usage:
 ;; Note: sin and cos are no-longer used.
+;; APPLE LOCAL v7 support. Merge from Codesourcery
+;; Unspec constants for Neon are defined in neon.md.
 
 (define_constants
   [(UNSPEC_SIN       0)	; `sin' operation (MODE_FLOAT):
@@ -93,10 +95,19 @@
    (UNSPEC_TLS      20) ; A symbol that has been treated properly for TLS usage.
    (UNSPEC_PIC_LABEL 21) ; A label used for PIC access that does not appear in the
                          ; instruction stream.
+;; APPLE LOCAL begin v7 support. Merge from Codesourcery
+   (UNSPEC_STACK_ALIGN 22) ; Doubleword aligned stack pointer.  Used to
+         ; generate correct unwind information.
    ; APPLE LOCAL ARM setjmp/longjmp interworking
-   (UNSPEC_JMP_XCHG 22) ; Indirect jump with possible change in ARM/Thumb state.
+   (UNSPEC_JMP_XCHG 23) ; Indirect jump with possible change in ARM/Thumb state.
+;; APPLE LOCAL end v7 support. Merge from Codesourcery
    ; APPLE LOCAL ARM UXTB support
    (UNSPEC_UXTB16   27) ; The UXTB16 instruction (ARM only)
+;; APPLE LOCAL begin 6258536 atomic builtins
+   (UNSPEC_CMPXCHG  28) ; Atomic compare and swap operations
+   (UNSPEC_BARRIER  29) ; memory barrier
+   (UNSPEC_SYNC     30) ; memory sync
+;; APPLE LOCAL end 6258536 atomic builtins
   ]
 )
 
@@ -121,18 +132,26 @@
 			;   a 32-bit object.
    (VUNSPEC_POOL_8   7) ; `pool-entry(8)'.  An entry in the constant pool for
 			;   a 64-bit object.
-   (VUNSPEC_TMRC     8) ; Used by the iWMMXt TMRC instruction.
-   (VUNSPEC_TMCR     9) ; Used by the iWMMXt TMCR instruction.
-   (VUNSPEC_ALIGN8   10) ; 8-byte alignment version of VUNSPEC_ALIGN
-   (VUNSPEC_WCMP_EQ  11) ; Used by the iWMMXt WCMPEQ instructions
-   (VUNSPEC_WCMP_GTU 12) ; Used by the iWMMXt WCMPGTU instructions
-   (VUNSPEC_WCMP_GT  13) ; Used by the iwMMXT WCMPGT instructions
+;; APPLE LOCAL begin v7 support. Merge from Codesourcery
+   (VUNSPEC_POOL_16  8) ; `pool-entry(16)'.  An entry in the constant pool for
+			;   a 128-bit object.
+   (VUNSPEC_TMRC     9) ; Used by the iWMMXt TMRC instruction.
+   (VUNSPEC_TMCR     10) ; Used by the iWMMXt TMCR instruction.
+   (VUNSPEC_ALIGN8   11) ; 8-byte alignment version of VUNSPEC_ALIGN
+   (VUNSPEC_WCMP_EQ  12) ; Used by the iWMMXt WCMPEQ instructions
+   (VUNSPEC_WCMP_GTU 13) ; Used by the iWMMXt WCMPGTU instructions
+   (VUNSPEC_WCMP_GT  14) ; Used by the iwMMXT WCMPGT instructions
+;; APPLE LOCAL end v7 support. Merge from Codesourcery
    (VUNSPEC_EH_RETURN 20); Use to override the return address for exception
 			 ; handling.
 			    ; APPLE LOCAL begin ARM strings in code
    (VUNSPEC_POOL_STRING 21) ; `pool-entry(string)'.  An entry in the constant
 			    ;   pool for a string.
 			    ; APPLE LOCAL end ARM strings in code
+;; APPLE LOCAL begin 6258536 atomic builtins
+   (VUNSPEC_LL 22)          ; Load locked (ldrex)
+   (VUNSPEC_SC 22)          ; Store conditional (strex)
+;; APPLE LOCAL end 6258536 atomic builtins
   ]
 )
 
@@ -185,7 +204,8 @@
 ;; scheduling information.
 
 (define_attr "insn"
-        "smulxy,smlaxy,smlalxy,smulwy,smlawx,mul,muls,mla,mlas,umull,umulls,umlal,umlals,smull,smulls,smlal,smlals,smlawy,smuad,smuadx,smlad,smladx,smusd,smusdx,smlsd,smlsdx,smmul,smmulr,other"
+;; APPLE LOCAL v7 support. Merge from Codesourcery
+        "mov,mvn,smulxy,smlaxy,smlalxy,smulwy,smlawx,mul,muls,mla,mlas,umull,umulls,umlal,umlals,smull,smulls,smlal,smlals,smlawy,smuad,smuadx,smlad,smladx,smusd,smusdx,smlsd,smlsdx,smmul,smmulr,smmla,smmls,umaal,smlald,smlsld,clz,mrs,msr,xtab,sdiv,udiv,other"
         (const_string "other"))
 
 ; TYPE attribute is used to detect floating point instructions which, if
@@ -194,6 +214,10 @@
 ; scheduling of writes.
 
 ; Classification of each insn
+;; APPLE LOCAL begin v7 support. Merge from Codesourcery
+; Note: vfp.md has different meanings for some of these, and some further
+; types as well.  See that file for details.
+;; APPLE LOCAL end v7 support. Merge from Codesourcery
 ; alu		any alu  instruction that doesn't hit memory or fp
 ;		regs or have a shifted source operand
 ; alu_shift	any data instruction that doesn't hit memory or fp
@@ -237,7 +261,8 @@
 ; mav_dmult	Double multiplies (7 cycle)
 ;
 (define_attr "type"
-	"alu,alu_shift,alu_shift_reg,mult,block,float,fdivx,fdivd,fdivs,fmul,ffmul,farith,ffarith,f_flag,float_em,f_load,f_store,f_loads,f_loadd,f_stores,f_stored,f_mem_r,r_mem_f,f_2_r,r_2_f,f_cvt,branch,call,load_byte,load1,load2,load3,load4,store1,store2,store3,store4,mav_farith,mav_dmult" 
+;; APPLE LOCAL v7 support. Merge from Codesourcery
+	"alu,alu_shift,alu_shift_reg,mult,block,float,fdivx,fdivd,fdivs,fmul,ffmul,farith,ffarith,f_flag,float_em,f_load,f_store,f_loads,f_loadd,f_stores,f_stored,f_mem_r,r_mem_f,f_2_r,r_2_f,f_cvt,branch,call,load_byte,load1,load2,load3,load4,store1,store2,store3,store4,mav_farith,mav_dmult,fmuls,fmuld,fmacs,fmacd"
 	(if_then_else 
 	 (eq_attr "insn" "smulxy,smlaxy,smlalxy,smulwy,smlawx,mul,muls,mla,mlas,umull,umulls,umlal,umlals,smull,smulls,smlal,smlals")
 	 (const_string "mult")
@@ -305,6 +330,12 @@
 (define_attr "far_jump" "yes,no" (const_string "no"))
 
 
+;; APPLE LOCAL begin v7 support. Merge from mainline
+;; The number of machine instructions this pattern expands to.
+;; Used for Thumb-2 conditional execution.
+(define_attr "ce_count" "" (const_int 1))
+
+;; APPLE LOCAL end v7 support. Merge from mainline
 ;;---------------------------------------------------------------------------
 ;; Mode macros
 
@@ -329,14 +360,16 @@
 
 (define_attr "generic_sched" "yes,no"
   (const (if_then_else 
-          (eq_attr "tune" "arm926ejs,arm1020e,arm1026ejs,arm1136js,arm1136jfs") 
+;; APPLE LOCAL v7 support. Merge from Codesourcery
+          (eq_attr "tune" "arm926ejs,arm1020e,arm1026ejs,arm1136js,arm1136jfs,cortexa8,cortexr4") 
           (const_string "no")
           (const_string "yes"))))
 
 (define_attr "generic_vfp" "yes,no"
   (const (if_then_else
 	  (and (eq_attr "fpu" "vfp")
-	       (eq_attr "tune" "!arm1020e,arm1022e"))
+;; APPLE LOCAL v7 support. Merge from Codesourcery
+	       (eq_attr "tune" "!arm1020e,arm1022e,cortexa8"))
 	  (const_string "yes")
 	  (const_string "no"))))
 
@@ -345,6 +378,11 @@
 (include "arm1020e.md")
 (include "arm1026ejs.md")
 (include "arm1136jfs.md")
+;; APPLE LOCAL begin v7 support. Merge from Codesourcery
+(include "cortex-a8.md")
+(include "cortex-r4.md")
+(include "vfp11.md")
+;; APPLE LOCAL end v7 support. Merge from Codesourcery
 
 
 ;;---------------------------------------------------------------------------
@@ -377,7 +415,8 @@
       DONE;
     }
 
-  if (TARGET_THUMB)
+  /* APPLE LOCAL v7 support. Merge from mainline */
+  if (TARGET_THUMB1)
     {
       if (GET_CODE (operands[1]) != REG)
         operands[1] = force_reg (SImode, operands[1]);
@@ -398,13 +437,15 @@
 )
 ;; APPLE LOCAL end 5831562 long long constants
 
-(define_insn "*thumb_adddi3"
+;; APPLE LOCAL v7 support. Merge from mainline
+(define_insn "*thumb1_adddi3"
   [(set (match_operand:DI          0 "register_operand" "=l")
 	(plus:DI (match_operand:DI 1 "register_operand" "%0")
 		 (match_operand:DI 2 "register_operand" "l")))
    (clobber (reg:CC CC_REGNUM))
   ]
-  "TARGET_THUMB"
+;; APPLE LOCAL v7 support. Merge from mainline
+  "TARGET_THUMB1"
   "add\\t%Q0, %Q0, %Q2\;adc\\t%R0, %R0, %R2"
   [(set_attr "length" "4")]
 )
@@ -415,9 +456,11 @@
 	(plus:DI (match_operand:DI 1 "s_register_operand" "%0, 0, r, 0")
 		 (match_operand:DI 2 "arm_rhs64_operand" "r,  0, Dd,Dd")))
    (clobber (reg:CC CC_REGNUM))]
-  "TARGET_ARM && !(TARGET_HARD_FLOAT && TARGET_MAVERICK)"
+;; APPLE LOCAL begin v7 support. Merge from mainline
+  "TARGET_32BIT && !(TARGET_HARD_FLOAT && TARGET_MAVERICK)"
   "#"
-  "TARGET_ARM && reload_completed"
+  "TARGET_32BIT && reload_completed"
+;; APPLE LOCAL end v7 support. Merge from mainline
   [(parallel [(set (reg:CC_C CC_REGNUM)
 		   (compare:CC_C (plus:SI (match_dup 1) (match_dup 2))
 				 (match_dup 1)))
@@ -444,9 +487,11 @@
 		  (match_operand:SI 2 "s_register_operand" "r,r"))
 		 (match_operand:DI 1 "s_register_operand" "r,0")))
    (clobber (reg:CC CC_REGNUM))]
-  "TARGET_ARM && !(TARGET_HARD_FLOAT && TARGET_MAVERICK)"
+;; APPLE LOCAL begin v7 support. Merge from mainline
+  "TARGET_32BIT && !(TARGET_HARD_FLOAT && TARGET_MAVERICK)"
   "#"
-  "TARGET_ARM && reload_completed"
+  "TARGET_32BIT && reload_completed"
+;; APPLE LOCAL end v7 support. Merge from mainline
   [(parallel [(set (reg:CC_C CC_REGNUM)
 		   (compare:CC_C (plus:SI (match_dup 1) (match_dup 2))
 				 (match_dup 1)))
@@ -473,9 +518,11 @@
 		  (match_operand:SI 2 "s_register_operand" "r,r"))
 		 (match_operand:DI 1 "s_register_operand" "r,0")))
    (clobber (reg:CC CC_REGNUM))]
-  "TARGET_ARM && !(TARGET_HARD_FLOAT && TARGET_MAVERICK)"
+;; APPLE LOCAL begin v7 support. Merge from mainline
+  "TARGET_32BIT && !(TARGET_HARD_FLOAT && TARGET_MAVERICK)"
   "#"
-  "TARGET_ARM && reload_completed"
+  "TARGET_32BIT && reload_completed"
+;; APPLE LOCAL end v7 support. Merge from mainline
   [(parallel [(set (reg:CC_C CC_REGNUM)
 		   (compare:CC_C (plus:SI (match_dup 1) (match_dup 2))
 				 (match_dup 1)))
@@ -500,7 +547,8 @@
 		 (match_operand:SI 2 "reg_or_int_operand" "")))]
   "TARGET_EITHER"
   "
-  if (TARGET_ARM && GET_CODE (operands[2]) == CONST_INT)
+  /* APPLE LOCAL v7 support. Merge from mainline */
+  if (TARGET_32BIT && GET_CODE (operands[2]) == CONST_INT)
     {
       arm_split_constant (PLUS, SImode, NULL_RTX,
 	                  INTVAL (operands[2]), operands[0], operands[1],
@@ -517,7 +565,8 @@
    (set (match_operand:SI          0 "arm_general_register_operand" "")
 	(plus:SI (match_operand:SI 1 "arm_general_register_operand" "")
 		 (match_operand:SI 2 "const_int_operand"  "")))]
-  "TARGET_ARM &&
+;; APPLE LOCAL v7 support. Merge from mainline
+  "TARGET_32BIT &&
    !(const_ok_for_arm (INTVAL (operands[2]))
      || const_ok_for_arm (-INTVAL (operands[2])))
     && const_ok_for_arm (~INTVAL (operands[2]))"
@@ -530,15 +579,17 @@
   [(set (match_operand:SI          0 "s_register_operand" "=r,r,r")
 	(plus:SI (match_operand:SI 1 "s_register_operand" "%r,r,r")
 		 (match_operand:SI 2 "reg_or_int_operand" "rI,L,?n")))]
-  "TARGET_ARM"
+;; APPLE LOCAL begin v7 support. Merge from mainline
+  "TARGET_32BIT"
   "@
    add%?\\t%0, %1, %2
    sub%?\\t%0, %1, #%n2
    #"
-  "TARGET_ARM &&
+  "TARGET_32BIT &&
    GET_CODE (operands[2]) == CONST_INT
    && !(const_ok_for_arm (INTVAL (operands[2]))
         || const_ok_for_arm (-INTVAL (operands[2])))"
+;; APPLE LOCAL end v7 support. Merge from mainline
   [(clobber (const_int 0))]
   "
   arm_split_constant (PLUS, SImode, curr_insn,
@@ -554,11 +605,13 @@
 ;; register.  Trying to reload it will always fail catastrophically,
 ;; so never allow those alternatives to match if reloading is needed.
 
-(define_insn "*thumb_addsi3"
+;; APPLE LOCAL v7 support. Merge from mainline
+(define_insn "*thumb1_addsi3"
   [(set (match_operand:SI          0 "register_operand" "=l,l,l,*r,*h,l,!k")
 	(plus:SI (match_operand:SI 1 "register_operand" "%0,0,l,*0,*0,!k,!k")
 		 (match_operand:SI 2 "nonmemory_operand" "I,J,lL,*h,*r,!M,!O")))]
-  "TARGET_THUMB"
+;; APPLE LOCAL v7 support. Merge from mainline
+  "TARGET_THUMB1"
   "*
    static const char * const asms[] = 
    {
@@ -579,6 +632,7 @@
   [(set_attr "length" "2")]
 )
 
+;; APPLE LOCAL begin v7 support. Merge from mainline
 ;; Reloading and elimination of the frame pointer can
 ;; sometimes cause this optimization to be missed.
 (define_peephole2
@@ -586,12 +640,13 @@
 	(match_operand:SI 1 "const_int_operand" ""))
    (set (match_dup 0)
 	(plus:SI (match_dup 0) (reg:SI SP_REGNUM)))]
-  "TARGET_THUMB
+  "TARGET_THUMB1
    && (unsigned HOST_WIDE_INT) (INTVAL (operands[1])) < 1024
    && (INTVAL (operands[1]) & 3) == 0"
   [(set (match_dup 0) (plus:SI (reg:SI SP_REGNUM) (match_dup 1)))]
   ""
 )
+;; APPLE LOCAL end v7 support. Merge from mainline
 
 ;; APPLE LOCAL begin ARM peephole
 ;; And sometimes greg will generate the same thing this way...
@@ -609,6 +664,8 @@
 )
 ;; APPLE LOCAL end ARM peephole
 
+;; APPLE LOCAL v7 support. Merge from mainline
+;; ??? Make Thumb-2 variants which prefer low regs
 (define_insn "*addsi3_compare0"
   [(set (reg:CC_NOOV CC_REGNUM)
 	(compare:CC_NOOV
@@ -617,10 +674,12 @@
 	 (const_int 0)))
    (set (match_operand:SI 0 "s_register_operand" "=r,r")
 	(plus:SI (match_dup 1) (match_dup 2)))]
-  "TARGET_ARM"
+;; APPLE LOCAL begin v7 support. Merge from mainline
+  "TARGET_32BIT"
   "@
-   add%?s\\t%0, %1, %2
-   sub%?s\\t%0, %1, #%n2"
+   add%.\\t%0, %1, %2
+   sub%.\\t%0, %1, #%n2"
+;; APPLE LOCAL end v7 support. Merge from mainline
   [(set_attr "conds" "set")]
 )
 
@@ -630,7 +689,8 @@
 	 (plus:SI (match_operand:SI 0 "s_register_operand" "r, r")
 		  (match_operand:SI 1 "arm_add_operand"    "rI,L"))
 	 (const_int 0)))]
-  "TARGET_ARM"
+;; APPLE LOCAL v7 support. Merge from mainline
+  "TARGET_32BIT"
   "@
    cmn%?\\t%0, %1
    cmp%?\\t%0, #%n1"
@@ -642,7 +702,8 @@
 	(compare:CC_Z
 	 (neg:SI (match_operand:SI 0 "s_register_operand" "r"))
 	 (match_operand:SI 1 "s_register_operand" "r")))]
-  "TARGET_ARM"
+;; APPLE LOCAL v7 support. Merge from mainline
+  "TARGET_32BIT"
   "cmn%?\\t%1, %0"
   [(set_attr "conds" "set")]
 )
@@ -657,10 +718,12 @@
    (set (match_operand:SI 0 "s_register_operand" "=r,r")
 	(plus:SI (match_dup 1)
 		 (match_operand:SI 3 "arm_addimm_operand" "L,I")))]
-  "TARGET_ARM && INTVAL (operands[2]) == -INTVAL (operands[3])"
+;; APPLE LOCAL begin v7 support. Merge from mainline
+  "TARGET_32BIT && INTVAL (operands[2]) == -INTVAL (operands[3])"
   "@
-   sub%?s\\t%0, %1, %2
-   add%?s\\t%0, %1, #%n2"
+   sub%.\\t%0, %1, %2
+   add%.\\t%0, %1, #%n2"
+;; APPLE LOCAL end v7 support. Merge from mainline
   [(set_attr "conds" "set")]
 )
 
@@ -684,7 +747,8 @@
 		       [(match_dup 2) (const_int 0)])
 		      (match_operand 4 "" "")
 		      (match_operand 5 "" "")))]
-  "TARGET_ARM && peep2_reg_dead_p (3, operands[2])"
+;; APPLE LOCAL v7 support. Merge from mainline
+  "TARGET_32BIT && peep2_reg_dead_p (3, operands[2])"
   [(parallel[
     (set (match_dup 2)
 	 (compare:CC
@@ -713,10 +777,12 @@
 	 (match_dup 1)))
    (set (match_operand:SI 0 "s_register_operand" "=r,r")
 	(plus:SI (match_dup 1) (match_dup 2)))]
-  "TARGET_ARM"
+;; APPLE LOCAL begin v7 support. Merge from mainline
+  "TARGET_32BIT"
   "@
-   add%?s\\t%0, %1, %2
-   sub%?s\\t%0, %1, #%n2"
+   add%.\\t%0, %1, %2
+   sub%.\\t%0, %1, #%n2"
+;; APPLE LOCAL end v7 support. Merge from mainline
   [(set_attr "conds" "set")]
 )
 
@@ -728,10 +794,12 @@
 	 (match_dup 2)))
    (set (match_operand:SI 0 "s_register_operand" "=r,r")
 	(plus:SI (match_dup 1) (match_dup 2)))]
-  "TARGET_ARM"
+;; APPLE LOCAL begin v7 support. Merge from mainline
+  "TARGET_32BIT"
   "@
-   add%?s\\t%0, %1, %2
-   sub%?s\\t%0, %1, #%n2"
+   add%.\\t%0, %1, %2
+   sub%.\\t%0, %1, #%n2"
+;; APPLE LOCAL end v7 support. Merge from mainline
   [(set_attr "conds" "set")]
 )
 
@@ -741,7 +809,8 @@
 	 (plus:SI (match_operand:SI 0 "s_register_operand" "r,r")
 		  (match_operand:SI 1 "arm_add_operand" "rI,L"))
 	 (match_dup 0)))]
-  "TARGET_ARM"
+;; APPLE LOCAL v7 support. Merge from mainline
+  "TARGET_32BIT"
   "@
    cmn%?\\t%0, %1
    cmp%?\\t%0, #%n1"
@@ -754,7 +823,8 @@
 	 (plus:SI (match_operand:SI 0 "s_register_operand" "r,r")
 		  (match_operand:SI 1 "arm_add_operand" "rI,L"))
 	 (match_dup 1)))]
-  "TARGET_ARM"
+;; APPLE LOCAL v7 support. Merge from mainline
+  "TARGET_32BIT"
   "@
    cmn%?\\t%0, %1
    cmp%?\\t%0, #%n1"
@@ -766,7 +836,8 @@
 	(plus:SI (ltu:SI (reg:CC_C CC_REGNUM) (const_int 0))
 		 (plus:SI (match_operand:SI 1 "s_register_operand" "r")
 			  (match_operand:SI 2 "arm_rhs_operand" "rI"))))]
-  "TARGET_ARM"
+;; APPLE LOCAL v7 support. Merge from mainline
+  "TARGET_32BIT"
   "adc%?\\t%0, %1, %2"
   [(set_attr "conds" "use")]
 )
@@ -779,7 +850,8 @@
 		      [(match_operand:SI 3 "s_register_operand" "r")
 		       (match_operand:SI 4 "reg_or_int_operand" "rM")])
 		    (match_operand:SI 1 "s_register_operand" "r"))))]
-  "TARGET_ARM"
+;; APPLE LOCAL v7 support. Merge from mainline
+  "TARGET_32BIT"
   "adc%?\\t%0, %1, %3%S2"
   [(set_attr "conds" "use")
    (set (attr "type") (if_then_else (match_operand 4 "const_int_operand" "")
@@ -792,7 +864,8 @@
 	(plus:SI (plus:SI (match_operand:SI 1 "s_register_operand" "r")
 			  (match_operand:SI 2 "arm_rhs_operand" "rI"))
 		 (ltu:SI (reg:CC_C CC_REGNUM) (const_int 0))))]
-  "TARGET_ARM"
+;; APPLE LOCAL v7 support. Merge from mainline
+  "TARGET_32BIT"
   "adc%?\\t%0, %1, %2"
   [(set_attr "conds" "use")]
 )
@@ -802,7 +875,8 @@
 	(plus:SI (plus:SI (ltu:SI (reg:CC_C CC_REGNUM) (const_int 0))
 			  (match_operand:SI 1 "s_register_operand" "r"))
 		 (match_operand:SI 2 "arm_rhs_operand" "rI")))]
-  "TARGET_ARM"
+;; APPLE LOCAL v7 support. Merge from mainline
+  "TARGET_32BIT"
   "adc%?\\t%0, %1, %2"
   [(set_attr "conds" "use")]
 )
@@ -812,12 +886,23 @@
 	(plus:SI (plus:SI (ltu:SI (reg:CC_C CC_REGNUM) (const_int 0))
 			  (match_operand:SI 2 "arm_rhs_operand" "rI"))
 		 (match_operand:SI 1 "s_register_operand" "r")))]
-  "TARGET_ARM"
+;; APPLE LOCAL v7 support. Merge from mainline
+  "TARGET_32BIT"
   "adc%?\\t%0, %1, %2"
   [(set_attr "conds" "use")]
 )
 
-(define_insn "incscc"
+;; APPLE LOCAL begin v7 support. Merge from mainline
+(define_expand "incscc"
+  [(set (match_operand:SI 0 "s_register_operand" "=r,r")
+        (plus:SI (match_operator:SI 2 "arm_comparison_operator"
+                    [(match_operand:CC 3 "cc_register" "") (const_int 0)])
+                 (match_operand:SI 1 "s_register_operand" "0,?r")))]
+  "TARGET_32BIT"
+  ""
+)
+
+(define_insn "*arm_incscc"
   [(set (match_operand:SI 0 "s_register_operand" "=r,r")
         (plus:SI (match_operator:SI 2 "arm_comparison_operator"
                     [(match_operand:CC 3 "cc_register" "") (const_int 0)])
@@ -829,6 +914,7 @@
   [(set_attr "conds" "use")
    (set_attr "length" "4,8")]
 )
+;; APPLE LOCAL end v7 support. Merge from mainline
 
 ; transform ((x << y) - 1) to ~(~(x-1) << y)  Where X is a constant.
 (define_split
@@ -837,7 +923,8 @@
 			    (match_operand:SI 2 "s_register_operand" ""))
 		 (const_int -1)))
    (clobber (match_operand:SI 3 "s_register_operand" ""))]
-  "TARGET_ARM"
+;; APPLE LOCAL v7 support. Merge from mainline
+  "TARGET_32BIT"
   [(set (match_dup 3) (match_dup 1))
    (set (match_dup 0) (not:SI (ashift:SI (match_dup 3) (match_dup 2))))]
   "
@@ -848,7 +935,8 @@
   [(set (match_operand:SF          0 "s_register_operand" "")
 	(plus:SF (match_operand:SF 1 "s_register_operand" "")
 		 (match_operand:SF 2 "arm_float_add_operand" "")))]
-  "TARGET_ARM && TARGET_HARD_FLOAT"
+;; APPLE LOCAL v7 support. Merge from mainline
+  "TARGET_32BIT && TARGET_HARD_FLOAT"
   "
   if (TARGET_MAVERICK
       && !cirrus_fp_register (operands[2], SFmode))
@@ -859,7 +947,8 @@
   [(set (match_operand:DF          0 "s_register_operand" "")
 	(plus:DF (match_operand:DF 1 "s_register_operand" "")
 		 (match_operand:DF 2 "arm_float_add_operand" "")))]
-  "TARGET_ARM && TARGET_HARD_FLOAT"
+;; APPLE LOCAL v7 support. Merge from mainline
+  "TARGET_32BIT && TARGET_HARD_FLOAT"
   "
   if (TARGET_MAVERICK
       && !cirrus_fp_register (operands[2], DFmode))
@@ -875,8 +964,9 @@
     (clobber (reg:CC CC_REGNUM))])]
   "TARGET_EITHER"
   "
+  /* APPLE LOCAL begin v7 support. Merge from mainline */
   if (TARGET_HARD_FLOAT && TARGET_MAVERICK
-      && TARGET_ARM
+      && TARGET_32BIT
       && cirrus_fp_register (operands[0], DImode)
       && cirrus_fp_register (operands[1], DImode))
     {
@@ -884,7 +974,7 @@
       DONE;
     }
 
-  if (TARGET_THUMB)
+  if (TARGET_THUMB1)
     {
       if (GET_CODE (operands[1]) != REG)
         operands[1] = force_reg (SImode, operands[1]);
@@ -892,24 +982,26 @@
         operands[2] = force_reg (SImode, operands[2]);
      }	
 
-  if (TARGET_ARM 
+  if (TARGET_32BIT
       && (GET_CODE (operands[2]) == CONST_INT
           || GET_CODE (operands[2]) == CONST_DOUBLE)
       && !const64_ok_for_arm_immediate (operands[2]))
     {
       emit_insn (gen_adddi3 (operands[0], operands[1],
-			    negate_rtx (DImode, operands[2])));
+                          negate_rtx (DImode, operands[2])));
       DONE;
     }
+  /* APPLE LOCAL end v7 support. Merge from mainline */
    "
 )
 
 (define_insn "*arm_subdi3"
   [(set (match_operand:DI           0 "s_register_operand" "=&r,&r,&r,&r,&r")
-	(minus:DI (match_operand:DI 1 "s_register_operand"   "0, r, 0, r ,0")
-		  (match_operand:DI 2 "arm_rhs64_operand"   "r, 0, 0,Dd,Dd")))
+	(minus:DI (match_operand:DI 1 "s_register_operand" "0,r,0,r,0")
+		  (match_operand:DI 2 "arm_rhs64_operand" "r,0,0,Dd,Dd")))
    (clobber (reg:CC CC_REGNUM))]
-  "TARGET_ARM"
+;; APPLE LOCAL v7 support. Merge from mainline
+  "TARGET_32BIT"
   "*
    if (which_alternative <= 2)
      return \"subs\\t%Q0, %Q1, %Q2\;sbc\\t%R0, %R1, %R2\";
@@ -929,7 +1021,8 @@
 	(minus:DI (match_operand:DI 1 "register_operand"  "0")
 		  (match_operand:DI 2 "register_operand"  "l")))
    (clobber (reg:CC CC_REGNUM))]
-  "TARGET_THUMB"
+;; APPLE LOCAL v7 support. Merge from mainline
+  "TARGET_THUMB1"
   "sub\\t%Q0, %Q0, %Q2\;sbc\\t%R0, %R0, %R2"
   [(set_attr "length" "4")]
 )
@@ -940,7 +1033,8 @@
 		  (zero_extend:DI
 		   (match_operand:SI 2 "s_register_operand"  "r,r"))))
    (clobber (reg:CC CC_REGNUM))]
-  "TARGET_ARM"
+;; APPLE LOCAL v7 support. Merge from mainline
+  "TARGET_32BIT"
   "subs\\t%Q0, %Q1, %2\;sbc\\t%R0, %R1, #0"
   [(set_attr "conds" "clob")
    (set_attr "length" "8")]
@@ -952,7 +1046,8 @@
 		  (sign_extend:DI
 		   (match_operand:SI 2 "s_register_operand"  "r,r"))))
    (clobber (reg:CC CC_REGNUM))]
-  "TARGET_ARM"
+;; APPLE LOCAL v7 support. Merge from mainline
+  "TARGET_32BIT"
   "subs\\t%Q0, %Q1, %2\;sbc\\t%R0, %R1, %2, asr #31"
   [(set_attr "conds" "clob")
    (set_attr "length" "8")]
@@ -989,8 +1084,10 @@
 		  (zero_extend:DI
 		   (match_operand:SI 2 "s_register_operand"  "r"))))
    (clobber (reg:CC CC_REGNUM))]
-  "TARGET_ARM"
-  "subs\\t%Q0, %1, %2\;rsc\\t%R0, %1, %1"
+;; APPLE LOCAL begin v7 support. Merge from mainline
+  "TARGET_32BIT"
+  "subs\\t%Q0, %1, %2\;sbc\\t%R0, %1, %1"
+;; APPLE LOCAL end v7 support. Merge from mainline
   [(set_attr "conds" "clob")
    (set_attr "length" "8")]
 )
@@ -1003,37 +1100,43 @@
   "
   if (GET_CODE (operands[1]) == CONST_INT)
     {
-      if (TARGET_ARM)
+      /* APPLE LOCAL v7 support. Merge from mainline */
+      if (TARGET_32BIT)
         {
           arm_split_constant (MINUS, SImode, NULL_RTX,
 	                      INTVAL (operands[1]), operands[0],
 	  		      operands[2], optimize && !no_new_pseudos);
           DONE;
 	}
-      else /* TARGET_THUMB */
+      /* APPLE LOCAL v7 support. Merge from mainline */
+      else /* TARGET_THUMB1 */
         operands[1] = force_reg (SImode, operands[1]);
     }
   "
 )
 
-(define_insn "*thumb_subsi3_insn"
+;; APPLE LOCAL v7 support. Merge from mainline
+(define_insn "*thumb1_subsi3_insn"
   [(set (match_operand:SI           0 "register_operand" "=l")
 	(minus:SI (match_operand:SI 1 "register_operand" "l")
 		  (match_operand:SI 2 "register_operand" "l")))]
-  "TARGET_THUMB"
+;; APPLE LOCAL v7 support. Merge from mainline
+  "TARGET_THUMB1"
   "sub\\t%0, %1, %2"
   [(set_attr "length" "2")]
 )
 
+;; APPLE LOCAL begin v7 support. Merge from mainline
+; ??? Check Thumb-2 split length
 (define_insn_and_split "*arm_subsi3_insn"
   [(set (match_operand:SI           0 "s_register_operand" "=r,r")
 	(minus:SI (match_operand:SI 1 "reg_or_int_operand" "rI,?n")
 		  (match_operand:SI 2 "s_register_operand" "r,r")))]
-  "TARGET_ARM"
+  "TARGET_32BIT"
   "@
    rsb%?\\t%0, %2, %1
    #"
-  "TARGET_ARM
+  "TARGET_32BIT
    && GET_CODE (operands[1]) == CONST_INT
    && !const_ok_for_arm (INTVAL (operands[1]))"
   [(clobber (const_int 0))]
@@ -1045,13 +1148,15 @@
   [(set_attr "length" "4,16")
    (set_attr "predicable" "yes")]
 )
+;; APPLE LOCAL end v7 support. Merge from mainline
 
 (define_peephole2
   [(match_scratch:SI 3 "r")
    (set (match_operand:SI 0 "arm_general_register_operand" "")
 	(minus:SI (match_operand:SI 1 "const_int_operand" "")
 		  (match_operand:SI 2 "arm_general_register_operand" "")))]
-  "TARGET_ARM
+;; APPLE LOCAL v7 support. Merge from mainline
+  "TARGET_32BIT
    && !const_ok_for_arm (INTVAL (operands[1]))
    && const_ok_for_arm (~INTVAL (operands[1]))"
   [(set (match_dup 3) (match_dup 1))
@@ -1067,14 +1172,26 @@
 	 (const_int 0)))
    (set (match_operand:SI 0 "s_register_operand" "=r,r")
 	(minus:SI (match_dup 1) (match_dup 2)))]
-  "TARGET_ARM"
+;; APPLE LOCAL begin v7 support. Merge from mainline
+  "TARGET_32BIT"
   "@
-   sub%?s\\t%0, %1, %2
-   rsb%?s\\t%0, %2, %1"
+   sub%.\\t%0, %1, %2
+   rsb%.\\t%0, %2, %1"
+;; APPLE LOCAL end v7 support. Merge from mainline
   [(set_attr "conds" "set")]
 )
 
-(define_insn "decscc"
+;; APPLE LOCAL begin v7 support. Merge from mainline
+(define_expand "decscc"
+  [(set (match_operand:SI            0 "s_register_operand" "=r,r")
+        (minus:SI (match_operand:SI  1 "s_register_operand" "0,?r")
+		  (match_operator:SI 2 "arm_comparison_operator"
+                   [(match_operand   3 "cc_register" "") (const_int 0)])))]
+  "TARGET_32BIT"
+  ""
+)
+
+(define_insn "*arm_decscc"
   [(set (match_operand:SI            0 "s_register_operand" "=r,r")
         (minus:SI (match_operand:SI  1 "s_register_operand" "0,?r")
 		  (match_operator:SI 2 "arm_comparison_operator"
@@ -1086,12 +1203,14 @@
   [(set_attr "conds" "use")
    (set_attr "length" "*,8")]
 )
+;; APPLE LOCAL end v7 support. Merge from mainline
 
 (define_expand "subsf3"
   [(set (match_operand:SF           0 "s_register_operand" "")
 	(minus:SF (match_operand:SF 1 "arm_float_rhs_operand" "")
 		  (match_operand:SF 2 "arm_float_rhs_operand" "")))]
-  "TARGET_ARM && TARGET_HARD_FLOAT"
+;; APPLE LOCAL v7 support. Merge from mainline
+  "TARGET_32BIT && TARGET_HARD_FLOAT"
   "
   if (TARGET_MAVERICK)
     {
@@ -1106,7 +1225,8 @@
   [(set (match_operand:DF           0 "s_register_operand" "")
 	(minus:DF (match_operand:DF 1 "arm_float_rhs_operand" "")
 		  (match_operand:DF 2 "arm_float_rhs_operand" "")))]
-  "TARGET_ARM && TARGET_HARD_FLOAT"
+;; APPLE LOCAL v7 support. Merge from mainline
+  "TARGET_32BIT && TARGET_HARD_FLOAT"
   "
   if (TARGET_MAVERICK)
     {
@@ -1133,12 +1253,26 @@
   [(set (match_operand:SI          0 "s_register_operand" "=&r,&r")
 	(mult:SI (match_operand:SI 2 "s_register_operand" "r,r")
 		 (match_operand:SI 1 "s_register_operand" "%?r,0")))]
-  "TARGET_ARM"
+;; APPLE LOCAL v7 support. Merge from mainline
+  "TARGET_32BIT && !arm_arch6"
   "mul%?\\t%0, %2, %1"
   [(set_attr "insn" "mul")
    (set_attr "predicable" "yes")]
 )
 
+;; APPLE LOCAL begin v7 support. Merge from mainline
+(define_insn "*arm_mulsi3_v6"
+  [(set (match_operand:SI          0 "s_register_operand" "=r")
+	(mult:SI (match_operand:SI 1 "s_register_operand" "r")
+		 (match_operand:SI 2 "s_register_operand" "r")))]
+  "TARGET_32BIT && arm_arch6"
+  "mul%?\\t%0, %1, %2"
+  [(set_attr "insn" "mul")
+   (set_attr "predicable" "yes")]
+)
+;; APPLE LOCAL end v7 support. Merge from mainline
+
+;; APPLE LOCAL begin v7 support. Merge from Codesourcery
 ; Unfortunately with the Thumb the '&'/'0' trick can fails when operands 
 ; 1 and 2; are the same, because reload will make operand 0 match 
 ; operand 1 without realizing that this conflicts with operand 2.  We fix 
@@ -1148,7 +1282,7 @@
   [(set (match_operand:SI          0 "register_operand" "=&l,&l,&l")
 	(mult:SI (match_operand:SI 1 "register_operand" "%l,*h,0")
 		 (match_operand:SI 2 "register_operand" "l,l,l")))]
-  "TARGET_THUMB"
+  "TARGET_THUMB1 && !arm_arch6"
   "*
   if (which_alternative < 2)
     return \"mov\\t%0, %1\;mul\\t%0, %2\";
@@ -1158,7 +1292,24 @@
   [(set_attr "length" "4,4,2")
    (set_attr "insn" "mul")]
 )
+;; APPLE LOCAL end v7 support. Merge from Codesourcery
 
+;; APPLE LOCAL begin v7 support. Merge from mainline
+(define_insn "*thumb_mulsi3_v6"
+  [(set (match_operand:SI          0 "register_operand" "=l,l,l")
+	(mult:SI (match_operand:SI 1 "register_operand" "0,l,0")
+		 (match_operand:SI 2 "register_operand" "l,0,0")))]
+  "TARGET_THUMB1 && arm_arch6"
+  "@
+   mul\\t%0, %2
+   mul\\t%0, %1
+   mul\\t%0, %1"
+  [(set_attr "length" "2")
+   (set_attr "insn" "mul")]
+)
+;; APPLE LOCAL end v7 support. Merge from mainline
+
+;; APPLE LOCAL begin v7 support. Merge from mainline
 (define_insn "*mulsi3_compare0"
   [(set (reg:CC_NOOV CC_REGNUM)
 	(compare:CC_NOOV (mult:SI
@@ -1167,8 +1318,25 @@
 			 (const_int 0)))
    (set (match_operand:SI 0 "s_register_operand" "=&r,&r")
 	(mult:SI (match_dup 2) (match_dup 1)))]
-  "TARGET_ARM"
-  "mul%?s\\t%0, %2, %1"
+  "TARGET_ARM && !arm_arch6"
+  "mul%.\\t%0, %2, %1"
+  [(set_attr "conds" "set")
+   (set_attr "insn" "muls")]
+)
+;; APPLE LOCAL end v7 support. Merge from mainline
+
+;; APPLE LOCAL begin v7 support. Merge from mainline
+(define_insn "*mulsi3_compare0_v6"
+  [(set (reg:CC_NOOV CC_REGNUM)
+	(compare:CC_NOOV (mult:SI
+			  (match_operand:SI 2 "s_register_operand" "r")
+			  (match_operand:SI 1 "s_register_operand" "r"))
+			 (const_int 0)))
+   (set (match_operand:SI 0 "s_register_operand" "=r")
+	(mult:SI (match_dup 2) (match_dup 1)))]
+;; APPLE LOCAL 6040923 unrecognizable insn ICE
+  "TARGET_ARM && arm_arch6"
+  "mul%.\\t%0, %2, %1"
   [(set_attr "conds" "set")
    (set_attr "insn" "muls")]
 )
@@ -1180,25 +1348,54 @@
 			  (match_operand:SI 1 "s_register_operand" "%?r,0"))
 			 (const_int 0)))
    (clobber (match_scratch:SI 0 "=&r,&r"))]
-  "TARGET_ARM"
-  "mul%?s\\t%0, %2, %1"
+  "TARGET_ARM && !arm_arch6"
+  "mul%.\\t%0, %2, %1"
   [(set_attr "conds" "set")
    (set_attr "insn" "muls")]
 )
 
+(define_insn "*mulsi_compare0_scratch_v6"
+  [(set (reg:CC_NOOV CC_REGNUM)
+	(compare:CC_NOOV (mult:SI
+			  (match_operand:SI 2 "s_register_operand" "r")
+			  (match_operand:SI 1 "s_register_operand" "r"))
+			 (const_int 0)))
+   (clobber (match_scratch:SI 0 "=r"))]
+;; APPLE LOCAL 6040923 unrecognizable insn ICE
+  "TARGET_ARM && arm_arch6"
+  "mul%.\\t%0, %2, %1"
+  [(set_attr "conds" "set")
+   (set_attr "insn" "muls")]
+)
+;; APPLE LOCAL end v7 support. Merge from mainline
+
 ;; Unnamed templates to match MLA instruction.
 
+;; APPLE LOCAL begin v7 support. Merge from mainline
 (define_insn "*mulsi3addsi"
   [(set (match_operand:SI 0 "s_register_operand" "=&r,&r,&r,&r")
 	(plus:SI
 	  (mult:SI (match_operand:SI 2 "s_register_operand" "r,r,r,r")
 		   (match_operand:SI 1 "s_register_operand" "%r,0,r,0"))
 	  (match_operand:SI 3 "s_register_operand" "?r,r,0,0")))]
-  "TARGET_ARM"
+  "TARGET_32BIT && !arm_arch6"
   "mla%?\\t%0, %2, %1, %3"
   [(set_attr "insn" "mla")
    (set_attr "predicable" "yes")]
 )
+
+(define_insn "*mulsi3addsi_v6"
+  [(set (match_operand:SI 0 "s_register_operand" "=r")
+	(plus:SI
+	  (mult:SI (match_operand:SI 2 "s_register_operand" "r")
+		   (match_operand:SI 1 "s_register_operand" "r"))
+	  (match_operand:SI 3 "s_register_operand" "r")))]
+  "TARGET_32BIT && arm_arch6"
+  "mla%?\\t%0, %2, %1, %3"
+  [(set_attr "insn" "mla")
+   (set_attr "predicable" "yes")]
+)
+;; APPLE LOCAL end v7 support. Merge from mainline
 
 (define_insn "*mulsi3addsi_compare0"
   [(set (reg:CC_NOOV CC_REGNUM)
@@ -1211,11 +1408,30 @@
    (set (match_operand:SI 0 "s_register_operand" "=&r,&r,&r,&r")
 	(plus:SI (mult:SI (match_dup 2) (match_dup 1))
 		 (match_dup 3)))]
-  "TARGET_ARM"
-  "mla%?s\\t%0, %2, %1, %3"
+;; APPLE LOCAL begin v7 support. Merge from mainline
+  "TARGET_ARM && arm_arch6"
+  "mla%.\\t%0, %2, %1, %3"
   [(set_attr "conds" "set")
    (set_attr "insn" "mlas")]
 )
+
+(define_insn "*mulsi3addsi_compare0_v6"
+  [(set (reg:CC_NOOV CC_REGNUM)
+	(compare:CC_NOOV
+	 (plus:SI (mult:SI
+		   (match_operand:SI 2 "s_register_operand" "r")
+		   (match_operand:SI 1 "s_register_operand" "r"))
+		  (match_operand:SI 3 "s_register_operand" "r"))
+	 (const_int 0)))
+   (set (match_operand:SI 0 "s_register_operand" "=r")
+	(plus:SI (mult:SI (match_dup 2) (match_dup 1))
+		 (match_dup 3)))]
+  "TARGET_ARM && arm_arch6 && optimize_size"
+  "mla%.\\t%0, %2, %1, %3"
+  [(set_attr "conds" "set")
+   (set_attr "insn" "mlas")]
+)
+;; APPLE LOCAL end v7 support. Merge from mainline
 
 (define_insn "*mulsi3addsi_compare0_scratch"
   [(set (reg:CC_NOOV CC_REGNUM)
@@ -1226,12 +1442,43 @@
 		  (match_operand:SI 3 "s_register_operand" "?r,r,0,0"))
 	 (const_int 0)))
    (clobber (match_scratch:SI 0 "=&r,&r,&r,&r"))]
-  "TARGET_ARM"
-  "mla%?s\\t%0, %2, %1, %3"
+;; APPLE LOCAL begin v7 support. Merge from mainline
+  "TARGET_ARM && !arm_arch6"
+  "mla%.\\t%0, %2, %1, %3"
+;; APPLE LOCAL end v7 support. Merge from mainline
   [(set_attr "conds" "set")
    (set_attr "insn" "mlas")]
 )
 
+;; APPLE LOCAL begin v7 support. Merge from mainline
+(define_insn "*mulsi3addsi_compare0_scratch_v6"
+  [(set (reg:CC_NOOV CC_REGNUM)
+	(compare:CC_NOOV
+	 (plus:SI (mult:SI
+		   (match_operand:SI 2 "s_register_operand" "r")
+		   (match_operand:SI 1 "s_register_operand" "r"))
+		  (match_operand:SI 3 "s_register_operand" "r"))
+	 (const_int 0)))
+   (clobber (match_scratch:SI 0 "=r"))]
+  "TARGET_ARM && arm_arch6 && optimize_size"
+  "mla%.\\t%0, %2, %1, %3"
+  [(set_attr "conds" "set")
+   (set_attr "insn" "mlas")]
+)
+
+(define_insn "*mulsi3subsi"
+  [(set (match_operand:SI 0 "s_register_operand" "=r")
+	(minus:SI
+	  (match_operand:SI 3 "s_register_operand" "r")
+	  (mult:SI (match_operand:SI 2 "s_register_operand" "r")
+		   (match_operand:SI 1 "s_register_operand" "r"))))]
+  "TARGET_32BIT && arm_arch_thumb2"
+  "mls%?\\t%0, %2, %1, %3"
+  [(set_attr "insn" "mla")
+   (set_attr "predicable" "yes")]
+)
+
+;; APPLE LOCAL end v7 support. Merge from mainline
 ;; Unnamed template to match long long multiply-accumulate (smlal)
 
 (define_insn "*mulsidi3adddi"
@@ -1241,18 +1488,34 @@
 	  (sign_extend:DI (match_operand:SI 2 "s_register_operand" "%r"))
 	  (sign_extend:DI (match_operand:SI 3 "s_register_operand" "r")))
 	 (match_operand:DI 1 "s_register_operand" "0")))]
-  "TARGET_ARM && arm_arch3m"
+;; APPLE LOCAL begin v7 support. Merge from mainline
+  "TARGET_32BIT && arm_arch3m && !arm_arch6"
   "smlal%?\\t%Q0, %R0, %3, %2"
   [(set_attr "insn" "smlal")
    (set_attr "predicable" "yes")]
 )
+
+(define_insn "*mulsidi3adddi_v6"
+  [(set (match_operand:DI 0 "s_register_operand" "=r")
+	(plus:DI
+	 (mult:DI
+	  (sign_extend:DI (match_operand:SI 2 "s_register_operand" "r"))
+	  (sign_extend:DI (match_operand:SI 3 "s_register_operand" "r")))
+	 (match_operand:DI 1 "s_register_operand" "0")))]
+  "TARGET_32BIT && arm_arch6"
+  "smlal%?\\t%Q0, %R0, %3, %2"
+  [(set_attr "insn" "smlal")
+   (set_attr "predicable" "yes")]
+)
+;; APPLE LOCAL end v7 support. Merge from mainline
 
 (define_insn "mulsidi3"
   [(set (match_operand:DI 0 "s_register_operand" "=&r")
 	(mult:DI
 	 (sign_extend:DI (match_operand:SI 1 "s_register_operand" "%r"))
 	 (sign_extend:DI (match_operand:SI 2 "s_register_operand" "r"))))]
-  "TARGET_ARM && arm_arch3m"
+;; APPLE LOCAL v7 support. Merge from mainline
+  "TARGET_32BIT && arm_arch3m"
   "smull%?\\t%Q0, %R0, %1, %2"
   [(set_attr "insn" "smull")
    (set_attr "predicable" "yes")]
@@ -1263,7 +1526,8 @@
 	(mult:DI
 	 (zero_extend:DI (match_operand:SI 1 "s_register_operand" "%r"))
 	 (zero_extend:DI (match_operand:SI 2 "s_register_operand" "r"))))]
-  "TARGET_ARM && arm_arch3m"
+;; APPLE LOCAL v7 support. Merge from mainline
+  "TARGET_32BIT && arm_arch3m"
   "umull%?\\t%Q0, %R0, %1, %2"
   [(set_attr "insn" "umull")
    (set_attr "predicable" "yes")]
@@ -1278,11 +1542,28 @@
 	  (zero_extend:DI (match_operand:SI 2 "s_register_operand" "%r"))
 	  (zero_extend:DI (match_operand:SI 3 "s_register_operand" "r")))
 	 (match_operand:DI 1 "s_register_operand" "0")))]
-  "TARGET_ARM && arm_arch3m"
+;; APPLE LOCAL begin v7 support. Merge from mainline
+  "TARGET_32BIT && arm_arch3m && !arm_arch6"
+  "umlal%?\\t%Q0, %R0, %3, %2"
+;; APPLE LOCAL end v7 support. Merge from mainline
+  [(set_attr "insn" "umlal")
+   (set_attr "predicable" "yes")]
+)
+
+;; APPLE LOCAL begin v7 support. Merge from mainline
+(define_insn "*umulsidi3adddi_v6"
+  [(set (match_operand:DI 0 "s_register_operand" "=r")
+	(plus:DI
+	 (mult:DI
+	  (zero_extend:DI (match_operand:SI 2 "s_register_operand" "r"))
+	  (zero_extend:DI (match_operand:SI 3 "s_register_operand" "r")))
+	 (match_operand:DI 1 "s_register_operand" "0")))]
+  "TARGET_32BIT && arm_arch6"
   "umlal%?\\t%Q0, %R0, %3, %2"
   [(set_attr "insn" "umlal")
    (set_attr "predicable" "yes")]
 )
+;; APPLE LOCAL end v7 support. Merge from mainline
 
 (define_insn "smulsi3_highpart"
   [(set (match_operand:SI 0 "s_register_operand" "=&r,&r")
@@ -1293,7 +1574,8 @@
 	   (sign_extend:DI (match_operand:SI 2 "s_register_operand" "r,r")))
 	  (const_int 32))))
    (clobber (match_scratch:SI 3 "=&r,&r"))]
-  "TARGET_ARM && arm_arch3m"
+;; APPLE LOCAL v7 support. Merge from mainline
+  "TARGET_32BIT && arm_arch3m"
   "smull%?\\t%3, %0, %2, %1"
   [(set_attr "insn" "smull")
    (set_attr "predicable" "yes")]
@@ -1308,7 +1590,8 @@
 	   (zero_extend:DI (match_operand:SI 2 "s_register_operand" "r,r")))
 	  (const_int 32))))
    (clobber (match_scratch:SI 3 "=&r,&r"))]
-  "TARGET_ARM && arm_arch3m"
+;; APPLE LOCAL v7 support. Merge from mainline
+  "TARGET_32BIT && arm_arch3m"
   "umull%?\\t%3, %0, %2, %1"
   [(set_attr "insn" "umull")
    (set_attr "predicable" "yes")]
@@ -1320,7 +1603,8 @@
 		  (match_operand:HI 1 "s_register_operand" "%r"))
 		 (sign_extend:SI
 		  (match_operand:HI 2 "s_register_operand" "r"))))]
-  "TARGET_ARM && arm_arch5e"
+;; APPLE LOCAL v7 support. Merge from mainline
+  "TARGET_DSP_MULTIPLY"
   "smulbb%?\\t%0, %1, %2"
   [(set_attr "insn" "smulxy")
    (set_attr "predicable" "yes")]
@@ -1333,7 +1617,8 @@
 		  (const_int 16))
 		 (sign_extend:SI
 		  (match_operand:HI 2 "s_register_operand" "r"))))]
-  "TARGET_ARM && arm_arch5e"
+;; APPLE LOCAL v7 support. Merge from mainline
+  "TARGET_DSP_MULTIPLY"
   "smultb%?\\t%0, %1, %2"
   [(set_attr "insn" "smulxy")
    (set_attr "predicable" "yes")]
@@ -1346,7 +1631,8 @@
 		 (ashiftrt:SI
 		  (match_operand:SI 2 "s_register_operand" "r")
 		  (const_int 16))))]
-  "TARGET_ARM && arm_arch5e"
+;; APPLE LOCAL v7 support. Merge from mainline
+  "TARGET_DSP_MULTIPLY"
   "smulbt%?\\t%0, %1, %2"
   [(set_attr "insn" "smulxy")
    (set_attr "predicable" "yes")]
@@ -1360,7 +1646,8 @@
 		 (ashiftrt:SI
 		  (match_operand:SI 2 "s_register_operand" "r")
 		  (const_int 16))))]
-  "TARGET_ARM && arm_arch5e"
+;; APPLE LOCAL v7 support. Merge from mainline
+  "TARGET_DSP_MULTIPLY"
   "smultt%?\\t%0, %1, %2"
   [(set_attr "insn" "smulxy")
    (set_attr "predicable" "yes")]
@@ -1373,7 +1660,8 @@
 			   (match_operand:HI 2 "s_register_operand" "%r"))
 			  (sign_extend:SI
 			   (match_operand:HI 3 "s_register_operand" "r")))))]
-  "TARGET_ARM && arm_arch5e"
+;; APPLE LOCAL v7 support. Merge from mainline
+  "TARGET_DSP_MULTIPLY"
   "smlabb%?\\t%0, %2, %3, %1"
   [(set_attr "insn" "smlaxy")
    (set_attr "predicable" "yes")]
@@ -1387,7 +1675,8 @@
 	 	    (match_operand:HI 2 "s_register_operand" "%r"))
 		   (sign_extend:DI
 		    (match_operand:HI 3 "s_register_operand" "r")))))]
-  "TARGET_ARM && arm_arch5e"
+;; APPLE LOCAL v7 support. Merge from mainline
+  "TARGET_DSP_MULTIPLY"
   "smlalbb%?\\t%Q0, %R0, %2, %3"
   [(set_attr "insn" "smlalxy")
    (set_attr "predicable" "yes")])
@@ -1449,7 +1738,8 @@
   [(set (match_operand:SF          0 "s_register_operand" "")
 	(mult:SF (match_operand:SF 1 "s_register_operand" "")
 		 (match_operand:SF 2 "arm_float_rhs_operand" "")))]
-  "TARGET_ARM && TARGET_HARD_FLOAT"
+;; APPLE LOCAL v7 support. Merge from mainline
+  "TARGET_32BIT && TARGET_HARD_FLOAT"
   "
   if (TARGET_MAVERICK
       && !cirrus_fp_register (operands[2], SFmode))
@@ -1460,7 +1750,8 @@
   [(set (match_operand:DF          0 "s_register_operand" "")
 	(mult:DF (match_operand:DF 1 "s_register_operand" "")
 		 (match_operand:DF 2 "arm_float_rhs_operand" "")))]
-  "TARGET_ARM && TARGET_HARD_FLOAT"
+;; APPLE LOCAL v7 support. Merge from mainline
+  "TARGET_32BIT && TARGET_HARD_FLOAT"
   "
   if (TARGET_MAVERICK
       && !cirrus_fp_register (operands[2], DFmode))
@@ -1473,14 +1764,16 @@
   [(set (match_operand:SF 0 "s_register_operand" "")
 	(div:SF (match_operand:SF 1 "arm_float_rhs_operand" "")
 		(match_operand:SF 2 "arm_float_rhs_operand" "")))]
-  "TARGET_ARM && TARGET_HARD_FLOAT && (TARGET_FPA || TARGET_VFP)"
+;; APPLE LOCAL v7 support. Merge from mainline
+  "TARGET_32BIT && TARGET_HARD_FLOAT && (TARGET_FPA || TARGET_VFP)"
   "")
 
 (define_expand "divdf3"
   [(set (match_operand:DF 0 "s_register_operand" "")
 	(div:DF (match_operand:DF 1 "arm_float_rhs_operand" "")
 		(match_operand:DF 2 "arm_float_rhs_operand" "")))]
-  "TARGET_ARM && TARGET_HARD_FLOAT && (TARGET_FPA || TARGET_VFP)"
+;; APPLE LOCAL v7 support. Merge from mainline
+  "TARGET_32BIT && TARGET_HARD_FLOAT && (TARGET_FPA || TARGET_VFP)"
   "")
 
 ;; Modulo insns
@@ -1489,14 +1782,16 @@
   [(set (match_operand:SF 0 "s_register_operand" "")
 	(mod:SF (match_operand:SF 1 "s_register_operand" "")
 		(match_operand:SF 2 "arm_float_rhs_operand" "")))]
-  "TARGET_ARM && TARGET_HARD_FLOAT && TARGET_FPA"
+;; APPLE LOCAL v7 support. Merge from mainline
+  "TARGET_32BIT && TARGET_HARD_FLOAT && TARGET_FPA"
   "")
 
 (define_expand "moddf3"
   [(set (match_operand:DF 0 "s_register_operand" "")
 	(mod:DF (match_operand:DF 1 "s_register_operand" "")
 		(match_operand:DF 2 "arm_float_rhs_operand" "")))]
-  "TARGET_ARM && TARGET_HARD_FLOAT && TARGET_FPA"
+;; APPLE LOCAL v7 support. Merge from mainline
+  "TARGET_32BIT && TARGET_HARD_FLOAT && TARGET_FPA"
   "")
 
 ;; Boolean and,ior,xor insns
@@ -1511,7 +1806,10 @@
 	(match_operator:DI 6 "logical_binary_operator"
 	  [(match_operand:DI 1 "s_register_operand" "")
 	   (match_operand:DI 2 "arm_rhs64_operand" "")]))]
-  "TARGET_ARM && reload_completed && ! IS_IWMMXT_REGNUM (REGNO (operands[0]))"
+;; APPLE LOCAL begin v7 support. Merge from mainline
+  "TARGET_32BIT && reload_completed
+   && ! IS_IWMMXT_REGNUM (REGNO (operands[0]))"
+;; APPLE LOCAL end v7 support. Merge from mainline
   [(set (match_dup 0) (match_op_dup:SI 6 [(match_dup 1) (match_dup 2)]))
    (set (match_dup 3) (match_op_dup:SI 6 [(match_dup 4) (match_dup 5)]))]
   "
@@ -1531,7 +1829,8 @@
 	(match_operator:DI 6 "logical_binary_operator"
 	  [(sign_extend:DI (match_operand:SI 2 "s_register_operand" ""))
 	   (match_operand:DI 1 "s_register_operand" "")]))]
-  "TARGET_ARM && reload_completed"
+;; APPLE LOCAL v7 support. Merge from mainline
+  "TARGET_32BIT && reload_completed"
   [(set (match_dup 0) (match_op_dup:SI 6 [(match_dup 1) (match_dup 2)]))
    (set (match_dup 3) (match_op_dup:SI 6
 			[(ashiftrt:SI (match_dup 2) (const_int 31))
@@ -1554,7 +1853,8 @@
 	(ior:DI
 	  (zero_extend:DI (match_operand:SI 2 "s_register_operand" ""))
 	  (match_operand:DI 1 "s_register_operand" "")))]
-  "TARGET_ARM && operands[0] != operands[1] && reload_completed"
+;; APPLE LOCAL v7 support. Merge from mainline
+  "TARGET_32BIT && operands[0] != operands[1] && reload_completed"
   [(set (match_dup 0) (ior:SI (match_dup 1) (match_dup 2)))
    (set (match_dup 3) (match_dup 4))]
   "
@@ -1573,7 +1873,8 @@
 	(xor:DI
 	  (zero_extend:DI (match_operand:SI 2 "s_register_operand" ""))
 	  (match_operand:DI 1 "s_register_operand" "")))]
-  "TARGET_ARM && operands[0] != operands[1] && reload_completed"
+;; APPLE LOCAL v7 support. Merge from mainline
+  "TARGET_32BIT && operands[0] != operands[1] && reload_completed"
   [(set (match_dup 0) (xor:SI (match_dup 1) (match_dup 2)))
    (set (match_dup 3) (match_dup 4))]
   "
@@ -1588,9 +1889,10 @@
 ;; APPLE LOCAL begin 5831562 long long constants
 (define_insn "anddi3"
   [(set (match_operand:DI         0 "s_register_operand" "=&r,&r,&r,&r")
-	(and:DI (match_operand:DI 1 "s_register_operand"  "%0,r, 0, r")
-		(match_operand:DI 2 "arm_rhs64_operand"    "r,r,Dd,Dd")))]
-  "TARGET_ARM && ! TARGET_IWMMXT"
+	(and:DI (match_operand:DI 1 "s_register_operand"  "%0,r,0,r")
+		(match_operand:DI 2 "s_register_operand"   "r,r,Dd,Dd")))]
+;; APPLE LOCAL v7 support. Merge from mainline
+  "TARGET_32BIT && ! TARGET_IWMMXT"
   "#"
   [(set_attr "length" "8")
    (set_attr "predicable" "yes")]
@@ -1602,9 +1904,11 @@
 	(and:DI (zero_extend:DI
 		 (match_operand:SI 2 "s_register_operand" "r,r"))
 		(match_operand:DI 1 "s_register_operand" "?r,0")))]
-  "TARGET_ARM"
+;; APPLE LOCAL begin v7 support. Merge from mainline
+  "TARGET_32BIT"
   "#"
-  "TARGET_ARM && reload_completed"
+  "TARGET_32BIT && reload_completed"
+;; APPLE LOCAL end v7 support. Merge from mainline
   ; The zero extend of operand 2 clears the high word of the output
   ; operand.
   [(set (match_dup 0) (and:SI (match_dup 1) (match_dup 2)))
@@ -1623,7 +1927,8 @@
 	(and:DI (sign_extend:DI
 		 (match_operand:SI 2 "s_register_operand" "r,r"))
 		(match_operand:DI  1 "s_register_operand" "?r,0")))]
-  "TARGET_ARM"
+;; APPLE LOCAL v7 support. Merge from mainline
+  "TARGET_32BIT"
   "#"
   [(set_attr "length" "8")]
 )
@@ -1634,7 +1939,8 @@
 		(match_operand:SI 2 "reg_or_int_operand" "")))]
   "TARGET_EITHER"
   "
-  if (TARGET_ARM)
+  /* APPLE LOCAL v7 support. Merge from mainline */
+  if (TARGET_32BIT)
     {
       if (GET_CODE (operands[2]) == CONST_INT)
         {
@@ -1645,7 +1951,8 @@
           DONE;
         }
     }
-  else /* TARGET_THUMB */
+  /* APPLE LOCAL v7 support. Merge from mainline */
+  else /* TARGET_THUMB1 */
     {
       if (GET_CODE (operands[2]) != CONST_INT)
         operands[2] = force_reg (SImode, operands[2]);
@@ -1690,12 +1997,14 @@
   "
 )
 
+;; APPLE LOCAL begin v7 support. Merge from mainline
+; ??? Check split length for Thumb-2
 ;; APPLE LOCAL begin ARM 4673027 suboptimal loop codegen
 (define_insn "*arm_andsi3_insn"
   [(set (match_operand:SI         0 "s_register_operand" "=r,r")
 	(and:SI (match_operand:SI 1 "s_register_operand" "r,r")
 		(match_operand:SI 2 "arm_not_operand" "rI,K")))]
-  "TARGET_ARM"
+  "TARGET_32BIT"
   "@
    and%?\\t%0, %1, %2
    bic%?\\t%0, %1, #%B2"
@@ -1703,12 +2012,15 @@
    (set_attr "predicable" "yes")]
 )
 ;; APPLE LOCAL end ARM 4673027 suboptimal loop codegen
+;; APPLE LOCAL end v7 support. Merge from mainline
 
-(define_insn "*thumb_andsi3_insn"
+;; APPLE LOCAL v7 support. Merge from mainline
+(define_insn "*thumb1_andsi3_insn"
   [(set (match_operand:SI         0 "register_operand" "=l")
 	(and:SI (match_operand:SI 1 "register_operand" "%0")
 		(match_operand:SI 2 "register_operand" "l")))]
-  "TARGET_THUMB"
+;; APPLE LOCAL v7 support. Merge from mainline
+  "TARGET_THUMB1"
   "and\\t%0, %0, %2"
   [(set_attr "length" "2")]
 )
@@ -1721,10 +2033,12 @@
 	 (const_int 0)))
    (set (match_operand:SI          0 "s_register_operand" "=r,r")
 	(and:SI (match_dup 1) (match_dup 2)))]
-  "TARGET_ARM"
+;; APPLE LOCAL begin v7 support. Merge from mainline
+  "TARGET_32BIT"
   "@
-   and%?s\\t%0, %1, %2
-   bic%?s\\t%0, %1, #%B2"
+   and%.\\t%0, %1, %2
+   bic%.\\t%0, %1, #%B2"
+;; APPLE LOCAL end v7 support. Merge from mainline
   [(set_attr "conds" "set")]
 )
 
@@ -1735,10 +2049,12 @@
 		 (match_operand:SI 1 "arm_not_operand" "rI,K"))
 	 (const_int 0)))
    (clobber (match_scratch:SI 2 "=X,r"))]
-  "TARGET_ARM"
+;; APPLE LOCAL begin v7 support. Merge from mainline
+  "TARGET_32BIT"
   "@
    tst%?\\t%0, %1
-   bic%?s\\t%2, %0, #%B1"
+   bic%.\\t%2, %0, #%B1"
+;; APPLE LOCAL end v7 support. Merge from mainline
   [(set_attr "conds" "set")]
 )
 
@@ -1749,7 +2065,8 @@
 		 	  (match_operand 1 "const_int_operand" "n")
 			  (match_operand 2 "const_int_operand" "n"))
 			 (const_int 0)))]
-  "TARGET_ARM
+;; APPLE LOCAL v7 support. Merge from mainline
+  "TARGET_32BIT
   && (INTVAL (operands[2]) >= 0 && INTVAL (operands[2]) < 32
       && INTVAL (operands[1]) > 0 
       && INTVAL (operands[1]) + (INTVAL (operands[2]) & 1) <= 8
@@ -1771,17 +2088,19 @@
 		(match_operand:SI 3 "const_int_operand" "n"))
 	       (const_int 0)))
    (clobber (reg:CC CC_REGNUM))]
-  "TARGET_ARM
+;; APPLE LOCAL begin v7 support. Merge from mainline
+  "TARGET_32BIT
    && (INTVAL (operands[3]) >= 0 && INTVAL (operands[3]) < 32
        && INTVAL (operands[2]) > 0 
        && INTVAL (operands[2]) + (INTVAL (operands[3]) & 1) <= 8
        && INTVAL (operands[2]) + INTVAL (operands[3]) <= 32)"
   "#"
-  "TARGET_ARM
+  "TARGET_32BIT
    && (INTVAL (operands[3]) >= 0 && INTVAL (operands[3]) < 32
        && INTVAL (operands[2]) > 0 
        && INTVAL (operands[2]) + (INTVAL (operands[3]) & 1) <= 8
        && INTVAL (operands[2]) + INTVAL (operands[3]) <= 32)"
+;; APPLE LOCAL end v7 support. Merge from mainline
   [(parallel [(set (reg:CC_NOOV CC_REGNUM)
 		   (compare:CC_NOOV (and:SI (match_dup 1) (match_dup 2))
 				    (const_int 0)))
@@ -1794,7 +2113,12 @@
 			 << INTVAL (operands[3])); 
   "
   [(set_attr "conds" "clob")
-   (set_attr "length" "8")]
+;; APPLE LOCAL begin v7 support. Merge from mainline
+   (set (attr "length")
+	(if_then_else (eq_attr "is_thumb" "yes")
+		      (const_int 12)
+		      (const_int 8)))]
+;; APPLE LOCAL end v7 support. Merge from mainline
 )
 
 (define_insn_and_split "*ne_zeroextractsi_shifted"
@@ -1893,7 +2217,8 @@
 			 (match_operand:SI 2 "const_int_operand" "")
 			 (match_operand:SI 3 "const_int_operand" "")))
    (clobber (match_operand:SI 4 "s_register_operand" ""))]
-  "TARGET_THUMB"
+;; APPLE LOCAL v7 support. Merge from mainline
+  "TARGET_THUMB1"
   [(set (match_dup 4) (ashift:SI (match_dup 1) (match_dup 2)))
    (set (match_dup 0) (lshiftrt:SI (match_dup 4) (match_dup 3)))]
   "{
@@ -1904,6 +2229,8 @@
    }"
 )
 
+;; APPLE LOCAL v7 support. Merge from mainline
+;; ??? Use Thumb-2 has bitfield insert/extract instructions.
 (define_split
   [(set (match_operand:SI 0 "s_register_operand" "")
 	(match_operator:SI 1 "shiftable_operator"
@@ -1931,7 +2258,8 @@
 	(sign_extract:SI (match_operand:SI 1 "s_register_operand" "")
 			 (match_operand:SI 2 "const_int_operand" "")
 			 (match_operand:SI 3 "const_int_operand" "")))]
-  "TARGET_THUMB"
+;; APPLE LOCAL v7 support. Merge from mainline
+  "TARGET_THUMB1"
   [(set (match_dup 0) (ashift:SI (match_dup 1) (match_dup 2)))
    (set (match_dup 0) (ashiftrt:SI (match_dup 0) (match_dup 3)))]
   "{
@@ -1974,6 +2302,8 @@
 ;;; this insv pattern, so this pattern needs to be reevalutated.
 ;;; APPLE LOCAL begin ARM insv for Thumb
 
+;; APPLE LOCAL v7 support. Merge from mainline
+; ??? Use Thumb-2 bitfield insert/extract instructions
 (define_expand "insv"
   [(set (zero_extract:SI (match_operand:SI 0 "s_register_operand" "")
                          (match_operand:SI 1 "general_operand" "")
@@ -2146,9 +2476,10 @@
   [(set (match_operand:DI 0 "s_register_operand" "=&r,&r")
 	(and:DI (not:DI (match_operand:DI 1 "s_register_operand" "r,0"))
 		(match_operand:DI 2 "s_register_operand" "0,r")))]
-  "TARGET_ARM"
+;; APPLE LOCAL begin v7 support. Merge from mainline
+  "TARGET_32BIT"
   "#"
-  "TARGET_ARM && reload_completed && ! IS_IWMMXT_REGNUM (REGNO (operands[0]))"
+  "TARGET_32BIT && reload_completed && ! IS_IWMMXT_REGNUM (REGNO (operands[0]))"
   [(set (match_dup 0) (and:SI (not:SI (match_dup 1)) (match_dup 2)))
    (set (match_dup 3) (and:SI (not:SI (match_dup 4)) (match_dup 5)))]
   "
@@ -2160,6 +2491,7 @@
     operands[5] = gen_highpart (SImode, operands[2]);
     operands[2] = gen_lowpart (SImode, operands[2]);
   }"
+;; APPLE LOCAL end v7 support. Merge from mainline
   [(set_attr "length" "8")
    (set_attr "predicable" "yes")]
 )
@@ -2169,13 +2501,15 @@
 	(and:DI (not:DI (zero_extend:DI
 			 (match_operand:SI 2 "s_register_operand" "r,r")))
 		(match_operand:DI 1 "s_register_operand" "0,?r")))]
-  "TARGET_ARM"
+;; APPLE LOCAL v7 support. Merge from mainline
+  "TARGET_32BIT"
   "@
    bic%?\\t%Q0, %Q1, %2
    #"
   ; (not (zero_extend ...)) allows us to just copy the high word from
   ; operand1 to operand0.
-  "TARGET_ARM
+;; APPLE LOCAL v7 support. Merge from mainline
+  "TARGET_32BIT
    && reload_completed
    && operands[0] != operands[1]"
   [(set (match_dup 0) (and:SI (not:SI (match_dup 2)) (match_dup 1)))
@@ -2196,9 +2530,11 @@
 	(and:DI (not:DI (sign_extend:DI
 			 (match_operand:SI 2 "s_register_operand" "r,r")))
 		(match_operand:DI 1 "s_register_operand" "0,r")))]
-  "TARGET_ARM"
+;; APPLE LOCAL begin v7 support. Merge from mainline
+  "TARGET_32BIT"
   "#"
-  "TARGET_ARM && reload_completed"
+  "TARGET_32BIT && reload_completed"
+;; APPLE LOCAL end v7 support. Merge from mainline
   [(set (match_dup 0) (and:SI (not:SI (match_dup 2)) (match_dup 1)))
    (set (match_dup 3) (and:SI (not:SI
 				(ashiftrt:SI (match_dup 2) (const_int 31)))
@@ -2218,7 +2554,8 @@
   [(set (match_operand:SI 0 "s_register_operand" "=r")
 	(and:SI (not:SI (match_operand:SI 2 "s_register_operand" "r"))
 		(match_operand:SI 1 "s_register_operand" "r")))]
-  "TARGET_ARM"
+;; APPLE LOCAL v7 support. Merge from mainline
+  "TARGET_32BIT"
   "bic%?\\t%0, %1, %2"
   [(set_attr "predicable" "yes")]
 )
@@ -2227,7 +2564,8 @@
   [(set (match_operand:SI                 0 "register_operand" "=l")
 	(and:SI (not:SI (match_operand:SI 1 "register_operand" "l"))
 		(match_operand:SI         2 "register_operand" "0")))]
-  "TARGET_THUMB"
+;; APPLE LOCAL v7 support. Merge from mainline
+  "TARGET_THUMB1"
   "bic\\t%0, %0, %1"
   [(set_attr "length" "2")]
 )
@@ -2255,8 +2593,10 @@
 	 (const_int 0)))
    (set (match_operand:SI 0 "s_register_operand" "=r")
 	(and:SI (not:SI (match_dup 2)) (match_dup 1)))]
-  "TARGET_ARM"
-  "bic%?s\\t%0, %1, %2"
+;; APPLE LOCAL begin v7 support. Merge from mainline
+  "TARGET_32BIT"
+  "bic%.\\t%0, %1, %2"
+;; APPLE LOCAL end v7 support. Merge from mainline
   [(set_attr "conds" "set")]
 )
 
@@ -2267,17 +2607,20 @@
 		 (match_operand:SI 1 "s_register_operand" "r"))
 	 (const_int 0)))
    (clobber (match_scratch:SI 0 "=r"))]
-  "TARGET_ARM"
-  "bic%?s\\t%0, %1, %2"
+;; APPLE LOCAL begin v7 support. Merge from mainline
+  "TARGET_32BIT"
+  "bic%.\\t%0, %1, %2"
+;; APPLE LOCAL end v7 support. Merge from mainline
   [(set_attr "conds" "set")]
 )
 
 ;; APPLE LOCAL begin 5831562 long long constants
 (define_insn "iordi3"
   [(set (match_operand:DI         0 "s_register_operand" "=&r,&r,&r,&r")
-	(ior:DI (match_operand:DI 1 "s_register_operand"  "%0,r, 0, r")
+	(ior:DI (match_operand:DI 1 "s_register_operand"  "%0,r,0,r")
 		(match_operand:DI 2 "arm_rhs64_operand"   "r,r,Dd,Dd")))]
-  "TARGET_ARM && ! TARGET_IWMMXT"
+;; APPLE LOCAL v7 support. Merge from mainline
+  "TARGET_32BIT && ! TARGET_IWMMXT"
   "#"
   [(set_attr "length" "8")
    (set_attr "predicable" "yes")]
@@ -2289,7 +2632,8 @@
 	(ior:DI (zero_extend:DI
 		 (match_operand:SI 2 "s_register_operand" "r,r"))
 		(match_operand:DI 1 "s_register_operand" "0,?r")))]
-  "TARGET_ARM"
+;; APPLE LOCAL v7 support. Merge from mainline
+  "TARGET_32BIT"
   "@
    orr%?\\t%Q0, %Q1, %2
    #"
@@ -2302,7 +2646,8 @@
 	(ior:DI (sign_extend:DI
 		 (match_operand:SI 2 "s_register_operand" "r,r"))
 		(match_operand:DI 1 "s_register_operand" "?r,0")))]
-  "TARGET_ARM"
+;; APPLE LOCAL v7 support. Merge from mainline
+  "TARGET_32BIT"
   "#"
   [(set_attr "length" "8")
    (set_attr "predicable" "yes")]
@@ -2316,36 +2661,41 @@
   "
   if (GET_CODE (operands[2]) == CONST_INT)
     {
-      if (TARGET_ARM)
+      /* APPLE LOCAL v7 support. Merge from mainline */
+      if (TARGET_32BIT)
         {
           arm_split_constant (IOR, SImode, NULL_RTX,
 	                      INTVAL (operands[2]), operands[0], operands[1],
 			      optimize && !no_new_pseudos);
           DONE;
 	}
-      else /* TARGET_THUMB */
+      /* APPLE LOCAL v7 support. Merge from mainline */
+      else /* TARGET_THUMB1 */
 	operands [2] = force_reg (SImode, operands [2]);
     }
   "
 )
 
 ;; APPLE LOCAL begin ARM 4673027 suboptimal loop codegen
-(define_insn "*arm_iorsi3"
+(define_insn"*arm_iorsi3"
   [(set (match_operand:SI         0 "s_register_operand" "=r")
 	(ior:SI (match_operand:SI 1 "s_register_operand" "r")
-		(match_operand:SI 2 "arm_rhs_operand" "rI")))]
-  "TARGET_ARM"
+		(match_operand:SI 2 "reg_or_int_operand" "rI")))]
+;; APPLE LOCAL v7 support. Merge from mainline
+  "TARGET_32BIT"
   "orr%?\\t%0, %1, %2"
   [(set_attr "length" "4")
    (set_attr "predicable" "yes")]
 )
 ;; APPLE LOCAL end ARM 4673027 suboptimal loop codegen
 
-(define_insn "*thumb_iorsi3"
+;; APPLE LOCAL v7 support. Merge from mainline
+(define_insn "*thumb1_iorsi3"
   [(set (match_operand:SI         0 "register_operand" "=l")
 	(ior:SI (match_operand:SI 1 "register_operand" "%0")
 		(match_operand:SI 2 "register_operand" "l")))]
-  "TARGET_THUMB"
+;; APPLE LOCAL v7 support. Merge from mainline
+  "TARGET_THUMB1"
   "orr\\t%0, %0, %2"
   [(set_attr "length" "2")]
 )
@@ -2355,7 +2705,8 @@
    (set (match_operand:SI 0 "arm_general_register_operand" "")
 	(ior:SI (match_operand:SI 1 "arm_general_register_operand" "")
 		(match_operand:SI 2 "const_int_operand" "")))]
-  "TARGET_ARM
+;; APPLE LOCAL v7 support. Merge from mainline
+  "TARGET_32BIT
    && !const_ok_for_arm (INTVAL (operands[2]))
    && const_ok_for_arm (~INTVAL (operands[2]))"
   [(set (match_dup 3) (match_dup 2))
@@ -2370,8 +2721,10 @@
 			 (const_int 0)))
    (set (match_operand:SI 0 "s_register_operand" "=r")
 	(ior:SI (match_dup 1) (match_dup 2)))]
-  "TARGET_ARM"
-  "orr%?s\\t%0, %1, %2"
+;; APPLE LOCAL begin v7 support. Merge from mainline
+  "TARGET_32BIT"
+  "orr%.\\t%0, %1, %2"
+;; APPLE LOCAL end v7 support. Merge from mainline
   [(set_attr "conds" "set")]
 )
 
@@ -2381,17 +2734,20 @@
 				 (match_operand:SI 2 "arm_rhs_operand" "rI"))
 			 (const_int 0)))
    (clobber (match_scratch:SI 0 "=r"))]
-  "TARGET_ARM"
-  "orr%?s\\t%0, %1, %2"
+;; APPLE LOCAL begin v7 support. Merge from mainline
+  "TARGET_32BIT"
+  "orr%.\\t%0, %1, %2"
+;; APPLE LOCAL end v7 support. Merge from mainline
   [(set_attr "conds" "set")]
 )
 
 ;; APPLE LOCAL begin 5831562 long long constants
 (define_insn "xordi3"
   [(set (match_operand:DI         0 "s_register_operand" "=&r,&r,&r,&r")
-	(xor:DI (match_operand:DI 1 "s_register_operand"  "%0,r, 0, r")
-		(match_operand:DI 2 "arm_rhs64_operand"   "r,r,Dd,Dd")))]
-  "TARGET_ARM && !TARGET_IWMMXT"
+	(xor:DI (match_operand:DI 1 "s_register_operand"  "%0,r,0,r")
+		(match_operand:DI 2 "s_register_operand"   "r,r,Dd,Dd")))]
+;; APPLE LOCAL v7 support. Merge from mainline
+  "TARGET_32BIT && !TARGET_IWMMXT"
   "#"
   [(set_attr "length" "8")
    (set_attr "predicable" "yes")]
@@ -2403,7 +2759,8 @@
 	(xor:DI (zero_extend:DI
 		 (match_operand:SI 2 "s_register_operand" "r,r"))
 		(match_operand:DI 1 "s_register_operand" "0,?r")))]
-  "TARGET_ARM"
+;; APPLE LOCAL v7 support. Merge from mainline
+  "TARGET_32BIT"
   "@
    eor%?\\t%Q0, %Q1, %2
    #"
@@ -2416,7 +2773,8 @@
 	(xor:DI (sign_extend:DI
 		 (match_operand:SI 2 "s_register_operand" "r,r"))
 		(match_operand:DI 1 "s_register_operand" "?r,0")))]
-  "TARGET_ARM"
+;; APPLE LOCAL v7 support. Merge from mainline
+  "TARGET_32BIT"
   "#"
   [(set_attr "length" "8")
    (set_attr "predicable" "yes")]
@@ -2427,7 +2785,8 @@
 	(xor:SI (match_operand:SI 1 "s_register_operand" "")
 		(match_operand:SI 2 "arm_rhs_operand"  "")))]
   "TARGET_EITHER"
-  "if (TARGET_THUMB)
+;; APPLE LOCAL v7 support. Merge from mainline
+  "if (TARGET_THUMB1)
      if (GET_CODE (operands[2]) == CONST_INT)
        operands[2] = force_reg (SImode, operands[2]);
   "
@@ -2437,16 +2796,19 @@
   [(set (match_operand:SI         0 "s_register_operand" "=r")
 	(xor:SI (match_operand:SI 1 "s_register_operand" "r")
 		(match_operand:SI 2 "arm_rhs_operand" "rI")))]
-  "TARGET_ARM"
+;; APPLE LOCAL v7 support. Merge from mainline
+  "TARGET_32BIT"
   "eor%?\\t%0, %1, %2"
   [(set_attr "predicable" "yes")]
 )
 
-(define_insn "*thumb_xorsi3"
+;; APPLE LOCAL v7 support. Merge from mainline
+(define_insn "*thumb1_xorsi3"
   [(set (match_operand:SI         0 "register_operand" "=l")
 	(xor:SI (match_operand:SI 1 "register_operand" "%0")
 		(match_operand:SI 2 "register_operand" "l")))]
-  "TARGET_THUMB"
+;; APPLE LOCAL v7 support. Merge from mainline
+  "TARGET_THUMB1"
   "eor\\t%0, %0, %2"
   [(set_attr "length" "2")]
 )
@@ -2458,8 +2820,10 @@
 			 (const_int 0)))
    (set (match_operand:SI 0 "s_register_operand" "=r")
 	(xor:SI (match_dup 1) (match_dup 2)))]
-  "TARGET_ARM"
-  "eor%?s\\t%0, %1, %2"
+;; APPLE LOCAL begin v7 support. Merge from mainline
+  "TARGET_32BIT"
+  "eor%.\\t%0, %1, %2"
+;; APPLE LOCAL end v7 support. Merge from mainline
   [(set_attr "conds" "set")]
 )
 
@@ -2468,7 +2832,8 @@
 	(compare:CC_NOOV (xor:SI (match_operand:SI 0 "s_register_operand" "r")
 				 (match_operand:SI 1 "arm_rhs_operand" "rI"))
 			 (const_int 0)))]
-  "TARGET_ARM"
+;; APPLE LOCAL v7 support. Merge from mainline
+  "TARGET_32BIT"
   "teq%?\\t%0, %1"
   [(set_attr "conds" "set")]
 )
@@ -2483,7 +2848,8 @@
 			(not:SI (match_operand:SI 2 "arm_rhs_operand" "")))
 		(match_operand:SI 3 "arm_rhs_operand" "")))
    (clobber (match_operand:SI 4 "s_register_operand" ""))]
-  "TARGET_ARM"
+;; APPLE LOCAL v7 support. Merge from mainline
+  "TARGET_32BIT"
   [(set (match_dup 4) (and:SI (ior:SI (match_dup 1) (match_dup 2))
 			      (not:SI (match_dup 3))))
    (set (match_dup 0) (not:SI (match_dup 4)))]
@@ -2495,12 +2861,19 @@
 	(and:SI (ior:SI (match_operand:SI 1 "s_register_operand" "r,r,0")
 			(match_operand:SI 2 "arm_rhs_operand" "rI,0,rI"))
 		(not:SI (match_operand:SI 3 "arm_rhs_operand" "rI,rI,rI"))))]
-  "TARGET_ARM"
+;; APPLE LOCAL begin v7 support. Merge from mainline
+  "TARGET_32BIT"
   "orr%?\\t%0, %1, %2\;bic%?\\t%0, %0, %3"
   [(set_attr "length" "8")
+   (set_attr "ce_count" "2")
    (set_attr "predicable" "yes")]
+;; APPLE LOCAL end v7 support. Merge from mainline
 )
 
+;; APPLE LOCAL begin v7 support. Merge from mainline
+; ??? Are these four splitters still beneficial when the Thumb-2 bitfield
+; insns are available?
+;; APPLE LOCAL end v7 support. Merge from mainline
 (define_split
   [(set (match_operand:SI 0 "s_register_operand" "")
 	(match_operator:SI 1 "logical_binary_operator"
@@ -2512,7 +2885,8 @@
 			 (match_operand:SI 6 "const_int_operand" ""))
 	    (match_operand:SI 7 "s_register_operand" "")])]))
    (clobber (match_operand:SI 8 "s_register_operand" ""))]
-  "TARGET_ARM
+;; APPLE LOCAL v7 support. Merge from mainline
+  "TARGET_32BIT
    && GET_CODE (operands[1]) == GET_CODE (operands[9])
    && INTVAL (operands[3]) == 32 - INTVAL (operands[6])"
   [(set (match_dup 8)
@@ -2538,7 +2912,8 @@
 			   (match_operand:SI 3 "const_int_operand" "")
 			   (match_operand:SI 4 "const_int_operand" ""))]))
    (clobber (match_operand:SI 8 "s_register_operand" ""))]
-  "TARGET_ARM
+;; APPLE LOCAL v7 support. Merge from mainline
+  "TARGET_32BIT
    && GET_CODE (operands[1]) == GET_CODE (operands[9])
    && INTVAL (operands[3]) == 32 - INTVAL (operands[6])"
   [(set (match_dup 8)
@@ -2564,7 +2939,8 @@
 			 (match_operand:SI 6 "const_int_operand" ""))
 	    (match_operand:SI 7 "s_register_operand" "")])]))
    (clobber (match_operand:SI 8 "s_register_operand" ""))]
-  "TARGET_ARM
+;; APPLE LOCAL v7 support. Merge from mainline
+  "TARGET_32BIT
    && GET_CODE (operands[1]) == GET_CODE (operands[9])
    && INTVAL (operands[3]) == 32 - INTVAL (operands[6])"
   [(set (match_dup 8)
@@ -2590,7 +2966,8 @@
 			   (match_operand:SI 3 "const_int_operand" "")
 			   (match_operand:SI 4 "const_int_operand" ""))]))
    (clobber (match_operand:SI 8 "s_register_operand" ""))]
-  "TARGET_ARM
+;; APPLE LOCAL v7 support. Merge from mainline
+  "TARGET_32BIT
    && GET_CODE (operands[1]) == GET_CODE (operands[9])
    && INTVAL (operands[3]) == 32 - INTVAL (operands[6])"
   [(set (match_dup 8)
@@ -2614,7 +2991,8 @@
 	 (smax:SI (match_operand:SI 1 "s_register_operand" "")
 		  (match_operand:SI 2 "arm_rhs_operand" "")))
     (clobber (reg:CC CC_REGNUM))])]
-  "TARGET_ARM"
+;; APPLE LOCAL v7 support. Merge from mainline
+  "TARGET_32BIT"
   "
   if (operands[2] == const0_rtx || operands[2] == constm1_rtx)
     {
@@ -2630,7 +3008,8 @@
   [(set (match_operand:SI 0 "s_register_operand" "=r")
 	(smax:SI (match_operand:SI 1 "s_register_operand" "r")
 		 (const_int 0)))]
-  "TARGET_ARM"
+;; APPLE LOCAL v7 support. Merge from mainline
+  "TARGET_32BIT"
   "bic%?\\t%0, %1, %1, asr #31"
   [(set_attr "predicable" "yes")]
 )
@@ -2639,12 +3018,14 @@
   [(set (match_operand:SI 0 "s_register_operand" "=r")
 	(smax:SI (match_operand:SI 1 "s_register_operand" "r")
 		 (const_int -1)))]
-  "TARGET_ARM"
+;; APPLE LOCAL v7 support. Merge from mainline
+  "TARGET_32BIT"
   "orr%?\\t%0, %1, %1, asr #31"
   [(set_attr "predicable" "yes")]
 )
 
-(define_insn "*smax_insn"
+;; APPLE LOCAL v7 support. Merge from mainline
+(define_insn "*arm_smax_insn"
   [(set (match_operand:SI          0 "s_register_operand" "=r,r")
 	(smax:SI (match_operand:SI 1 "s_register_operand"  "%0,?r")
 		 (match_operand:SI 2 "arm_rhs_operand"    "rI,rI")))
@@ -2663,7 +3044,8 @@
 	 (smin:SI (match_operand:SI 1 "s_register_operand" "")
 		  (match_operand:SI 2 "arm_rhs_operand" "")))
     (clobber (reg:CC CC_REGNUM))])]
-  "TARGET_ARM"
+;; APPLE LOCAL v7 support. Merge from mainline
+  "TARGET_32BIT"
   "
   if (operands[2] == const0_rtx)
     {
@@ -2679,12 +3061,14 @@
   [(set (match_operand:SI 0 "s_register_operand" "=r")
 	(smin:SI (match_operand:SI 1 "s_register_operand" "r")
 		 (const_int 0)))]
-  "TARGET_ARM"
+;; APPLE LOCAL v7 support. Merge from mainline
+  "TARGET_32BIT"
   "and%?\\t%0, %1, %1, asr #31"
   [(set_attr "predicable" "yes")]
 )
 
-(define_insn "*smin_insn"
+;; APPLE LOCAL v7 support. Merge from mainline
+(define_insn "*arm_smin_insn"
   [(set (match_operand:SI 0 "s_register_operand" "=r,r")
 	(smin:SI (match_operand:SI 1 "s_register_operand" "%0,?r")
 		 (match_operand:SI 2 "arm_rhs_operand" "rI,rI")))
@@ -2697,7 +3081,18 @@
    (set_attr "length" "8,12")]
 )
 
-(define_insn "umaxsi3"
+;; APPLE LOCAL begin v7 support. Merge from mainline
+(define_expand "umaxsi3"
+  [(parallel [
+    (set (match_operand:SI 0 "s_register_operand" "")
+	 (umax:SI (match_operand:SI 1 "s_register_operand" "")
+		  (match_operand:SI 2 "arm_rhs_operand" "")))
+    (clobber (reg:CC CC_REGNUM))])]
+  "TARGET_32BIT"
+  ""
+)
+
+(define_insn "*arm_umaxsi3"
   [(set (match_operand:SI 0 "s_register_operand" "=r,r,r")
 	(umax:SI (match_operand:SI 1 "s_register_operand" "0,r,?r")
 		 (match_operand:SI 2 "arm_rhs_operand" "rI,0,rI")))
@@ -2711,7 +3106,17 @@
    (set_attr "length" "8,8,12")]
 )
 
-(define_insn "uminsi3"
+(define_expand "uminsi3"
+  [(parallel [
+    (set (match_operand:SI 0 "s_register_operand" "")
+	 (umin:SI (match_operand:SI 1 "s_register_operand" "")
+		  (match_operand:SI 2 "arm_rhs_operand" "")))
+    (clobber (reg:CC CC_REGNUM))])]
+  "TARGET_32BIT"
+  ""
+)
+
+(define_insn "*arm_uminsi3"
   [(set (match_operand:SI 0 "s_register_operand" "=r,r,r")
 	(umin:SI (match_operand:SI 1 "s_register_operand" "0,r,?r")
 		 (match_operand:SI 2 "arm_rhs_operand" "rI,0,rI")))
@@ -2724,6 +3129,7 @@
   [(set_attr "conds" "clob")
    (set_attr "length" "8,8,12")]
 )
+;; APPLE LOCAL end v7 support. Merge from mainline
 
 (define_insn "*store_minmaxsi"
   [(set (match_operand:SI 0 "memory_operand" "=m")
@@ -2731,17 +3137,24 @@
 	 [(match_operand:SI 1 "s_register_operand" "r")
 	  (match_operand:SI 2 "s_register_operand" "r")]))
    (clobber (reg:CC CC_REGNUM))]
-  "TARGET_ARM"
+;; APPLE LOCAL begin v7 support. Merge from mainline
+  "TARGET_32BIT"
   "*
   operands[3] = gen_rtx_fmt_ee (minmax_code (operands[3]), SImode,
 				operands[1], operands[2]);
   output_asm_insn (\"cmp\\t%1, %2\", operands);
+  if (TARGET_THUMB2)
+    output_asm_insn (\"ite\t%d3\", operands);
   output_asm_insn (\"str%d3\\t%1, %0\", operands);
   output_asm_insn (\"str%D3\\t%2, %0\", operands);
   return \"\";
   "
   [(set_attr "conds" "clob")
-   (set_attr "length" "12")
+   (set (attr "length")
+	(if_then_else (eq_attr "is_thumb" "yes")
+		      (const_int 14)
+		      (const_int 12)))
+;; APPLE LOCAL end v7 support. Merge from mainline
    (set_attr "type" "store1")]
 )
 
@@ -2755,22 +3168,40 @@
 	    (match_operand:SI 3 "arm_rhs_operand" "rI,rI")])
 	  (match_operand:SI 1 "s_register_operand" "0,?r")]))
    (clobber (reg:CC CC_REGNUM))]
-  "TARGET_ARM && !arm_eliminable_register (operands[1])"
+;; APPLE LOCAL begin v7 support. Merge from mainline
+  "TARGET_32BIT && !arm_eliminable_register (operands[1])"
   "*
   {
     enum rtx_code code = GET_CODE (operands[4]);
+    bool need_else;
+
+    if (which_alternative != 0 || operands[3] != const0_rtx
+        || (code != PLUS && code != MINUS && code != IOR && code != XOR))
+      need_else = true;
+    else
+      need_else = false;
 
     operands[5] = gen_rtx_fmt_ee (minmax_code (operands[5]), SImode,
 				  operands[2], operands[3]);
     output_asm_insn (\"cmp\\t%2, %3\", operands);
+    if (TARGET_THUMB2)
+      {
+	if (need_else)
+	  output_asm_insn (\"ite\\t%d5\", operands);
+	else
+	  output_asm_insn (\"it\\t%d5\", operands);
+      }
     output_asm_insn (\"%i4%d5\\t%0, %1, %2\", operands);
-    if (which_alternative != 0 || operands[3] != const0_rtx
-        || (code != PLUS && code != MINUS && code != IOR && code != XOR))
+    if (need_else)
       output_asm_insn (\"%i4%D5\\t%0, %1, %3\", operands);
     return \"\";
   }"
   [(set_attr "conds" "clob")
-   (set_attr "length" "12")]
+   (set (attr "length")
+	(if_then_else (eq_attr "is_thumb" "yes")
+		      (const_int 14)
+		      (const_int 12)))]
+;; APPLE LOCAL end v7 support. Merge from mainline
 )
 
 
@@ -2780,7 +3211,8 @@
   [(set (match_operand:DI            0 "s_register_operand" "")
         (ashift:DI (match_operand:DI 1 "s_register_operand" "")
                    (match_operand:SI 2 "reg_or_int_operand" "")))]
-  "TARGET_ARM"
+;; APPLE LOCAL v7 support. Merge from mainline
+  "TARGET_32BIT"
   "
   if (GET_CODE (operands[2]) == CONST_INT)
     {
@@ -2805,7 +3237,8 @@
         (ashift:DI (match_operand:DI 1 "s_register_operand" "?r,0")
                    (const_int 1)))
    (clobber (reg:CC CC_REGNUM))]
-  "TARGET_ARM"
+;; APPLE LOCAL v7 support. Merge from mainline
+  "TARGET_32BIT"
   "movs\\t%Q0, %Q1, asl #1\;adc\\t%R0, %R1, %R1"
   [(set_attr "conds" "clob")
    (set_attr "length" "8")]
@@ -2826,11 +3259,13 @@
   "
 )
 
-(define_insn "*thumb_ashlsi3"
+;; APPLE LOCAL v7 support. Merge from mainline
+(define_insn "*thumb1_ashlsi3"
   [(set (match_operand:SI            0 "register_operand" "=l,l")
 	(ashift:SI (match_operand:SI 1 "register_operand" "l,0")
 		   (match_operand:SI 2 "nonmemory_operand" "N,l")))]
-  "TARGET_THUMB"
+;; APPLE LOCAL v7 support. Merge from mainline
+  "TARGET_THUMB1"
   "lsl\\t%0, %1, %2"
   [(set_attr "length" "2")]
 )
@@ -2839,7 +3274,8 @@
   [(set (match_operand:DI              0 "s_register_operand" "")
         (ashiftrt:DI (match_operand:DI 1 "s_register_operand" "")
                      (match_operand:SI 2 "reg_or_int_operand" "")))]
-  "TARGET_ARM"
+;; APPLE LOCAL v7 support. Merge from mainline
+  "TARGET_32BIT"
   "
   if (GET_CODE (operands[2]) == CONST_INT)
     {
@@ -2864,9 +3300,12 @@
         (ashiftrt:DI (match_operand:DI 1 "s_register_operand" "?r,0")
                      (const_int 1)))
    (clobber (reg:CC CC_REGNUM))]
-  "TARGET_ARM"
+;; APPLE LOCAL v7 support. Merge from mainline
+  "TARGET_32BIT"
   "movs\\t%R0, %R1, asr #1\;mov\\t%Q0, %Q1, rrx"
   [(set_attr "conds" "clob")
+;; APPLE LOCAL v7 support. Merge from Codesourcery
+   (set_attr "insn" "mov")
    (set_attr "length" "8")]
 )
 
@@ -2882,11 +3321,13 @@
   "
 )
 
-(define_insn "*thumb_ashrsi3"
+;; APPLE LOCAL v7 support. Merge from mainline
+(define_insn "*thumb1_ashrsi3"
   [(set (match_operand:SI              0 "register_operand" "=l,l")
 	(ashiftrt:SI (match_operand:SI 1 "register_operand" "l,0")
 		     (match_operand:SI 2 "nonmemory_operand" "N,l")))]
-  "TARGET_THUMB"
+;; APPLE LOCAL v7 support. Merge from mainline
+  "TARGET_THUMB1"
   "asr\\t%0, %1, %2"
   [(set_attr "length" "2")]
 )
@@ -2895,7 +3336,8 @@
   [(set (match_operand:DI              0 "s_register_operand" "")
         (lshiftrt:DI (match_operand:DI 1 "s_register_operand" "")
                      (match_operand:SI 2 "reg_or_int_operand" "")))]
-  "TARGET_ARM"
+;; APPLE LOCAL v7 support. Merge from mainline
+  "TARGET_32BIT"
   "
   if (GET_CODE (operands[2]) == CONST_INT)
     {
@@ -2920,9 +3362,12 @@
         (lshiftrt:DI (match_operand:DI 1 "s_register_operand" "?r,0")
                      (const_int 1)))
    (clobber (reg:CC CC_REGNUM))]
-  "TARGET_ARM"
+;; APPLE LOCAL v7 support. Merge from mainline
+  "TARGET_32BIT"
   "movs\\t%R0, %R1, lsr #1\;mov\\t%Q0, %Q1, rrx"
   [(set_attr "conds" "clob")
+;; APPLE LOCAL v7 support. Merge from Codesourcery
+   (set_attr "insn" "mov")
    (set_attr "length" "8")]
 )
 
@@ -2941,11 +3386,13 @@
   "
 )
 
-(define_insn "*thumb_lshrsi3"
+;; APPLE LOCAL v7 support. Merge from mainline
+(define_insn "*thumb1_lshrsi3"
   [(set (match_operand:SI              0 "register_operand" "=l,l")
 	(lshiftrt:SI (match_operand:SI 1 "register_operand" "l,0")
 		     (match_operand:SI 2 "nonmemory_operand" "N,l")))]
-  "TARGET_THUMB"
+;; APPLE LOCAL v7 support. Merge from mainline
+  "TARGET_THUMB1"
   "lsr\\t%0, %1, %2"
   [(set_attr "length" "2")]
 )
@@ -2954,7 +3401,8 @@
   [(set (match_operand:SI              0 "s_register_operand" "")
 	(rotatert:SI (match_operand:SI 1 "s_register_operand" "")
 		     (match_operand:SI 2 "reg_or_int_operand" "")))]
-  "TARGET_ARM"
+;; APPLE LOCAL v7 support. Merge from mainline
+  "TARGET_32BIT"
   "
   if (GET_CODE (operands[2]) == CONST_INT)
     operands[2] = GEN_INT ((32 - INTVAL (operands[2])) % 32);
@@ -2973,13 +3421,15 @@
 		     (match_operand:SI 2 "arm_rhs_operand" "")))]
   "TARGET_EITHER"
   "
-  if (TARGET_ARM)
+  /* APPLE LOCAL v7 support. Merge from mainline */
+  if (TARGET_32BIT)
     {
       if (GET_CODE (operands[2]) == CONST_INT
           && ((unsigned HOST_WIDE_INT) INTVAL (operands[2])) > 31)
         operands[2] = GEN_INT (INTVAL (operands[2]) % 32);
     }
-  else /* TARGET_THUMB */
+  /* APPLE LOCAL v7 support. Merge from mainline */
+  else /* TARGET_THUMB1 */
     {
       if (GET_CODE (operands [2]) == CONST_INT)
         operands [2] = force_reg (SImode, operands[2]);
@@ -2987,11 +3437,13 @@
   "
 )
 
-(define_insn "*thumb_rotrsi3"
+;; APPLE LOCAL v7 support. Merge from mainline
+(define_insn "*thumb1_rotrsi3"
   [(set (match_operand:SI              0 "register_operand" "=l")
 	(rotatert:SI (match_operand:SI 1 "register_operand" "0")
 		     (match_operand:SI 2 "register_operand" "l")))]
-  "TARGET_THUMB"
+;; APPLE LOCAL v7 support. Merge from mainline
+  "TARGET_THUMB1"
   "ror\\t%0, %0, %2"
   [(set_attr "length" "2")]
 )
@@ -3001,8 +3453,10 @@
 	(match_operator:SI  3 "shift_operator"
 	 [(match_operand:SI 1 "s_register_operand"  "r")
 	  (match_operand:SI 2 "reg_or_int_operand" "rM")]))]
-  "TARGET_ARM"
-  "mov%?\\t%0, %1%S3"
+;; APPLE LOCAL begin v7 support. Merge from mainline
+  "TARGET_32BIT"
+  "* return arm_output_shift(operands, 0);"
+;; APPLE LOCAL end v7 support. Merge from mainline
   [(set_attr "predicable" "yes")
    (set_attr "shift" "1")
    (set (attr "type") (if_then_else (match_operand 2 "const_int_operand" "")
@@ -3018,8 +3472,10 @@
 			 (const_int 0)))
    (set (match_operand:SI 0 "s_register_operand" "=r")
 	(match_op_dup 3 [(match_dup 1) (match_dup 2)]))]
-  "TARGET_ARM"
-  "mov%?s\\t%0, %1%S3"
+;; APPLE LOCAL begin v7 support. Merge from mainline
+  "TARGET_32BIT"
+  "* return arm_output_shift(operands, 1);"
+;; APPLE LOCAL end v7 support. Merge from mainline
   [(set_attr "conds" "set")
    (set_attr "shift" "1")
    (set (attr "type") (if_then_else (match_operand 2 "const_int_operand" "")
@@ -3034,13 +3490,16 @@
 			   (match_operand:SI 2 "arm_rhs_operand" "rM")])
 			 (const_int 0)))
    (clobber (match_scratch:SI 0 "=r"))]
-  "TARGET_ARM"
-  "mov%?s\\t%0, %1%S3"
+;; APPLE LOCAL begin v7 support. Merge from mainline
+  "TARGET_32BIT"
+  "* return arm_output_shift(operands, 1);"
+;; APPLE LOCAL end v7 support. Merge from mainline
   [(set_attr "conds" "set")
    (set_attr "shift" "1")]
 )
 
-(define_insn "*notsi_shiftsi"
+;; APPLE LOCAL v7 support. Merge from mainline
+(define_insn "*arm_notsi_shiftsi"
   [(set (match_operand:SI 0 "s_register_operand" "=r")
 	(not:SI (match_operator:SI 3 "shift_operator"
 		 [(match_operand:SI 1 "s_register_operand" "r")
@@ -3049,12 +3508,15 @@
   "mvn%?\\t%0, %1%S3"
   [(set_attr "predicable" "yes")
    (set_attr "shift" "1")
+;; APPLE LOCAL v7 support. Merge from Codesourcery
+   (set_attr "insn" "mvn")
    (set (attr "type") (if_then_else (match_operand 2 "const_int_operand" "")
 		      (const_string "alu_shift")
 		      (const_string "alu_shift_reg")))]
 )
 
-(define_insn "*notsi_shiftsi_compare0"
+;; APPLE LOCAL v7 support. Merge from mainline
+(define_insn "*arm_notsi_shiftsi_compare0"
   [(set (reg:CC_NOOV CC_REGNUM)
 	(compare:CC_NOOV (not:SI (match_operator:SI 3 "shift_operator"
 			  [(match_operand:SI 1 "s_register_operand" "r")
@@ -3063,15 +3525,19 @@
    (set (match_operand:SI 0 "s_register_operand" "=r")
 	(not:SI (match_op_dup 3 [(match_dup 1) (match_dup 2)])))]
   "TARGET_ARM"
-  "mvn%?s\\t%0, %1%S3"
+;; APPLE LOCAL begin v7 support. Merge from Codesourcery
+  "mvn%.\\t%0, %1%S3"
   [(set_attr "conds" "set")
    (set_attr "shift" "1")
+   (set_attr "insn" "mvn")
+;; APPLE LOCAL end v7 support. Merge from Codesourcery
    (set (attr "type") (if_then_else (match_operand 2 "const_int_operand" "")
 		      (const_string "alu_shift")
 		      (const_string "alu_shift_reg")))]
 )
 
-(define_insn "*not_shiftsi_compare0_scratch"
+;; APPLE LOCAL v7 support. Merge from mainline
+(define_insn "*arm_not_shiftsi_compare0_scratch"
   [(set (reg:CC_NOOV CC_REGNUM)
 	(compare:CC_NOOV (not:SI (match_operator:SI 3 "shift_operator"
 			  [(match_operand:SI 1 "s_register_operand" "r")
@@ -3079,9 +3545,12 @@
 			 (const_int 0)))
    (clobber (match_scratch:SI 0 "=r"))]
   "TARGET_ARM"
-  "mvn%?s\\t%0, %1%S3"
+;; APPLE LOCAL begin v7 support. Merge from Codesourcery
+  "mvn%.\\t%0, %1%S3"
   [(set_attr "conds" "set")
    (set_attr "shift" "1")
+   (set_attr "insn" "mvn")
+;; APPLE LOCAL end v7 support. Merge from Codesourcery
    (set (attr "type") (if_then_else (match_operand 2 "const_int_operand" "")
 		      (const_string "alu_shift")
 		      (const_string "alu_shift_reg")))]
@@ -3097,7 +3566,8 @@
    (set (match_operand:SI              0 "register_operand" "")
 	(lshiftrt:SI (match_dup 4)
 		     (match_operand:SI 3 "const_int_operand" "")))]
-  "TARGET_THUMB"
+;; APPLE LOCAL v7 support. Merge from mainline
+  "TARGET_THUMB1"
   "
   {
     HOST_WIDE_INT lshift = 32 - INTVAL (operands[2]) - INTVAL (operands[3]);
@@ -3126,7 +3596,8 @@
     (clobber (reg:CC CC_REGNUM))])]
   "TARGET_EITHER"
   "
-  if (TARGET_THUMB)
+  /* APPLE LOCAL v7 support. Merge from mainline */
+  if (TARGET_THUMB1)
     {
       if (GET_CODE (operands[1]) != REG)
         operands[1] = force_reg (SImode, operands[1]);
@@ -3146,11 +3617,13 @@
    (set_attr "length" "8")]
 )
 
-(define_insn "*thumb_negdi2"
+;; APPLE LOCAL v7 support. Merge from mainline
+(define_insn "*thumb1_negdi2"
   [(set (match_operand:DI         0 "register_operand" "=&l")
 	(neg:DI (match_operand:DI 1 "register_operand"   "l")))
    (clobber (reg:CC CC_REGNUM))]
-  "TARGET_THUMB"
+;; APPLE LOCAL v7 support. Merge from mainline
+  "TARGET_THUMB1"
   "mov\\t%R0, #0\;neg\\t%Q0, %Q1\;sbc\\t%R0, %R1"
   [(set_attr "length" "6")]
 )
@@ -3165,30 +3638,35 @@
 (define_insn "*arm_negsi2"
   [(set (match_operand:SI         0 "s_register_operand" "=r")
 	(neg:SI (match_operand:SI 1 "s_register_operand" "r")))]
-  "TARGET_ARM"
+;; APPLE LOCAL v7 support. Merge from mainline
+  "TARGET_32BIT"
   "rsb%?\\t%0, %1, #0"
   [(set_attr "predicable" "yes")]
 )
 
-(define_insn "*thumb_negsi2"
+;; APPLE LOCAL begin v7 support. Merge from mainline
+(define_insn "*thumb1_negsi2"
   [(set (match_operand:SI         0 "register_operand" "=l")
 	(neg:SI (match_operand:SI 1 "register_operand" "l")))]
-  "TARGET_THUMB"
+  "TARGET_THUMB1"
   "neg\\t%0, %1"
   [(set_attr "length" "2")]
 )
+;; APPLE LOCAL end v7 support. Merge from mainline
 
 (define_expand "negsf2"
   [(set (match_operand:SF         0 "s_register_operand" "")
 	(neg:SF (match_operand:SF 1 "s_register_operand" "")))]
-  "TARGET_ARM && TARGET_HARD_FLOAT && (TARGET_FPA || TARGET_VFP)"
+;; APPLE LOCAL v7 support. Merge from mainline
+  "TARGET_32BIT && TARGET_HARD_FLOAT && (TARGET_FPA || TARGET_VFP)"
   ""
 )
 
 (define_expand "negdf2"
   [(set (match_operand:DF         0 "s_register_operand" "")
 	(neg:DF (match_operand:DF 1 "s_register_operand" "")))]
-  "TARGET_ARM && TARGET_HARD_FLOAT && (TARGET_FPA || TARGET_VFP)"
+;; APPLE LOCAL v7 support. Merge from mainline
+  "TARGET_32BIT && TARGET_HARD_FLOAT && (TARGET_FPA || TARGET_VFP)"
   "")
 
 ;; abssi2 doesn't really clobber the condition codes if a different register
@@ -3201,11 +3679,13 @@
     [(set (match_operand:SI         0 "s_register_operand" "")
 	  (abs:SI (match_operand:SI 1 "s_register_operand" "")))
      (clobber (reg:CC CC_REGNUM))])]
-  "TARGET_ARM"
+;; APPLE LOCAL v7 support. Merge from mainline
+  "TARGET_32BIT"
   "")
 
 (define_insn "*arm_abssi2"
-  [(set (match_operand:SI         0 "s_register_operand" "=r,&r")
+;; APPLE LOCAL v7 support. Merge from mainline
+  [(set (match_operand:SI 0 "s_register_operand" "=r,&r")
 	(abs:SI (match_operand:SI 1 "s_register_operand" "0,r")))
    (clobber (reg:CC CC_REGNUM))]
   "TARGET_ARM"
@@ -3218,7 +3698,8 @@
    (set_attr "length" "8")]
 )
 
-(define_insn "*neg_abssi2"
+;; APPLE LOCAL v7 support. Merge from mainline
+(define_insn "*arm_neg_abssi2"
   [(set (match_operand:SI 0 "s_register_operand" "=r,&r")
 	(neg:SI (abs:SI (match_operand:SI 1 "s_register_operand" "0,r"))))
    (clobber (reg:CC CC_REGNUM))]
@@ -3235,33 +3716,39 @@
 (define_expand "abssf2"
   [(set (match_operand:SF         0 "s_register_operand" "")
 	(abs:SF (match_operand:SF 1 "s_register_operand" "")))]
-  "TARGET_ARM && TARGET_HARD_FLOAT"
+;; APPLE LOCAL v7 support. Merge from mainline
+  "TARGET_32BIT && TARGET_HARD_FLOAT"
   "")
 
 (define_expand "absdf2"
   [(set (match_operand:DF         0 "s_register_operand" "")
 	(abs:DF (match_operand:DF 1 "s_register_operand" "")))]
-  "TARGET_ARM && TARGET_HARD_FLOAT"
+;; APPLE LOCAL v7 support. Merge from mainline
+  "TARGET_32BIT && TARGET_HARD_FLOAT"
   "")
 
 (define_expand "sqrtsf2"
   [(set (match_operand:SF 0 "s_register_operand" "")
 	(sqrt:SF (match_operand:SF 1 "s_register_operand" "")))]
-  "TARGET_ARM && TARGET_HARD_FLOAT && (TARGET_FPA || TARGET_VFP)"
+;; APPLE LOCAL v7 support. Merge from mainline
+  "TARGET_32BIT && TARGET_HARD_FLOAT && (TARGET_FPA || TARGET_VFP)"
   "")
 
 (define_expand "sqrtdf2"
   [(set (match_operand:DF 0 "s_register_operand" "")
 	(sqrt:DF (match_operand:DF 1 "s_register_operand" "")))]
-  "TARGET_ARM && TARGET_HARD_FLOAT && (TARGET_FPA || TARGET_VFP)"
+;; APPLE LOCAL v7 support. Merge from mainline
+  "TARGET_32BIT && TARGET_HARD_FLOAT && (TARGET_FPA || TARGET_VFP)"
   "")
 
 (define_insn_and_split "one_cmpldi2"
   [(set (match_operand:DI 0 "s_register_operand" "=&r,&r")
 	(not:DI (match_operand:DI 1 "s_register_operand" "?r,0")))]
-  "TARGET_ARM"
+;; APPLE LOCAL begin v7 support. Merge from mainline
+  "TARGET_32BIT"
   "#"
-  "TARGET_ARM && reload_completed"
+  "TARGET_32BIT && reload_completed"
+;; APPLE LOCAL end v7 support. Merge from mainline
   [(set (match_dup 0) (not:SI (match_dup 1)))
    (set (match_dup 2) (not:SI (match_dup 3)))]
   "
@@ -3285,17 +3772,26 @@
 (define_insn "*arm_one_cmplsi2"
   [(set (match_operand:SI         0 "s_register_operand" "=r")
 	(not:SI (match_operand:SI 1 "s_register_operand"  "r")))]
-  "TARGET_ARM"
+;; APPLE LOCAL v7 support. Merge from mainline
+  "TARGET_32BIT"
   "mvn%?\\t%0, %1"
-  [(set_attr "predicable" "yes")]
+;; APPLE LOCAL begin v7 support. Merge from Codesourcery
+  [(set_attr "predicable" "yes")
+   (set_attr "insn" "mvn")]
+;; APPLE LOCAL end v7 support. Merge from Codesourcery
 )
 
-(define_insn "*thumb_one_cmplsi2"
+;; APPLE LOCAL v7 support. Merge from mainline
+(define_insn "*thumb1_one_cmplsi2"
   [(set (match_operand:SI         0 "register_operand" "=l")
 	(not:SI (match_operand:SI 1 "register_operand"  "l")))]
-  "TARGET_THUMB"
+;; APPLE LOCAL v7 support. Merge from mainline
+  "TARGET_THUMB1"
   "mvn\\t%0, %1"
-  [(set_attr "length" "2")]
+;; APPLE LOCAL begin v7 support. Merge from Codesourcery
+  [(set_attr "length" "2")
+   (set_attr "insn" "mvn")]
+;; APPLE LOCAL end v7 support. Merge from Codesourcery
 )
 
 (define_insn "*notsi_compare0"
@@ -3304,9 +3800,14 @@
 			 (const_int 0)))
    (set (match_operand:SI 0 "s_register_operand" "=r")
 	(not:SI (match_dup 1)))]
-  "TARGET_ARM"
-  "mvn%?s\\t%0, %1"
-  [(set_attr "conds" "set")]
+;; APPLE LOCAL begin v7 support. Merge from mainline
+  "TARGET_32BIT"
+  "mvn%.\\t%0, %1"
+;; APPLE LOCAL end v7 support. Merge from mainline
+;; APPLE LOCAL begin v7 support. Merge from Codesourcery
+  [(set_attr "conds" "set")
+   (set_attr "insn" "mvn")]
+;; APPLE LOCAL end v7 support. Merge from Codesourcery
 )
 
 (define_insn "*notsi_compare0_scratch"
@@ -3314,9 +3815,14 @@
 	(compare:CC_NOOV (not:SI (match_operand:SI 1 "s_register_operand" "r"))
 			 (const_int 0)))
    (clobber (match_scratch:SI 0 "=r"))]
-  "TARGET_ARM"
-  "mvn%?s\\t%0, %1"
-  [(set_attr "conds" "set")]
+;; APPLE LOCAL begin v7 support. Merge from mainline
+  "TARGET_32BIT"
+  "mvn%.\\t%0, %1"
+;; APPLE LOCAL end v7 support. Merge from mainline
+;; APPLE LOCAL begin v7 support. Merge from Codesourcery
+  [(set_attr "conds" "set")
+   (set_attr "insn" "mvn")]
+;; APPLE LOCAL end v7 support. Merge from Codesourcery
 )
 
 ;; Fixed <--> Floating conversion insns
@@ -3324,7 +3830,8 @@
 (define_expand "floatsisf2"
   [(set (match_operand:SF           0 "s_register_operand" "")
 	(float:SF (match_operand:SI 1 "s_register_operand" "")))]
-  "TARGET_ARM && TARGET_HARD_FLOAT"
+;; APPLE LOCAL v7 support. Merge from mainline
+  "TARGET_32BIT && TARGET_HARD_FLOAT"
   "
   if (TARGET_MAVERICK)
     {
@@ -3336,7 +3843,8 @@
 (define_expand "floatsidf2"
   [(set (match_operand:DF           0 "s_register_operand" "")
 	(float:DF (match_operand:SI 1 "s_register_operand" "")))]
-  "TARGET_ARM && TARGET_HARD_FLOAT"
+;; APPLE LOCAL v7 support. Merge from mainline
+  "TARGET_32BIT && TARGET_HARD_FLOAT"
   "
   if (TARGET_MAVERICK)
     {
@@ -3348,7 +3856,8 @@
 (define_expand "fix_truncsfsi2"
   [(set (match_operand:SI         0 "s_register_operand" "")
 	(fix:SI (fix:SF (match_operand:SF 1 "s_register_operand"  ""))))]
-  "TARGET_ARM && TARGET_HARD_FLOAT"
+;; APPLE LOCAL v7 support. Merge from mainline
+  "TARGET_32BIT && TARGET_HARD_FLOAT"
   "
   if (TARGET_MAVERICK)
     {
@@ -3364,7 +3873,8 @@
 (define_expand "fix_truncdfsi2"
   [(set (match_operand:SI         0 "s_register_operand" "")
 	(fix:SI (fix:DF (match_operand:DF 1 "s_register_operand"  ""))))]
-  "TARGET_ARM && TARGET_HARD_FLOAT"
+;; APPLE LOCAL v7 support. Merge from mainline
+  "TARGET_32BIT && TARGET_HARD_FLOAT"
   "
   if (TARGET_MAVERICK)
     {
@@ -3381,13 +3891,23 @@
   [(set (match_operand:SF  0 "s_register_operand" "")
 	(float_truncate:SF
  	 (match_operand:DF 1 "s_register_operand" "")))]
-  "TARGET_ARM && TARGET_HARD_FLOAT"
+;; APPLE LOCAL v7 support. Merge from mainline
+  "TARGET_32BIT && TARGET_HARD_FLOAT"
   ""
 )
 
 ;; Zero and sign extension instructions.
 
-(define_insn "zero_extendsidi2"
+;; APPLE LOCAL begin v7 support. Merge from mainline
+(define_expand "zero_extendsidi2"
+  [(set (match_operand:DI 0 "s_register_operand" "")
+        (zero_extend:DI (match_operand:SI 1 "s_register_operand" "")))]
+  "TARGET_32BIT"
+  ""
+)
+
+(define_insn "*arm_zero_extendsidi2"
+;; APPLE LOCAL end v7 support. Merge from mainline
   [(set (match_operand:DI 0 "s_register_operand" "=r")
         (zero_extend:DI (match_operand:SI 1 "s_register_operand" "r")))]
   "TARGET_ARM"
@@ -3398,16 +3918,27 @@
     return \"mov%?\\t%R0, #0\";
   "
   [(set_attr "length" "8")
+;; APPLE LOCAL v7 support. Merge from Codesourcery
+   (set_attr "insn" "mov")
    (set_attr "predicable" "yes")]
 )
 
-(define_insn "zero_extendqidi2"
+;; APPLE LOCAL begin v7 support. Merge from mainline
+(define_expand "zero_extendqidi2"
+  [(set (match_operand:DI                 0 "s_register_operand"  "")
+	(zero_extend:DI (match_operand:QI 1 "nonimmediate_operand" "")))]
+  "TARGET_32BIT"
+  ""
+)
+
+(define_insn "*arm_zero_extendqidi2"
   [(set (match_operand:DI                 0 "s_register_operand"  "=r,r")
 	(zero_extend:DI (match_operand:QI 1 "nonimmediate_operand" "r,m")))]
   "TARGET_ARM"
   "@
    and%?\\t%Q0, %1, #255\;mov%?\\t%R0, #0
-   ldr%?b\\t%Q0, %1\;mov%?\\t%R0, #0"
+   ldr%(b%)\\t%Q0, %1\;mov%?\\t%R0, #0"
+;; APPLE LOCAL end v7 support. Merge from mainline
   [(set_attr "length" "8")
    (set_attr "predicable" "yes")
    (set_attr "type" "*,load_byte")
@@ -3415,7 +3946,16 @@
    (set_attr "neg_pool_range" "*,4084")]
 )
 
-(define_insn "extendsidi2"
+;; APPLE LOCAL begin v7 support. Merge from mainline
+(define_expand "extendsidi2"
+  [(set (match_operand:DI 0 "s_register_operand" "")
+        (sign_extend:DI (match_operand:SI 1 "s_register_operand" "")))]
+  "TARGET_32BIT"
+  ""
+)
+
+(define_insn "*arm_extendsidi2"
+;; APPLE LOCAL end v7 support. Merge from mainline
   [(set (match_operand:DI 0 "s_register_operand" "=r")
         (sign_extend:DI (match_operand:SI 1 "s_register_operand" "r")))]
   "TARGET_ARM"
@@ -3427,6 +3967,8 @@
   "
   [(set_attr "length" "8")
    (set_attr "shift" "1")
+;; APPLE LOCAL v7 support. Merge from Codesourcery
+   (set_attr "insn" "mov")
    (set_attr "predicable" "yes")]
 )
 
@@ -3439,7 +3981,8 @@
   "TARGET_EITHER"
   "
   {
-    if ((TARGET_THUMB || arm_arch4) && GET_CODE (operands[1]) == MEM)
+    /* APPLE LOCAL v7 support. Merge from mainline */
+    if ((TARGET_THUMB1 || arm_arch4) && GET_CODE (operands[1]) == MEM)
       {
 	emit_insn (gen_rtx_SET (VOIDmode, operands[0],
 				gen_rtx_ZERO_EXTEND (SImode, operands[1])));
@@ -3468,10 +4011,12 @@
 )
 
 ;; APPLE LOCAL ARM compact switch tables
-(define_insn "adjustable_thumb_zero_extendhisi2"
+;; APPLE LOCAL begin v7 support. Merge from mainline
+(define_insn "adjustable_thumb1_zero_extendhisi2"
   [(set (match_operand:SI 0 "register_operand" "=l")
 	(zero_extend:SI (match_operand:HI 1 "memory_operand" "m")))]
-  "TARGET_THUMB && !arm_arch6"
+  "TARGET_THUMB1 && !arm_arch6"
+;; APPLE LOCAL end v7 support. Merge from mainline
   "*
   rtx mem = XEXP (operands[1], 0);
 
@@ -3511,10 +4056,12 @@
 )
 
 ;; APPLE LOCAL ARM compact switch tables
-(define_insn "adjustable_thumb_zero_extendhisi2_v6"
+;; APPLE LOCAL v7 support. Merge from mainline
+(define_insn "adjustable_thumb1_zero_extendhisi2_v6"
   [(set (match_operand:SI 0 "register_operand" "=l,l")
 	(zero_extend:SI (match_operand:HI 1 "nonimmediate_operand" "l,m")))]
-  "TARGET_THUMB && arm_arch6"
+;; APPLE LOCAL v7 support. Merge from mainline
+  "TARGET_THUMB1 && arm_arch6"
   "*
   rtx mem;
 
@@ -3562,7 +4109,8 @@
   [(set (match_operand:SI 0 "s_register_operand" "=r")
 	(zero_extend:SI (match_operand:HI 1 "memory_operand" "m")))]
   "TARGET_ARM && arm_arch4 && !arm_arch6"
-  "ldr%?h\\t%0, %1"
+;; APPLE LOCAL v7 support. Merge from mainline
+  "ldr%(h%)\\t%0, %1"
   [(set_attr "type" "load_byte")
    (set_attr "predicable" "yes")
    (set_attr "pool_range" "256")
@@ -3573,9 +4121,11 @@
   [(set (match_operand:SI 0 "s_register_operand" "=r,r")
 	(zero_extend:SI (match_operand:HI 1 "nonimmediate_operand" "r,m")))]
   "TARGET_ARM && arm_arch6"
+;; APPLE LOCAL begin v7 support. Merge from mainline
   "@
    uxth%?\\t%0, %1
-   ldr%?h\\t%0, %1"
+   ldr%(h%)\\t%0, %1"
+;; APPLE LOCAL end v7 support. Merge from mainline
   [(set_attr "type" "alu_shift,load_byte")
    (set_attr "predicable" "yes")
    (set_attr "pool_range" "*,256")
@@ -3586,7 +4136,8 @@
   [(set (match_operand:SI 0 "s_register_operand" "=r")
 	(plus:SI (zero_extend:SI (match_operand:HI 1 "s_register_operand" "r"))
 		 (match_operand:SI 2 "s_register_operand" "r")))]
-  "TARGET_ARM && arm_arch6"
+;; APPLE LOCAL v7 support. Merge from mainline
+  "TARGET_INT_SIMD"
   "uxtah%?\\t%0, %2, %1"
   [(set_attr "type" "alu_shift")
    (set_attr "predicable" "yes")]
@@ -3632,20 +4183,24 @@
   "
 )
 
-(define_insn "*thumb_zero_extendqisi2"
+;; APPLE LOCAL v7 support. Merge from mainline
+(define_insn "*thumb1_zero_extendqisi2"
   [(set (match_operand:SI 0 "register_operand" "=l")
 	(zero_extend:SI (match_operand:QI 1 "memory_operand" "m")))]
-  "TARGET_THUMB && !arm_arch6"
+;; APPLE LOCAL v7 support. Merge from mainline
+  "TARGET_THUMB1 && !arm_arch6"
   "ldrb\\t%0, %1"
   [(set_attr "length" "2")
    (set_attr "type" "load_byte")
    (set_attr "pool_range" "32")]
 )
 
-(define_insn "*thumb_zero_extendqisi2_v6"
+;; APPLE LOCAL v7 support. Merge from mainline
+(define_insn "*thumb1_zero_extendqisi2_v6"
   [(set (match_operand:SI 0 "register_operand" "=l,l")
 	(zero_extend:SI (match_operand:QI 1 "nonimmediate_operand" "l,m")))]
-  "TARGET_THUMB && arm_arch6"
+;; APPLE LOCAL v7 support. Merge from mainline
+  "TARGET_THUMB1 && arm_arch6"
   "@
    uxtb\\t%0, %1
    ldrb\\t%0, %1"
@@ -3658,7 +4213,8 @@
   [(set (match_operand:SI 0 "s_register_operand" "=r")
 	(zero_extend:SI (match_operand:QI 1 "memory_operand" "m")))]
   "TARGET_ARM && !arm_arch6"
-  "ldr%?b\\t%0, %1\\t%@ zero_extendqisi2"
+;; APPLE LOCAL v7 support. Merge from mainline
+  "ldr%(b%)\\t%0, %1\\t%@ zero_extendqisi2"
   [(set_attr "type" "load_byte")
    (set_attr "predicable" "yes")
    (set_attr "pool_range" "4096")
@@ -3669,9 +4225,11 @@
   [(set (match_operand:SI 0 "s_register_operand" "=r,r")
 	(zero_extend:SI (match_operand:QI 1 "nonimmediate_operand" "r,m")))]
   "TARGET_ARM && arm_arch6"
+;; APPLE LOCAL begin v7 support. Merge from mainline
   "@
-   uxtb%?\\t%0, %1
-   ldr%?b\\t%0, %1\\t%@ zero_extendqisi2"
+   uxtb%(%)\\t%0, %1
+   ldr%(b%)\\t%0, %1\\t%@ zero_extendqisi2"
+;; APPLE LOCAL end v7 support. Merge from mainline
   [(set_attr "type" "alu_shift,load_byte")
    (set_attr "predicable" "yes")
    (set_attr "pool_range" "*,4096")
@@ -3682,7 +4240,8 @@
   [(set (match_operand:SI 0 "s_register_operand" "=r")
 	(plus:SI (zero_extend:SI (match_operand:QI 1 "s_register_operand" "r"))
 		 (match_operand:SI 2 "s_register_operand" "r")))]
-  "TARGET_ARM && arm_arch6"
+;; APPLE LOCAL v7 support. Merge from mainline
+  "TARGET_INT_SIMD"
   "uxtab%?\\t%0, %2, %1"
   [(set_attr "predicable" "yes")
    (set_attr "type" "alu_shift")]
@@ -3692,7 +4251,8 @@
   [(set (match_operand:SI 0 "s_register_operand" "")
 	(zero_extend:SI (subreg:QI (match_operand:SI 1 "" "") 0)))
    (clobber (match_operand:SI 2 "s_register_operand" ""))]
-  "TARGET_ARM && (GET_CODE (operands[1]) != MEM) && ! BYTES_BIG_ENDIAN"
+;; APPLE LOCAL v7 support. Merge from mainline
+  "TARGET_32BIT && (GET_CODE (operands[1]) != MEM) && ! BYTES_BIG_ENDIAN"
   [(set (match_dup 2) (match_dup 1))
    (set (match_dup 0) (and:SI (match_dup 2) (const_int 255)))]
   ""
@@ -3702,7 +4262,8 @@
   [(set (match_operand:SI 0 "s_register_operand" "")
 	(zero_extend:SI (subreg:QI (match_operand:SI 1 "" "") 3)))
    (clobber (match_operand:SI 2 "s_register_operand" ""))]
-  "TARGET_ARM && (GET_CODE (operands[1]) != MEM) && BYTES_BIG_ENDIAN"
+;; APPLE LOCAL v7 support. Merge from mainline
+  "TARGET_32BIT && (GET_CODE (operands[1]) != MEM) && BYTES_BIG_ENDIAN"
   [(set (match_dup 2) (match_dup 1))
    (set (match_dup 0) (and:SI (match_dup 2) (const_int 255)))]
   ""
@@ -3712,7 +4273,8 @@
   [(set (reg:CC_Z CC_REGNUM)
 	(compare:CC_Z (match_operand:QI 0 "s_register_operand" "r")
 			 (const_int 0)))]
-  "TARGET_ARM"
+;; APPLE LOCAL v7 support. Merge from mainline
+  "TARGET_32BIT"
   "tst\\t%0, #255"
   [(set_attr "conds" "set")]
 )
@@ -3729,9 +4291,11 @@
   {
     if (GET_CODE (operands[1]) == MEM)
       {
-	if (TARGET_THUMB)
+        /* APPLE LOCAL v7 support. Merge from mainline */
+	if (TARGET_THUMB1)
 	  {
-	    emit_insn (gen_thumb_extendhisi2 (operands[0], operands[1]));
+            /* APPLE LOCAL v7 support. Merge from mainline */
+	    emit_insn (gen_thumb1_extendhisi2 (operands[0], operands[1]));
 	    DONE;
           }
 	else if (arm_arch4)
@@ -3753,8 +4317,10 @@
 
     if (arm_arch6)
       {
-	if (TARGET_THUMB)
-	  emit_insn (gen_thumb_extendhisi2 (operands[0], operands[1]));
+        /* APPLE LOCAL begin v7 support. Merge from mainline */
+	if (TARGET_THUMB1)
+	  emit_insn (gen_thumb1_extendhisi2 (operands[0], operands[1]));
+        /* APPLE LOCAL end v7 support. Merge from mainline */
 	else
 	  emit_insn (gen_rtx_SET (VOIDmode, operands[0],
 		     gen_rtx_SIGN_EXTEND (SImode, operands[1])));
@@ -3767,11 +4333,13 @@
   }"
 )
 
-(define_insn "thumb_extendhisi2"
+;; APPLE LOCAL v7 support. Merge from mainline
+(define_insn "thumb1_extendhisi2"
   [(set (match_operand:SI 0 "register_operand" "=l")
 	(sign_extend:SI (match_operand:HI 1 "memory_operand" "m")))
    (clobber (match_scratch:SI 2 "=&l"))]
-  "TARGET_THUMB && !arm_arch6"
+;; APPLE LOCAL v7 support. Merge from mainline
+  "TARGET_THUMB1 && !arm_arch6"
   "*
   {
     rtx ops[4];
@@ -3829,11 +4397,13 @@
 ;; the early-clobber: we can always use operand 0 if operand 2
 ;; overlaps the address.
 ;; APPLE LOCAL ARM compact switch tables
-(define_insn "adjustable_thumb_extendhisi2_insn_v6"
+;; APPLE LOCAL v7 support. Merge from mainline
+(define_insn "adjustable_thumb1_extendhisi2_insn_v6"
   [(set (match_operand:SI 0 "register_operand" "=l,l")
 	(sign_extend:SI (match_operand:HI 1 "nonimmediate_operand" "l,m")))
    (clobber (match_scratch:SI 2 "=X,l"))]
-  "TARGET_THUMB && arm_arch6"
+;; APPLE LOCAL v7 support. Merge from mainline
+  "TARGET_THUMB1 && arm_arch6"
   "*
   {
     rtx ops[4];
@@ -3891,6 +4461,8 @@
    (set_attr "pool_range" "*,1020")]
 )
 
+;; APPLE LOCAL v7 support. Merge from mainline
+;; This pattern will only be used when ldsh is not available
 (define_expand "extendhisi2_mem"
   [(set (match_dup 2) (zero_extend:SI (match_operand:HI 1 "" "")))
    (set (match_dup 3)
@@ -3930,20 +4502,25 @@
   [(set (match_operand:SI 0 "s_register_operand" "=r")
 	(sign_extend:SI (match_operand:HI 1 "memory_operand" "m")))]
   "TARGET_ARM && arm_arch4 && !arm_arch6"
-  "ldr%?sh\\t%0, %1"
+;; APPLE LOCAL v7 support. Merge from mainline
+  "ldr%(sh%)\\t%0, %1"
   [(set_attr "type" "load_byte")
    (set_attr "predicable" "yes")
    (set_attr "pool_range" "256")
    (set_attr "neg_pool_range" "244")]
 )
 
+;; APPLE LOCAL v7 support. Merge from mainline
+;; ??? Check Thumb-2 pool range
 (define_insn "*arm_extendhisi2_v6"
   [(set (match_operand:SI 0 "s_register_operand" "=r,r")
 	(sign_extend:SI (match_operand:HI 1 "nonimmediate_operand" "r,m")))]
-  "TARGET_ARM && arm_arch6"
+;; APPLE LOCAL begin v7 support. Merge from mainline
+  "TARGET_32BIT && arm_arch6"
   "@
    sxth%?\\t%0, %1
-   ldr%?sh\\t%0, %1"
+   ldr%(sh%)\\t%0, %1"
+;; APPLE LOCAL end v7 support. Merge from mainline
   [(set_attr "type" "alu_shift,load_byte")
    (set_attr "predicable" "yes")
    (set_attr "pool_range" "*,256")
@@ -3954,7 +4531,8 @@
   [(set (match_operand:SI 0 "s_register_operand" "=r")
 	(plus:SI (sign_extend:SI (match_operand:HI 1 "s_register_operand" "r"))
 		 (match_operand:SI 2 "s_register_operand" "r")))]
-  "TARGET_ARM && arm_arch6"
+;; APPLE LOCAL v7 support. Merge from mainline
+  "TARGET_INT_SIMD"
   "sxtah%?\\t%0, %2, %1"
 )
 
@@ -3983,11 +4561,13 @@
   }"
 )
 
-(define_insn "*extendqihi_insn"
+;; APPLE LOCAL v7 support. Merge from mainline
+(define_insn "*arm_extendqihi_insn"
   [(set (match_operand:HI 0 "s_register_operand" "=r")
 	(sign_extend:HI (match_operand:QI 1 "memory_operand" "Uq")))]
   "TARGET_ARM && arm_arch4"
-  "ldr%?sb\\t%0, %1"
+;; APPLE LOCAL v7 support. Merge from mainline
+  "ldr%(sb%)\\t%0, %1"
   [(set_attr "type" "load_byte")
    (set_attr "predicable" "yes")
    (set_attr "pool_range" "256")
@@ -4030,7 +4610,8 @@
   [(set (match_operand:SI 0 "s_register_operand" "=r")
 	(sign_extend:SI (match_operand:QI 1 "memory_operand" "Uq")))]
   "TARGET_ARM && arm_arch4 && !arm_arch6"
-  "ldr%?sb\\t%0, %1"
+;; APPLE LOCAL v7 support. Merge from mainline
+  "ldr%(sb%)\\t%0, %1"
   [(set_attr "type" "load_byte")
    (set_attr "predicable" "yes")
    (set_attr "pool_range" "256")
@@ -4041,9 +4622,11 @@
   [(set (match_operand:SI 0 "s_register_operand" "=r,r")
 	(sign_extend:SI (match_operand:QI 1 "nonimmediate_operand" "r,Uq")))]
   "TARGET_ARM && arm_arch6"
+;; APPLE LOCAL begin v7 support. Merge from mainline
   "@
    sxtb%?\\t%0, %1
-   ldr%?sb\\t%0, %1"
+   ldr%(sb%)\\t%0, %1"
+;; APPLE LOCAL end v7 support. Merge from mainline
   [(set_attr "type" "alu_shift,load_byte")
    (set_attr "predicable" "yes")
    (set_attr "pool_range" "*,256")
@@ -4054,17 +4637,20 @@
   [(set (match_operand:SI 0 "s_register_operand" "=r")
 	(plus:SI (sign_extend:SI (match_operand:QI 1 "s_register_operand" "r"))
 		 (match_operand:SI 2 "s_register_operand" "r")))]
-  "TARGET_ARM && arm_arch6"
+;; APPLE LOCAL v7 support. Merge from mainline
+  "TARGET_INT_SIMD"
   "sxtab%?\\t%0, %2, %1"
   [(set_attr "type" "alu_shift")
    (set_attr "predicable" "yes")]
 )
 
 ;; APPLE LOCAL ARM compact switch tables
-(define_insn "adjustable_thumb_extendqisi2"
+;; APPLE LOCAL v7 support. Merge from mainline
+(define_insn "adjustable_thumb1_extendqisi2"
   [(set (match_operand:SI 0 "register_operand" "=l,l")
 	(sign_extend:SI (match_operand:QI 1 "memory_operand" "V,m")))]
-  "TARGET_THUMB && !arm_arch6"
+;; APPLE LOCAL v7 support. Merge from mainline
+  "TARGET_THUMB1 && !arm_arch6"
   "*
   {
     rtx ops[3];
@@ -4140,10 +4726,12 @@
 )
 
 ;; APPLE LOCAL ARM compact switch tables
-(define_insn "adjustable_thumb_extendqisi2_v6"
+;; APPLE LOCAL v7 support. Merge from mainline
+(define_insn "adjustable_thumb1_extendqisi2_v6"
   [(set (match_operand:SI 0 "register_operand" "=l,l,l")
 	(sign_extend:SI (match_operand:QI 1 "nonimmediate_operand" "l,V,m")))]
-  "TARGET_THUMB && arm_arch6"
+;; APPLE LOCAL v7 support. Merge from mainline
+  "TARGET_THUMB1 && arm_arch6"
   "*
   {
     rtx ops[3];
@@ -4224,7 +4812,8 @@
 (define_expand "extendsfdf2"
   [(set (match_operand:DF                  0 "s_register_operand" "")
 	(float_extend:DF (match_operand:SF 1 "s_register_operand"  "")))]
-  "TARGET_ARM && TARGET_HARD_FLOAT"
+;; APPLE LOCAL v7 support. Merge from mainline
+  "TARGET_32BIT && TARGET_HARD_FLOAT"
   ""
 )
 
@@ -4330,7 +4919,8 @@
 (define_split
   [(set (match_operand:ANY64 0 "arm_general_register_operand" "")
 	(match_operand:ANY64 1 "const_double_operand" ""))]
-  "TARGET_ARM
+;; APPLE LOCAL v7 support. Merge from mainline
+  "TARGET_32BIT
    && reload_completed
    && (arm_const_double_inline_cost (operands[1])
        <= ((optimize_size || arm_ld_sched) ? 3 : 4))"
@@ -4426,10 +5016,12 @@
 ;;; ??? This was originally identical to the movdf_insn pattern.
 ;;; ??? The 'i' constraint looks funny, but it should always be replaced by
 ;;; thumb_reorg with a memory reference.
-(define_insn "adjustable_thumb_movdi_insn"
+;; APPLE LOCAL v7 support. Merge from mainline
+(define_insn "adjustable_thumb1_movdi_insn"
   [(set (match_operand:DI 0 "nonimmediate_operand" "=l,l,l,l,>,l, m,*r")
 	(match_operand:DI 1 "general_operand"      "l, I,J,>,l,mi,l,*r"))]
-  "TARGET_THUMB
+;; APPLE LOCAL v7 support. Merge from mainline
+  "TARGET_THUMB1
    && !(TARGET_HARD_FLOAT && TARGET_MAVERICK)
    && (   register_operand (operands[0], DImode)
        || register_operand (operands[1], DImode))"
@@ -4466,6 +5058,8 @@
   }"
   [(set_attr "length" "4,4,6,2,2,4,4,4")
    (set_attr "type" "*,*,*,load2,store2,load2,store2,*")
+;; APPLE LOCAL v7 support. Merge from Codesourcery
+   (set_attr "insn" "*,mov,*,*,*,*,*,mov")
    (set_attr "pool_range" "*,*,*,*,*,1018,*,*")]
 )
 ;; APPLE LOCAL end compact switch tables
@@ -4475,7 +5069,8 @@
         (match_operand:SI 1 "general_operand" ""))]
   "TARGET_EITHER"
   "
-  if (TARGET_ARM)
+  /* APPLE LOCAL v7 support. Merge from mainline */
+  if (TARGET_32BIT)
     {
       /* Everything except mem = const or mem = mem can be done easily.  */
       if (GET_CODE (operands[0]) == MEM)
@@ -4491,7 +5086,8 @@
           DONE;
         }
     }
-  else /* TARGET_THUMB....  */
+  /* APPLE LOCAL v7 support. Merge from mainline */
+  else /* TARGET_THUMB1...  */
     {
       if (!no_new_pseudos)
         {
@@ -4531,9 +5127,10 @@
   "
 )
 
+;; APPLE LOCAL begin v7 support. Merge from mainline
 (define_insn "*arm_movsi_insn"
-  [(set (match_operand:SI 0 "nonimmediate_operand" "=r,r,r, m")
-	(match_operand:SI 1 "general_operand"      "rI,K,mi,r"))]
+  [(set (match_operand:SI 0 "nonimmediate_operand" "=r,r,r,r, m")
+	(match_operand:SI 1 "general_operand"      "rI,K,N,mi,r"))]
   "TARGET_ARM && ! TARGET_IWMMXT
    && !(TARGET_HARD_FLOAT && TARGET_VFP)
    && (   register_operand (operands[0], SImode)
@@ -4541,18 +5138,23 @@
   "@
    mov%?\\t%0, %1
    mvn%?\\t%0, #%B1
+   movw%?\\t%0, %1
    ldr%?\\t%0, %1
    str%?\\t%1, %0"
-  [(set_attr "type" "*,*,load1,store1")
+  [(set_attr "type" "*,*,*,load1,store1")
+;; APPLE LOCAL v7 support. Merge from Codesourcery
+   (set_attr "insn" "mov,mvn,mov,*,*")
    (set_attr "predicable" "yes")
-   (set_attr "pool_range" "*,*,4096,*")
-   (set_attr "neg_pool_range" "*,*,4084,*")]
+   (set_attr "pool_range" "*,*,*,4096,*")
+   (set_attr "neg_pool_range" "*,*,*,4084,*")]
 )
+;; APPLE LOCAL end v7 support. Merge from mainline
 
 (define_split
   [(set (match_operand:SI 0 "arm_general_register_operand" "")
 	(match_operand:SI 1 "const_int_operand" ""))]
-  "TARGET_ARM
+;; APPLE LOCAL v7 support. Merge from mainline
+  "TARGET_32BIT
   && (!(const_ok_for_arm (INTVAL (operands[1]))
         || const_ok_for_arm (~INTVAL (operands[1]))))"
   [(clobber (const_int 0))]
@@ -4563,10 +5165,12 @@
   "
 )
 
-(define_insn "*thumb_movsi_insn"
+;; APPLE LOCAL v7 support. Merge from mainline
+(define_insn "*thumb1_movsi_insn"
   [(set (match_operand:SI 0 "nonimmediate_operand" "=l,l,l,l,l,>,l, m,*lh")
 	(match_operand:SI 1 "general_operand"      "l, I,J,K,>,l,mi,l,*lh"))]
-  "TARGET_THUMB
+;; APPLE LOCAL v7 support. Merge from mainline
+  "TARGET_THUMB1
    && (   register_operand (operands[0], SImode) 
        || register_operand (operands[1], SImode))"
   "@
@@ -4587,7 +5191,8 @@
 (define_split 
   [(set (match_operand:SI 0 "register_operand" "")
 	(match_operand:SI 1 "const_int_operand" ""))]
-  "TARGET_THUMB && satisfies_constraint_J (operands[1])"
+;; APPLE LOCAL v7 support. Merge from mainline
+  "TARGET_THUMB1 && satisfies_constraint_J (operands[1])"
   [(set (match_dup 0) (match_dup 1))
    (set (match_dup 0) (neg:SI (match_dup 0)))]
   "operands[1] = GEN_INT (- INTVAL (operands[1]));"
@@ -4596,7 +5201,8 @@
 (define_split 
   [(set (match_operand:SI 0 "register_operand" "")
 	(match_operand:SI 1 "const_int_operand" ""))]
-  "TARGET_THUMB && satisfies_constraint_K (operands[1])"
+;; APPLE LOCAL v7 support. Merge from mainline
+  "TARGET_THUMB1 && satisfies_constraint_K (operands[1])"
   [(set (match_dup 0) (match_dup 1))
    (set (match_dup 0) (ashift:SI (match_dup 0) (match_dup 2)))]
   "
@@ -4640,12 +5246,14 @@
    (set (attr "neg_pool_range") (const_int 4084))]
 )
 
-(define_insn "pic_load_addr_thumb"
+;; APPLE LOCAL v7 support. Merge from mainline
+(define_insn "pic_load_addr_thumb1"
   [(set (match_operand:SI 0 "s_register_operand" "=l")
 	(unspec:SI [(match_operand:SI 1 "" "mX")
 		    (label_ref (match_operand 2 "" ""))] UNSPEC_PIC_SYM))
    (use (label_ref (match_dup 2)))]
-  "TARGET_THUMB && (flag_pic || (TARGET_MACHO && MACHO_DYNAMIC_NO_PIC_P))"
+;; APPLE LOCAL v7 support. Merge from mainline
+  "TARGET_THUMB1 && (flag_pic || (TARGET_MACHO && MACHO_DYNAMIC_NO_PIC_P))"
   "ldr\\t%0, %1"
   [(set_attr "type" "load1")
    (set (attr "pool_range") (const_int 1022))
@@ -4866,10 +5474,12 @@
 		    (const_int 0)))
    (set (match_operand:SI 0 "s_register_operand" "=r,r")
 	(match_dup 1))]
-  "TARGET_ARM"
+;; APPLE LOCAL begin v7 support. Merge from mainline
+  "TARGET_32BIT"
   "@
    cmp%?\\t%0, #0
-   sub%?s\\t%0, %1, #0"
+   sub%.\\t%0, %1, #0"
+;; APPLE LOCAL end v7 support. Merge from mainline
   [(set_attr "conds" "set")]
 )
 
@@ -4985,7 +5595,8 @@
 (define_expand "storehi_single_op"
   [(set (match_operand:HI 0 "memory_operand" "")
 	(match_operand:HI 1 "general_operand" ""))]
-  "TARGET_ARM && arm_arch4"
+;; APPLE LOCAL v7 support. Merge from mainline
+  "TARGET_32BIT && arm_arch4"
   "
   if (!s_register_operand (operands[1], HImode))
     operands[1] = copy_to_mode_reg (HImode, operands[1]);
@@ -5103,9 +5714,29 @@
           DONE;
        }
     }
-  else /* TARGET_THUMB */
+  /* APPLE LOCAL begin v7 support. Merge from mainline */
+  else if (TARGET_THUMB2)
+    {
+      /* Thumb-2 can do everything except mem=mem and mem=const easily.  */
+      if (!no_new_pseudos)
+	{
+	  if (GET_CODE (operands[0]) != REG)
+	    operands[1] = force_reg (HImode, operands[1]);
+          /* Zero extend a constant, and keep it in an SImode reg.  */
+          else if (GET_CODE (operands[1]) == CONST_INT)
+	    {
+	      rtx reg = gen_reg_rtx (SImode);
+	      HOST_WIDE_INT val = INTVAL (operands[1]) & 0xffff;
+
+	      emit_insn (gen_movsi (reg, GEN_INT (val)));
+	      operands[1] = gen_lowpart (HImode, reg);
+	    }
+	}
+    }
+  else /* TARGET_THUMB1 */
     {
       if (!no_new_pseudos)
+  /* APPLE LOCAL end v7 support. Merge from mainline */
         {
 	  if (GET_CODE (operands[1]) == CONST_INT)
 	    {
@@ -5166,10 +5797,12 @@
 )
 
 ;; APPLE LOCAL ARM compact switch tables
-(define_insn "adjustable_thumb_movhi_insn"
+;; APPLE LOCAL v7 support. Merge from mainline
+(define_insn "adjustable_thumb1_movhi_insn"
   [(set (match_operand:HI 0 "nonimmediate_operand" "=l,l,m,*r,*h,l")
 	(match_operand:HI 1 "general_operand"       "l,m,l,*h,*r,I"))]
-  "TARGET_THUMB
+;; APPLE LOCAL v7 support. Merge from mainline
+  "TARGET_THUMB1
    && (   register_operand (operands[0], HImode)
        || register_operand (operands[1], HImode))"
   "*
@@ -5262,13 +5895,17 @@
    && (GET_CODE (operands[1]) != CONST_INT
        || const_ok_for_arm (INTVAL (operands[1]))
        || const_ok_for_arm (~INTVAL (operands[1])))"
+;; APPLE LOCAL begin v7 support. Merge from mainline
   "@
    mov%?\\t%0, %1\\t%@ movhi
    mvn%?\\t%0, #%B1\\t%@ movhi
-   str%?h\\t%1, %0\\t%@ movhi
-   ldr%?h\\t%0, %1\\t%@ movhi"
+   str%(h%)\\t%1, %0\\t%@ movhi
+   ldr%(h%)\\t%0, %1\\t%@ movhi"
+;; APPLE LOCAL end v7 support. Merge from mainline
   [(set_attr "type" "*,*,store1,load1")
    (set_attr "predicable" "yes")
+;; APPLE LOCAL v7 support. Merge from Codesourcery
+   (set_attr "insn" "mov,mvn,*,*")
    (set_attr "pool_range" "*,*,*,256")
    (set_attr "neg_pool_range" "*,*,*,244")]
 )
@@ -5280,14 +5917,18 @@
   "@
    mov%?\\t%0, %1\\t%@ movhi
    mvn%?\\t%0, #%B1\\t%@ movhi"
-  [(set_attr "predicable" "yes")]
+;; APPLE LOCAL begin v7 support. Merge from Codesourcery
+  [(set_attr "predicable" "yes")
+   (set_attr "insn" "mov,mvn")]
+;; APPLE LOCAL end v7 support. Merge from Codesourcery
 )
 
 (define_expand "thumb_movhi_clobber"
   [(set (match_operand:HI     0 "memory_operand"   "")
 	(match_operand:HI     1 "register_operand" ""))
    (clobber (match_operand:DI 2 "register_operand" ""))]
-  "TARGET_THUMB"
+;; APPLE LOCAL v7 support. Merge from mainline
+  "TARGET_THUMB1"
   "
   if (strict_memory_address_p (HImode, XEXP (operands[0], 0))
       && REGNO (operands[1]) <= LAST_LO_REGNUM)
@@ -5402,22 +6043,29 @@
 (define_insn "*arm_movqi_insn"
   [(set (match_operand:QI 0 "nonimmediate_operand" "=r,r,r,m")
 	(match_operand:QI 1 "general_operand" "rI,K,m,r"))]
-  "TARGET_ARM
+;; APPLE LOCAL v7 support. Merge from mainline
+  "TARGET_32BIT
    && (   register_operand (operands[0], QImode)
        || register_operand (operands[1], QImode))"
+;; APPLE LOCAL begin v7 support. Merge from mainline
   "@
    mov%?\\t%0, %1
    mvn%?\\t%0, #%B1
-   ldr%?b\\t%0, %1
-   str%?b\\t%1, %0"
+   ldr%(b%)\\t%0, %1
+   str%(b%)\\t%1, %0"
+;; APPLE LOCAL end v7 support. Merge from mainline
   [(set_attr "type" "*,*,load1,store1")
+;; APPLE LOCAL v7 support. Merge from Codesourcery
+   (set_attr "insn" "mov,mvn,*,*")
    (set_attr "predicable" "yes")]
 )
 
-(define_insn "*thumb_movqi_insn"
+;; APPLE LOCAL v7 support. Merge from mainline
+(define_insn "*thumb1_movqi_insn"
   [(set (match_operand:QI 0 "nonimmediate_operand" "=l,l,m,*r,*h,l")
 	(match_operand:QI 1 "general_operand"      "l, m,l,*h,*r,I"))]
-  "TARGET_THUMB
+;; APPLE LOCAL v7 support. Merge from mainline
+  "TARGET_THUMB1
    && (   register_operand (operands[0], QImode)
        || register_operand (operands[1], QImode))"
   "@
@@ -5429,6 +6077,8 @@
    mov\\t%0, %1"
   [(set_attr "length" "2")
    (set_attr "type" "*,load1,store1,*,*,*")
+;; APPLE LOCAL v7 support. Merge from Codesourcery
+   (set_attr "insn" "*,*,*,mov,mov,mov")
    (set_attr "pool_range" "*,32,*,*,*,*")]
 )
 
@@ -5437,12 +6087,14 @@
 	(match_operand:SF 1 "general_operand" ""))]
   "TARGET_EITHER"
   "
-  if (TARGET_ARM)
+  /* APPLE LOCAL v7 support. Merge from mainline */
+  if (TARGET_32BIT)
     {
       if (GET_CODE (operands[0]) == MEM)
         operands[1] = force_reg (SFmode, operands[1]);
     }
-  else /* TARGET_THUMB */
+  /* APPLE LOCAL v7 support. Merge from mainline */
+  else /* TARGET_THUMB1 */
     {
       if (!no_new_pseudos)
         {
@@ -5458,7 +6110,8 @@
 (define_split
   [(set (match_operand:SF 0 "arm_general_register_operand" "")
 	(match_operand:SF 1 "immediate_operand" ""))]
-  "TARGET_ARM
+;; APPLE LOCAL v7 support. Merge from mainline
+  "TARGET_32BIT
    && reload_completed
    && GET_CODE (operands[1]) == CONST_DOUBLE"
   [(set (match_dup 2) (match_dup 3))]
@@ -5484,15 +6137,19 @@
   [(set_attr "length" "4,4,4")
    (set_attr "predicable" "yes")
    (set_attr "type" "*,load1,store1")
+;; APPLE LOCAL v7 support. Merge from Codesourcery
+   (set_attr "insn" "mov,*,*")
    (set_attr "pool_range" "*,4096,*")
    (set_attr "neg_pool_range" "*,4084,*")]
 )
 
 ;;; ??? This should have alternatives for constants.
-(define_insn "*thumb_movsf_insn"
+;; APPLE LOCAL v7 support. Merge from mainline
+(define_insn "*thumb1_movsf_insn"
   [(set (match_operand:SF     0 "nonimmediate_operand" "=l,l,>,l, m,*r,*h")
 	(match_operand:SF     1 "general_operand"      "l, >,l,mF,l,*h,*r"))]
-  "TARGET_THUMB
+;; APPLE LOCAL v7 support. Merge from mainline
+  "TARGET_THUMB1
    && (   register_operand (operands[0], SFmode) 
        || register_operand (operands[1], SFmode))"
   "@
@@ -5513,7 +6170,8 @@
 	(match_operand:DF 1 "general_operand" ""))]
   "TARGET_EITHER"
   "
-  if (TARGET_ARM)
+  /* APPLE LOCAL v7 support. Merge from mainline */
+  if (TARGET_32BIT)
     {
       if (GET_CODE (operands[0]) == MEM)
         operands[1] = force_reg (DFmode, operands[1]);
@@ -5535,7 +6193,8 @@
   [(match_operand:DF 0 "arm_reload_memory_operand" "=o")
    (match_operand:DF 1 "s_register_operand" "r")
    (match_operand:SI 2 "s_register_operand" "=&r")]
-  "TARGET_ARM"
+;; APPLE LOCAL v7 support. Merge from mainline
+  "TARGET_32BIT"
   "
   {
     enum rtx_code code = GET_CODE (XEXP (operands[0], 0));
@@ -5604,7 +6263,8 @@
 (define_insn "*thumb_movdf_insn"
   [(set (match_operand:DF 0 "nonimmediate_operand" "=l,l,>,l, m,*r")
 	(match_operand:DF 1 "general_operand"      "l, >,l,mF,l,*r"))]
-  "TARGET_THUMB
+;; APPLE LOCAL v7 support. Merge from mainline
+  "TARGET_THUMB1
    && (   register_operand (operands[0], DFmode)
        || register_operand (operands[1], DFmode))"
   "*
@@ -5641,34 +6301,16 @@
 (define_expand "movxf"
   [(set (match_operand:XF 0 "general_operand" "")
 	(match_operand:XF 1 "general_operand" ""))]
-  "TARGET_ARM && TARGET_HARD_FLOAT && TARGET_FPA"
+;; APPLE LOCAL v7 support. Merge from mainline
+  "TARGET_32BIT && TARGET_HARD_FLOAT && TARGET_FPA"
   "
   if (GET_CODE (operands[0]) == MEM)
     operands[1] = force_reg (XFmode, operands[1]);
   "
 )
 
-;; Vector Moves
-(define_expand "movv2si"
-  [(set (match_operand:V2SI 0 "nonimmediate_operand" "")
-	(match_operand:V2SI 1 "general_operand" ""))]
-  "TARGET_REALLY_IWMMXT"
-{
-})
-
-(define_expand "movv4hi"
-  [(set (match_operand:V4HI 0 "nonimmediate_operand" "")
-	(match_operand:V4HI 1 "general_operand" ""))]
-  "TARGET_REALLY_IWMMXT"
-{
-})
-
-(define_expand "movv8qi"
-  [(set (match_operand:V8QI 0 "nonimmediate_operand" "")
-	(match_operand:V8QI 1 "general_operand" ""))]
-  "TARGET_REALLY_IWMMXT"
-{
-})
+;; APPLE LOCAL v7 support. Merge from mainline
+;; Removed lines
 
 
 ;; load- and store-multiple insns
@@ -5679,7 +6321,8 @@
   [(match_par_dup 3 [(set (match_operand:SI 0 "" "")
                           (match_operand:SI 1 "" ""))
                      (use (match_operand:SI 2 "" ""))])]
-  "TARGET_ARM"
+;; APPLE LOCAL v7 support. Merge from mainline
+  "TARGET_32BIT"
 {
   HOST_WIDE_INT offset = 0;
 
@@ -5714,14 +6357,17 @@
 	  (mem:SI (plus:SI (match_dup 2) (const_int 8))))
      (set (match_operand:SI 6 "arm_hard_register_operand" "")
 	  (mem:SI (plus:SI (match_dup 2) (const_int 12))))])]
-  "TARGET_ARM && XVECLEN (operands[0], 0) == 5"
-  "ldm%?ia\\t%1!, {%3, %4, %5, %6}"
+;; APPLE LOCAL begin v7 support. Merge from mainline
+  "TARGET_32BIT && XVECLEN (operands[0], 0) == 5"
+  "ldm%(ia%)\\t%1!, {%3, %4, %5, %6}"
+;; APPLE LOCAL end v7 support. Merge from mainline
   [(set_attr "type" "load4")
    (set_attr "predicable" "yes")]
 )
 
 ;; APPLE LOCAL begin ARM compact switch tables
-(define_insn "*ldmsi_postinc4_thumb"
+;; APPLE LOCAL v7 support. Merge from mainline
+(define_insn "*ldmsi_postinc4_thumb1"
   [(match_parallel 0 "load_multiple_operation"
     [(set (match_operand:SI 1 "s_register_operand" "=l")
 	  (plus:SI (match_operand:SI 2 "s_register_operand" "1")
@@ -5734,7 +6380,8 @@
 	  (mem:SI (plus:SI (match_dup 2) (const_int 8))))
      (set (match_operand:SI 6 "arm_hard_register_operand" "")
 	  (mem:SI (plus:SI (match_dup 2) (const_int 12))))])]
-  "TARGET_THUMB && XVECLEN (operands[0], 0) == 5"
+;; APPLE LOCAL v7 support. Merge from mainline
+  "TARGET_THUMB1 && XVECLEN (operands[0], 0) == 5"
   "ldmia\\t%1!, {%3, %4, %5, %6}"
   [(set_attr "type" "load4")
    (set_attr "length" "2")]
@@ -5752,8 +6399,10 @@
 	  (mem:SI (plus:SI (match_dup 2) (const_int 4))))
      (set (match_operand:SI 5 "arm_hard_register_operand" "")
 	  (mem:SI (plus:SI (match_dup 2) (const_int 8))))])]
-  "TARGET_ARM && XVECLEN (operands[0], 0) == 4"
-  "ldm%?ia\\t%1!, {%3, %4, %5}"
+;; APPLE LOCAL begin v7 support. Merge from mainline
+  "TARGET_32BIT && XVECLEN (operands[0], 0) == 4"
+  "ldm%(ia%)\\t%1!, {%3, %4, %5}"
+;; APPLE LOCAL end v7 support. Merge from mainline
   [(set_attr "type" "load3")
    (set_attr "predicable" "yes")]
 )
@@ -5767,8 +6416,10 @@
 	  (mem:SI (match_dup 2)))
      (set (match_operand:SI 4 "arm_hard_register_operand" "")
 	  (mem:SI (plus:SI (match_dup 2) (const_int 4))))])]
-  "TARGET_ARM && XVECLEN (operands[0], 0) == 3"
-  "ldm%?ia\\t%1!, {%3, %4}"
+;; APPLE LOCAL begin v7 support. Merge from mainline
+  "TARGET_32BIT && XVECLEN (operands[0], 0) == 3"
+  "ldm%(ia%)\\t%1!, {%3, %4}"
+;; APPLE LOCAL end v7 support. Merge from mainline
   [(set_attr "type" "load2")
    (set_attr "predicable" "yes")]
 )
@@ -5785,8 +6436,10 @@
 	  (mem:SI (plus:SI (match_dup 1) (const_int 8))))
      (set (match_operand:SI 5 "arm_hard_register_operand" "")
 	  (mem:SI (plus:SI (match_dup 1) (const_int 12))))])]
-  "TARGET_ARM && XVECLEN (operands[0], 0) == 4"
-  "ldm%?ia\\t%1, {%2, %3, %4, %5}"
+;; APPLE LOCAL begin v7 support. Merge from mainline
+  "TARGET_32BIT && XVECLEN (operands[0], 0) == 4"
+  "ldm%(ia%)\\t%1, {%2, %3, %4, %5}"
+;; APPLE LOCAL end v7 support. Merge from mainline
   [(set_attr "type" "load4")
    (set_attr "predicable" "yes")]
 )
@@ -5799,8 +6452,10 @@
 	  (mem:SI (plus:SI (match_dup 1) (const_int 4))))
      (set (match_operand:SI 4 "arm_hard_register_operand" "")
 	  (mem:SI (plus:SI (match_dup 1) (const_int 8))))])]
-  "TARGET_ARM && XVECLEN (operands[0], 0) == 3"
-  "ldm%?ia\\t%1, {%2, %3, %4}"
+;; APPLE LOCAL begin v7 support. Merge from mainline
+  "TARGET_32BIT && XVECLEN (operands[0], 0) == 3"
+  "ldm%(ia%)\\t%1, {%2, %3, %4}"
+;; APPLE LOCAL end v7 support. Merge from mainline
   [(set_attr "type" "load3")
    (set_attr "predicable" "yes")]
 )
@@ -5811,8 +6466,10 @@
 	  (mem:SI (match_operand:SI 1 "s_register_operand" "r")))
      (set (match_operand:SI 3 "arm_hard_register_operand" "")
 	  (mem:SI (plus:SI (match_dup 1) (const_int 4))))])]
-  "TARGET_ARM && XVECLEN (operands[0], 0) == 2"
-  "ldm%?ia\\t%1, {%2, %3}"
+;; APPLE LOCAL begin v7 support. Merge from mainline
+  "TARGET_32BIT && XVECLEN (operands[0], 0) == 2"
+  "ldm%(ia%)\\t%1, {%2, %3}"
+;; APPLE LOCAL end v7 support. Merge from mainline
   [(set_attr "type" "load2")
    (set_attr "predicable" "yes")]
 )
@@ -5821,7 +6478,8 @@
   [(match_par_dup 3 [(set (match_operand:SI 0 "" "")
                           (match_operand:SI 1 "" ""))
                      (use (match_operand:SI 2 "" ""))])]
-  "TARGET_ARM"
+;; APPLE LOCAL v7 support. Merge from mainline
+  "TARGET_32BIT"
 {
   HOST_WIDE_INT offset = 0;
 
@@ -5856,14 +6514,17 @@
 	  (match_operand:SI 5 "arm_hard_register_operand" ""))
      (set (mem:SI (plus:SI (match_dup 2) (const_int 12)))
 	  (match_operand:SI 6 "arm_hard_register_operand" ""))])]
-  "TARGET_ARM && XVECLEN (operands[0], 0) == 5"
-  "stm%?ia\\t%1!, {%3, %4, %5, %6}"
+;; APPLE LOCAL begin v7 support. Merge from mainline
+  "TARGET_32BIT && XVECLEN (operands[0], 0) == 5"
+  "stm%(ia%)\\t%1!, {%3, %4, %5, %6}"
+;; APPLE LOCAL end v7 support. Merge from mainline
   [(set_attr "predicable" "yes")
    (set_attr "type" "store4")]
 )
 
 ;; APPLE LOCAL begin ARM compact switch tables
-(define_insn "*stmsi_postinc4_thumb"
+;; APPLE LOCAL v7 support. Merge from mainline
+(define_insn "*stmsi_postinc4_thumb1"
   [(match_parallel 0 "store_multiple_operation"
     [(set (match_operand:SI 1 "s_register_operand" "=l")
 	  (plus:SI (match_operand:SI 2 "s_register_operand" "1")
@@ -5876,8 +6537,10 @@
 	  (match_operand:SI 5 "arm_hard_register_operand" ""))
      (set (mem:SI (plus:SI (match_dup 2) (const_int 12)))
 	  (match_operand:SI 6 "arm_hard_register_operand" ""))])]
-  "TARGET_THUMB && XVECLEN (operands[0], 0) == 5"
+;; APPLE LOCAL begin v7 support. Merge from mainline
+  "TARGET_THUMB1 && XVECLEN (operands[0], 0) == 5"
   "stmia\\t%1!, {%3, %4, %5, %6}"
+;; APPLE LOCAL end v7 support. Merge from mainline
   [(set_attr "type" "store4")
    (set_attr "length" "2")]
 )
@@ -5894,8 +6557,10 @@
 	  (match_operand:SI 4 "arm_hard_register_operand" ""))
      (set (mem:SI (plus:SI (match_dup 2) (const_int 8)))
 	  (match_operand:SI 5 "arm_hard_register_operand" ""))])]
-  "TARGET_ARM && XVECLEN (operands[0], 0) == 4"
-  "stm%?ia\\t%1!, {%3, %4, %5}"
+;; APPLE LOCAL begin v7 support. Merge from mainline
+  "TARGET_32BIT && XVECLEN (operands[0], 0) == 4"
+  "stm%(ia%)\\t%1!, {%3, %4, %5}"
+;; APPLE LOCAL end v7 support. Merge from mainline
   [(set_attr "predicable" "yes")
    (set_attr "type" "store3")]
 )
@@ -5909,8 +6574,10 @@
 	  (match_operand:SI 3 "arm_hard_register_operand" ""))
      (set (mem:SI (plus:SI (match_dup 2) (const_int 4)))
 	  (match_operand:SI 4 "arm_hard_register_operand" ""))])]
-  "TARGET_ARM && XVECLEN (operands[0], 0) == 3"
-  "stm%?ia\\t%1!, {%3, %4}"
+;; APPLE LOCAL begin v7 support. Merge from mainline
+  "TARGET_32BIT && XVECLEN (operands[0], 0) == 3"
+  "stm%(ia%)\\t%1!, {%3, %4}"
+;; APPLE LOCAL end v7 support. Merge from mainline
   [(set_attr "predicable" "yes")
    (set_attr "type" "store2")]
 )
@@ -5927,8 +6594,10 @@
 	  (match_operand:SI 4 "arm_hard_register_operand" ""))
      (set (mem:SI (plus:SI (match_dup 1) (const_int 12)))
 	  (match_operand:SI 5 "arm_hard_register_operand" ""))])]
-  "TARGET_ARM && XVECLEN (operands[0], 0) == 4"
-  "stm%?ia\\t%1, {%2, %3, %4, %5}"
+;; APPLE LOCAL begin v7 support. Merge from mainline
+  "TARGET_32BIT && XVECLEN (operands[0], 0) == 4"
+  "stm%(ia%)\\t%1, {%2, %3, %4, %5}"
+;; APPLE LOCAL end v7 support. Merge from mainline
   [(set_attr "predicable" "yes")
    (set_attr "type" "store4")]
 )
@@ -5941,8 +6610,10 @@
 	  (match_operand:SI 3 "arm_hard_register_operand" ""))
      (set (mem:SI (plus:SI (match_dup 1) (const_int 8)))
 	  (match_operand:SI 4 "arm_hard_register_operand" ""))])]
-  "TARGET_ARM && XVECLEN (operands[0], 0) == 3"
-  "stm%?ia\\t%1, {%2, %3, %4}"
+;; APPLE LOCAL begin v7 support. Merge from mainline
+  "TARGET_32BIT && XVECLEN (operands[0], 0) == 3"
+  "stm%(ia%)\\t%1, {%2, %3, %4}"
+;; APPLE LOCAL end v7 support. Merge from mainline
   [(set_attr "predicable" "yes")
    (set_attr "type" "store3")]
 )
@@ -5953,8 +6624,10 @@
 	  (match_operand:SI 2 "arm_hard_register_operand" ""))
      (set (mem:SI (plus:SI (match_dup 1) (const_int 4)))
 	  (match_operand:SI 3 "arm_hard_register_operand" ""))])]
-  "TARGET_ARM && XVECLEN (operands[0], 0) == 2"
-  "stm%?ia\\t%1, {%2, %3}"
+;; APPLE LOCAL begin v7 support. Merge from mainline
+  "TARGET_32BIT && XVECLEN (operands[0], 0) == 2"
+  "stm%(ia%)\\t%1, {%2, %3}"
+;; APPLE LOCAL end v7 support. Merge from mainline
   [(set_attr "predicable" "yes")
    (set_attr "type" "store2")]
 )
@@ -5970,7 +6643,8 @@
    (match_operand:SI 3 "const_int_operand" "")]
   "TARGET_EITHER"
   "
-  if (TARGET_ARM)
+  /* APPLE LOCAL v7 support. Merge from mainline */
+  if (TARGET_32BIT)
     {
       if (arm_gen_movmemqi (operands))
         DONE;
@@ -6015,7 +6689,8 @@
    (clobber (match_scratch:SI 4 "=&l"))
    (clobber (match_scratch:SI 5 "=&l"))
    (clobber (match_scratch:SI 6 "=&l"))]
-  "TARGET_THUMB"
+;; APPLE LOCAL v7 support. Merge from mainline
+  "TARGET_THUMB1"
   "* return thumb_output_move_mem_multiple (3, operands);"
   [(set_attr "length" "4")
    ; This isn't entirely accurate...  It loads as well, but in terms of
@@ -6034,7 +6709,8 @@
 	(plus:SI (match_dup 3) (const_int 8)))
    (clobber (match_scratch:SI 4 "=&l"))
    (clobber (match_scratch:SI 5 "=&l"))]
-  "TARGET_THUMB"
+;; APPLE LOCAL v7 support. Merge from mainline
+  "TARGET_THUMB1"
   "* return thumb_output_move_mem_multiple (2, operands);"
   [(set_attr "length" "4")
    ; This isn't entirely accurate...  It loads as well, but in terms of
@@ -6068,26 +6744,30 @@
 	        (match_operand:SI 2 "nonmemory_operand" "")])
 	      (label_ref (match_operand 3 "" ""))
 	      (pc)))]
-  "TARGET_THUMB"
+;; APPLE LOCAL begin v7 support. Merge from mainline
+  "TARGET_THUMB1"
   "
-  if (thumb_cmpneg_operand (operands[2], SImode))
+  if (thumb1_cmpneg_operand (operands[2], SImode))
     {
       emit_jump_insn (gen_cbranchsi4_scratch (NULL, operands[1], operands[2],
 					      operands[3], operands[0]));
       DONE;
     }
-  if (!thumb_cmp_operand (operands[2], SImode))
+  if (!thumb1_cmp_operand (operands[2], SImode))
     operands[2] = force_reg (SImode, operands[2]);
   ")
+;; APPLE LOCAL end v7 support. Merge from mainline
 
 (define_insn "*cbranchsi4_insn"
   [(set (pc) (if_then_else
 	      (match_operator 0 "arm_comparison_operator"
 	       [(match_operand:SI 1 "s_register_operand" "l,*h")
-	        (match_operand:SI 2 "thumb_cmp_operand" "lI*h,*r")])
+;; APPLE LOCAL begin v7 support. Merge from mainline
+	        (match_operand:SI 2 "thumb1_cmp_operand" "lI*h,*r")])
 	      (label_ref (match_operand 3 "" ""))
 	      (pc)))]
-  "TARGET_THUMB"
+  "TARGET_THUMB1"
+;; APPLE LOCAL end v7 support. Merge from mainline
   "*
   output_asm_insn (\"cmp\\t%1, %2\", operands);
 
@@ -6095,8 +6775,8 @@
     {
     case 4:  return \"b%d0\\t%l3\";
     /* APPLE LOCAL begin ARM MACH assembler */
-    case 6:  return \"b%D0\\t%.LCB%=\;b\\t%l3\\t%@long jump\\n%.LCB%=:\";
-    default: return \"b%D0\\t%.LCB%=\;bl\\t%l3\\t%@far jump\\n%.LCB%=:\";
+    case 6:  return \"b%D0\\t%~LCB%=\;b\\t%l3\\t%@long jump\\n%~LCB%=:\";
+    default: return \"b%D0\\t%~LCB%=\;bl\\t%l3\\t%@far jump\\n%~LCB%=:\";
     /* APPLE LOCAL end ARM MACH assembler */
     }
   "
@@ -6121,11 +6801,13 @@
   [(set (pc) (if_then_else
 	      (match_operator 4 "arm_comparison_operator"
 	       [(match_operand:SI 1 "s_register_operand" "l,0")
-	        (match_operand:SI 2 "thumb_cmpneg_operand" "L,J")])
+;; APPLE LOCAL v7 support. Merge from mainline
+	        (match_operand:SI 2 "thumb1_cmpneg_operand" "L,J")])
 	      (label_ref (match_operand 3 "" ""))
 	      (pc)))
    (clobber (match_scratch:SI 0 "=l,l"))]
-  "TARGET_THUMB"
+;; APPLE LOCAL v7 support. Merge from mainline
+  "TARGET_THUMB1"
   "*
   output_asm_insn (\"add\\t%0, %1, #%n2\", operands);
 
@@ -6133,8 +6815,8 @@
     {
     case 4:  return \"b%d4\\t%l3\";
     /* APPLE LOCAL begin ARM MACH assembler */
-    case 6:  return \"b%D4\\t%.LCB%=\;b\\t%l3\\t%@long jump\\n%.LCB%=:\";
-    default: return \"b%D4\\t%.LCB%=\;bl\\t%l3\\t%@far jump\\n%.LCB%=:\";
+    case 6:  return \"b%D4\\t%~LCB%=\;b\\t%l3\\t%@long jump\\n%~LCB%=:\";
+    default: return \"b%D4\\t%~LCB%=\;bl\\t%l3\\t%@far jump\\n%~LCB%=:\";
     /* APPLE LOCAL end ARM MACH assembler */
     }
   "
@@ -6164,7 +6846,8 @@
 	 (pc)))
    (set (match_operand:SI 0 "thumb_cbrch_target_operand" "=l,l,*h,*m")
 	(match_dup 1))]
-  "TARGET_THUMB"
+;; APPLE LOCAL v7 support. Merge from mainline
+  "TARGET_THUMB1"
   "*{
   if (which_alternative == 0)
     output_asm_insn (\"cmp\t%0, #0\", operands);
@@ -6182,8 +6865,8 @@
     {
     case 4:  return \"b%d3\\t%l2\";
     /* APPLE LOCAL begin ARM MACH assembler */
-    case 6:  return \"b%D3\\t%.LCB%=\;b\\t%l2\\t%@long jump\\n%.LCB%=:\";
-    default: return \"b%D3\\t%.LCB%=\;bl\\t%l2\\t%@far jump\\n%.LCB%=:\";
+    case 6:  return \"b%D3\\t%~LCB%=\;b\\t%l2\\t%@long jump\\n%~LCB%=:\";
+    default: return \"b%D3\\t%~LCB%=\;bl\\t%l2\\t%@far jump\\n%~LCB%=:\";
     /* APPLE LOCAL end ARM MACH assembler */
     }
   }"
@@ -6253,15 +6936,16 @@
 	   (neg:SI (match_operand:SI 2 "s_register_operand" "l"))])
 	 (label_ref (match_operand 3 "" ""))
 	 (pc)))]
-  "TARGET_THUMB"
+;; APPLE LOCAL v7 support. Merge from mainline
+  "TARGET_THUMB1"
   "*
   output_asm_insn (\"cmn\\t%1, %2\", operands);
   switch (get_attr_length (insn))
     {
     case 4:  return \"b%d0\\t%l3\";
     /* APPLE LOCAL begin ARM MACH assembler */
-    case 6:  return \"b%D0\\t%.LCB%=\;b\\t%l3\\t%@long jump\\n%.LCB%=:\";
-    default: return \"b%D0\\t%.LCB%=\;bl\\t%l3\\t%@far jump\\n%.LCB%=:\";
+    case 6:  return \"b%D0\\t%~LCB%=\;b\\t%l3\\t%@long jump\\n%~LCB%=:\";
+    default: return \"b%D0\\t%~LCB%=\;bl\\t%l3\\t%@far jump\\n%~LCB%=:\";
     /* APPLE LOCAL end ARM MACH assembler */
     }
   "
@@ -6293,7 +6977,8 @@
 	 (label_ref (match_operand 3 "" ""))
 	 (pc)))
    (clobber (match_scratch:SI 4 "=l"))]
-  "TARGET_THUMB"
+;; APPLE LOCAL v7 support. Merge from mainline
+  "TARGET_THUMB1"
   "*
   {
   rtx op[3];
@@ -6306,8 +6991,8 @@
     {
     case 4:  return \"b%d0\\t%l3\";
     /* APPLE LOCAL begin ARM MACH assembler */
-    case 6:  return \"b%D0\\t%.LCB%=\;b\\t%l3\\t%@long jump\\n%.LCB%=:\";
-    default: return \"b%D0\\t%.LCB%=\;bl\\t%l3\\t%@far jump\\n%.LCB%=:\";
+    case 6:  return \"b%D0\\t%~LCB%=\;b\\t%l3\\t%@long jump\\n%~LCB%=:\";
+    default: return \"b%D0\\t%~LCB%=\;bl\\t%l3\\t%@far jump\\n%~LCB%=:\";
     /* APPLE LOCAL end ARM MACH assembler */
     }
   }"
@@ -6339,7 +7024,8 @@
 	 (label_ref (match_operand 3 "" ""))
 	 (pc)))
    (clobber (match_scratch:SI 4 "=l"))]
-  "TARGET_THUMB"
+;; APPLE LOCAL v7 support. Merge from mainline
+  "TARGET_THUMB1"
   "*
   {
   rtx op[3];
@@ -6352,8 +7038,8 @@
     {
     case 4:  return \"b%d0\\t%l3\";
     /* APPLE LOCAL begin ARM MACH assembler */
-    case 6:  return \"b%D0\\t%.LCB%=\;b\\t%l3\\t%@long jump\\n%.LCB%=:\";
-    default: return \"b%D0\\t%.LCB%=\;bl\\t%l3\\t%@far jump\\n%.LCB%=:\";
+    case 6:  return \"b%D0\\t%~LCB%=\;b\\t%l3\\t%@long jump\\n%~LCB%=:\";
+    default: return \"b%D0\\t%~LCB%=\;bl\\t%l3\\t%@far jump\\n%~LCB%=:\";
     /* APPLE LOCAL end ARM MACH assembler */
     }
   }"
@@ -6383,7 +7069,8 @@
 	   (const_int 0)])
 	 (label_ref (match_operand 2 "" ""))
 	 (pc)))]
-  "TARGET_THUMB"
+;; APPLE LOCAL v7 support. Merge from mainline
+  "TARGET_THUMB1"
   "*
   {
   output_asm_insn (\"tst\\t%0, %1\", operands);
@@ -6391,8 +7078,8 @@
     {
     case 4:  return \"b%d3\\t%l2\";
     /* APPLE LOCAL begin ARM MACH assembler */
-    case 6:  return \"b%D3\\t%.LCB%=\;b\\t%l2\\t%@long jump\\n%.LCB%=:\";
-    default: return \"b%D3\\t%.LCB%=\;bl\\t%l2\\t%@far jump\\n%.LCB%=:\";
+    case 6:  return \"b%D3\\t%~LCB%=\;b\\t%l2\\t%@long jump\\n%~LCB%=:\";
+    default: return \"b%D3\\t%~LCB%=\;bl\\t%l2\\t%@far jump\\n%~LCB%=:\";
     /* APPLE LOCAL end ARM MACH assembler */
     }
   }"
@@ -6425,7 +7112,8 @@
    (set (match_operand:SI 0 "thumb_cbrch_target_operand" "=l,*?h,*?m,*?m")
 	(and:SI (match_dup 2) (match_dup 3)))
    (clobber (match_scratch:SI 1 "=X,l,&l,&l"))]
-  "TARGET_THUMB"
+;; APPLE LOCAL v7 support. Merge from mainline
+  "TARGET_THUMB1"
   "*
   {
   if (which_alternative == 0)
@@ -6445,8 +7133,8 @@
     {
     case 4:  return \"b%d5\\t%l4\";
     /* APPLE LOCAL begin ARM MACH assembler */
-    case 6:  return \"b%D5\\t%.LCB%=\;b\\t%l4\\t%@long jump\\n%.LCB%=:\";
-    default: return \"b%D5\\t%.LCB%=\;bl\\t%l4\\t%@far jump\\n%.LCB%=:\";
+    case 6:  return \"b%D5\\t%~LCB%=\;b\\t%l4\\t%@long jump\\n%~LCB%=:\";
+    default: return \"b%D5\\t%~LCB%=\;bl\\t%l4\\t%@far jump\\n%~LCB%=:\";
     /* APPLE LOCAL end ARM MACH assembler */
     }
   }"
@@ -6492,7 +7180,8 @@
 	 (label_ref (match_operand 3 "" ""))
 	 (pc)))
    (clobber (match_scratch:SI 0 "=l"))]
-  "TARGET_THUMB"
+;; APPLE LOCAL v7 support. Merge from mainline
+  "TARGET_THUMB1"
   "*
   {
   output_asm_insn (\"orr\\t%0, %2\", operands);
@@ -6500,8 +7189,8 @@
     {
     case 4:  return \"b%d4\\t%l3\";
     /* APPLE LOCAL begin ARM MACH assembler */
-    case 6:  return \"b%D4\\t%.LCB%=\;b\\t%l3\\t%@long jump\\n%.LCB%=:\";
-    default: return \"b%D4\\t%.LCB%=\;bl\\t%l3\\t%@far jump\\n%.LCB%=:\";
+    case 6:  return \"b%D4\\t%~LCB%=\;b\\t%l3\\t%@long jump\\n%~LCB%=:\";
+    default: return \"b%D4\\t%~LCB%=\;bl\\t%l3\\t%@far jump\\n%~LCB%=:\";
     /* APPLE LOCAL end ARM MACH assembler */
     }
   }"
@@ -6534,7 +7223,8 @@
    (set (match_operand:SI 0 "thumb_cbrch_target_operand" "=l,*?h,*?m,*?m")
 	(ior:SI (match_dup 2) (match_dup 3)))
    (clobber (match_scratch:SI 1 "=X,l,&l,&l"))]
-  "TARGET_THUMB"
+;; APPLE LOCAL v7 support. Merge from mainline
+  "TARGET_THUMB1"
   "*
   {
   if (which_alternative == 0)
@@ -6554,8 +7244,8 @@
     {
     case 4:  return \"b%d5\\t%l4\";
     /* APPLE LOCAL begin ARM MACH assembler */
-    case 6:  return \"b%D5\\t%.LCB%=\;b\\t%l4\\t%@long jump\\n%.LCB%=:\";
-    default: return \"b%D5\\t%.LCB%=\;bl\\t%l4\\t%@far jump\\n%.LCB%=:\";
+    case 6:  return \"b%D5\\t%~LCB%=\;b\\t%l4\\t%@long jump\\n%~LCB%=:\";
+    default: return \"b%D5\\t%~LCB%=\;bl\\t%l4\\t%@far jump\\n%~LCB%=:\";
     /* APPLE LOCAL end ARM MACH assembler */
     }
   }"
@@ -6601,7 +7291,8 @@
 	 (label_ref (match_operand 3 "" ""))
 	 (pc)))
    (clobber (match_scratch:SI 0 "=l"))]
-  "TARGET_THUMB"
+;; APPLE LOCAL v7 support. Merge from mainline
+  "TARGET_THUMB1"
   "*
   {
   output_asm_insn (\"eor\\t%0, %2\", operands);
@@ -6609,8 +7300,8 @@
     {
     case 4:  return \"b%d4\\t%l3\";
     /* APPLE LOCAL begin ARM MACH assembler */
-    case 6:  return \"b%D4\\t%.LCB%=\;b\\t%l3\\t%@long jump\\n%.LCB%=:\";
-    default: return \"b%D4\\t%.LCB%=\;bl\\t%l3\\t%@far jump\\n%.LCB%=:\";
+    case 6:  return \"b%D4\\t%~LCB%=\;b\\t%l3\\t%@long jump\\n%~LCB%=:\";
+    default: return \"b%D4\\t%~LCB%=\;bl\\t%l3\\t%@far jump\\n%~LCB%=:\";
     /* APPLE LOCAL end ARM MACH assembler */
     }
   }"
@@ -6643,7 +7334,8 @@
    (set (match_operand:SI 0 "thumb_cbrch_target_operand" "=l,*?h,*?m,*?m")
 	(xor:SI (match_dup 2) (match_dup 3)))
    (clobber (match_scratch:SI 1 "=X,l,&l,&l"))]
-  "TARGET_THUMB"
+;; APPLE LOCAL v7 support. Merge from mainline
+  "TARGET_THUMB1"
   "*
   {
   if (which_alternative == 0)
@@ -6663,8 +7355,8 @@
     {
     case 4:  return \"b%d5\\t%l4\";
     /* APPLE LOCAL begin ARM MACH assembler */
-    case 6:  return \"b%D5\\t%.LCB%=\;b\\t%l4\\t%@long jump\\n%.LCB%=:\";
-    default: return \"b%D5\\t%.LCB%=\;bl\\t%l4\\t%@far jump\\n%.LCB%=:\";
+    case 6:  return \"b%D5\\t%~LCB%=\;b\\t%l4\\t%@long jump\\n%~LCB%=:\";
+    default: return \"b%D5\\t%~LCB%=\;bl\\t%l4\\t%@far jump\\n%~LCB%=:\";
     /* APPLE LOCAL end ARM MACH assembler */
     }
   }"
@@ -6710,7 +7402,8 @@
 	 (label_ref (match_operand 3 "" ""))
 	 (pc)))
    (clobber (match_scratch:SI 0 "=l"))]
-  "TARGET_THUMB"
+;; APPLE LOCAL v7 support. Merge from mainline
+  "TARGET_THUMB1"
   "*
   {
   output_asm_insn (\"bic\\t%0, %2\", operands);
@@ -6718,8 +7411,8 @@
     {
     case 4:  return \"b%d4\\t%l3\";
     /* APPLE LOCAL begin ARM MACH assembler */
-    case 6:  return \"b%D4\\t%.LCB%=\;b\\t%l3\\t%@long jump\\n%.LCB%=:\";
-    default: return \"b%D4\\t%.LCB%=\;bl\\t%l3\\t%@far jump\\n%.LCB%=:\";
+    case 6:  return \"b%D4\\t%~LCB%=\;b\\t%l3\\t%@long jump\\n%~LCB%=:\";
+    default: return \"b%D4\\t%~LCB%=\;bl\\t%l3\\t%@far jump\\n%~LCB%=:\";
     /* APPLE LOCAL end ARM MACH assembler */
     }
   }"
@@ -6752,7 +7445,8 @@
    (set (match_operand:SI 0 "thumb_cbrch_target_operand" "=!l,l,*?h,*?m,*?m")
 	(and:SI (not:SI (match_dup 3)) (match_dup 2)))
    (clobber (match_scratch:SI 1 "=X,l,l,&l,&l"))]
-  "TARGET_THUMB"
+;; APPLE LOCAL v7 support. Merge from mainline
+  "TARGET_THUMB1"
   "*
   {
   if (which_alternative == 0)
@@ -6774,8 +7468,8 @@
     {
     case 4:  return \"b%d5\\t%l4\";
     /* APPLE LOCAL begin ARM MACH assembler */
-    case 6:  return \"b%D5\\t%.LCB%=\;b\\t%l4\\t%@long jump\\n%.LCB%=:\";
-    default: return \"b%D5\\t%.LCB%=\;bl\\t%l4\\t%@far jump\\n%.LCB%=:\";
+    case 6:  return \"b%D5\\t%~LCB%=\;b\\t%l4\\t%@long jump\\n%~LCB%=:\";
+    default: return \"b%D5\\t%~LCB%=\;bl\\t%l4\\t%@far jump\\n%~LCB%=:\";
     /* APPLE LOCAL end ARM MACH assembler */
     }
   }"
@@ -6821,7 +7515,8 @@
    (set (match_operand:SI 0 "thumb_cbrch_target_operand" "=l,*?h,*?m,*?m")
 	(plus:SI (match_dup 2) (const_int -1)))
    (clobber (match_scratch:SI 1 "=X,l,&l,&l"))]
-  "TARGET_THUMB"
+;; APPLE LOCAL v7 support. Merge from mainline
+  "TARGET_THUMB1"
   "*
    {
      rtx cond[2];
@@ -6855,11 +7550,11 @@
 	   output_asm_insn (\"b%d0\\t%l1\", cond);
 	   return \"\";
 	 case 6:
-	   output_asm_insn (\"b%D0\\t%.LCB%=\", cond);
-	   return \"b\\t%l4\\t%@long jump\\n%.LCB%=:\";
+	   output_asm_insn (\"b%D0\\t%~LCB%=\", cond);
+	   return \"b\\t%l4\\t%@long jump\\n%~LCB%=:\";
 	 default:
-	   output_asm_insn (\"b%D0\\t%.LCB%=\", cond);
-	   return \"bl\\t%l4\\t%@far jump\\n%.LCB%=:\";
+	   output_asm_insn (\"b%D0\\t%~LCB%=\", cond);
+	   return \"bl\\t%l4\\t%@far jump\\n%~LCB%=:\";
 	 /* APPLE LOCAL end ARM MACH assembler */
        }
    }
@@ -6930,7 +7625,8 @@
     (match_operand:SI 0 "thumb_cbrch_target_operand" "=l,l,*!h,*?h,*?m,*?m")
     (plus:SI (match_dup 2) (match_dup 3)))
    (clobber (match_scratch:SI 1 "=X,X,X,l,&l,&l"))]
-  "TARGET_THUMB
+;; APPLE LOCAL v7 support. Merge from mainline
+  "TARGET_THUMB1
    && (GET_CODE (operands[4]) == EQ
        || GET_CODE (operands[4]) == NE
        || GET_CODE (operands[4]) == GE
@@ -6961,9 +7657,9 @@
 	   return \"b%d4\\t%l5\";
 	 /* APPLE LOCAL begin ARM MACH assembler */
 	 case 6:
-	   return \"b%D4\\t%.LCB%=\;b\\t%l5\\t%@long jump\\n%.LCB%=:\";
+	   return \"b%D4\\t%~LCB%=\;b\\t%l5\\t%@long jump\\n%~LCB%=:\";
 	 default:
-	   return \"b%D4\\t%.LCB%=\;bl\\t%l5\\t%@far jump\\n%.LCB%=:\";
+	   return \"b%D4\\t%~LCB%=\;bl\\t%l5\\t%@far jump\\n%~LCB%=:\";
 	 /* APPLE LOCAL end ARM MACH assembler */
        }
    }
@@ -7011,7 +7707,8 @@
 	 (label_ref (match_operand 4 "" ""))
 	 (pc)))
    (clobber (match_scratch:SI 0 "=X,X,l,l"))]
-  "TARGET_THUMB
+;; APPLE LOCAL v7 support. Merge from mainline
+  "TARGET_THUMB1
    && (GET_CODE (operands[3]) == EQ
        || GET_CODE (operands[3]) == NE
        || GET_CODE (operands[3]) == GE
@@ -7046,9 +7743,9 @@
 	   return \"b%d3\\t%l4\";
 	 /* APPLE LOCAL begin ARM MACH assembler */
 	 case 6:
-	   return \"b%D3\\t%.LCB%=\;b\\t%l4\\t%@long jump\\n%.LCB%=:\";
+	   return \"b%D3\\t%~LCB%=\;b\\t%l4\\t%@long jump\\n%~LCB%=:\";
 	 default:
-	   return \"b%D3\\t%.LCB%=\;bl\\t%l4\\t%@far jump\\n%.LCB%=:\";
+	   return \"b%D3\\t%~LCB%=\;bl\\t%l4\\t%@far jump\\n%~LCB%=:\";
 	 /* APPLE LOCAL end ARM MACH assembler */
        }
    }
@@ -7083,7 +7780,8 @@
    (set (match_operand:SI 0 "thumb_cbrch_target_operand" "=l,*?h,*?m,*?m")
 	(minus:SI (match_dup 2) (match_dup 3)))
    (clobber (match_scratch:SI 1 "=X,l,&l,&l"))]
-  "TARGET_THUMB
+;; APPLE LOCAL v7 support. Merge from mainline
+  "TARGET_THUMB1
    && (GET_CODE (operands[4]) == EQ
        || GET_CODE (operands[4]) == NE
        || GET_CODE (operands[4]) == GE
@@ -7114,9 +7812,9 @@
 	   return \"b%d4\\t%l5\";
 	 /* APPLE LOCAL begin ARM MACH assembler */
 	 case 6:
-	   return \"b%D4\\t%.LCB%=\;b\\t%l5\\t%@long jump\\n%.LCB%=:\";
+	   return \"b%D4\\t%~LCB%=\;b\\t%l5\\t%@long jump\\n%~LCB%=:\";
 	 default:
-	   return \"b%D4\\t%.LCB%=\;bl\\t%l5\\t%@far jump\\n%.LCB%=:\";
+	   return \"b%D4\\t%~LCB%=\;bl\\t%l5\\t%@far jump\\n%~LCB%=:\";
 	 /* APPLE LOCAL end ARM MACH assembler */
        }
    }
@@ -7162,7 +7860,8 @@
 	   (const_int 0)])
 	 (label_ref (match_operand 3 "" ""))
 	 (pc)))]
-  "TARGET_THUMB
+;; APPLE LOCAL v7 support. Merge from mainline
+  "TARGET_THUMB1
    && (GET_CODE (operands[0]) == EQ
        || GET_CODE (operands[0]) == NE
        || GET_CODE (operands[0]) == GE
@@ -7173,8 +7872,8 @@
     {
     case 4:  return \"b%d0\\t%l3\";
     /* APPLE LOCAL begin ARM MACH assembler */
-    case 6:  return \"b%D0\\t%.LCB%=\;b\\t%l3\\t%@long jump\\n%.LCB%=:\";
-    default: return \"b%D0\\t%.LCB%=\;bl\\t%l3\\t%@far jump\\n%.LCB%=:\";
+    case 6:  return \"b%D0\\t%~LCB%=\;b\\t%l3\\t%@long jump\\n%~LCB%=:\";
+    default: return \"b%D0\\t%~LCB%=\;bl\\t%l3\\t%@far jump\\n%~LCB%=:\";
     /* APPLE LOCAL end ARM MACH assembler */
     }
   "
@@ -7200,7 +7899,8 @@
 (define_expand "cmpsi"
   [(match_operand:SI 0 "s_register_operand" "")
    (match_operand:SI 1 "arm_add_operand" "")]
-  "TARGET_ARM"
+;; APPLE LOCAL v7 support. Merge from mainline
+  "TARGET_32BIT"
   "{
     arm_compare_op0 = operands[0];
     arm_compare_op1 = operands[1];
@@ -7211,7 +7911,8 @@
 (define_expand "cmpsf"
   [(match_operand:SF 0 "s_register_operand" "")
    (match_operand:SF 1 "arm_float_compare_operand" "")]
-  "TARGET_ARM && TARGET_HARD_FLOAT"
+;; APPLE LOCAL v7 support. Merge from mainline
+  "TARGET_32BIT && TARGET_HARD_FLOAT"
   "
   arm_compare_op0 = operands[0];
   arm_compare_op1 = operands[1];
@@ -7222,7 +7923,8 @@
 (define_expand "cmpdf"
   [(match_operand:DF 0 "s_register_operand" "")
    (match_operand:DF 1 "arm_float_compare_operand" "")]
-  "TARGET_ARM && TARGET_HARD_FLOAT"
+;; APPLE LOCAL v7 support. Merge from mainline
+  "TARGET_32BIT && TARGET_HARD_FLOAT"
   "
   arm_compare_op0 = operands[0];
   arm_compare_op1 = operands[1];
@@ -7235,7 +7937,8 @@
   [(set (reg:CC CC_REGNUM)
 	(compare:CC (match_operand:SI 0 "s_register_operand" "r,r")
 		    (match_operand:SI 1 "arm_add_operand"    "rI,L")))]
-  "TARGET_ARM"
+;; APPLE LOCAL v7 support. Merge from mainline
+  "TARGET_32BIT"
   "@
    cmp%?\\t%0, %1
    cmn%?\\t%0, #%n1"
@@ -7244,7 +7947,8 @@
 )
 ;; APPLE LOCAL end ARM enhance conditional insn generation
 
-(define_insn "*cmpsi_shiftsi"
+;; APPLE LOCAL v7 support. Merge from mainline
+(define_insn "*arm_cmpsi_shiftsi"
   [(set (reg:CC CC_REGNUM)
 	(compare:CC (match_operand:SI   0 "s_register_operand" "r")
 		    (match_operator:SI  3 "shift_operator"
@@ -7259,7 +7963,8 @@
 		      (const_string "alu_shift_reg")))]
 )
 
-(define_insn "*cmpsi_shiftsi_swp"
+;; APPLE LOCAL v7 support. Merge from mainline
+(define_insn "*arm_cmpsi_shiftsi_swp"
   [(set (reg:CC_SWP CC_REGNUM)
 	(compare:CC_SWP (match_operator:SI 3 "shift_operator"
 			 [(match_operand:SI 1 "s_register_operand" "r")
@@ -7274,7 +7979,8 @@
 		      (const_string "alu_shift_reg")))]
 )
 
-(define_insn "*cmpsi_negshiftsi_si"
+;; APPLE LOCAL v7 support. Merge from mainline
+(define_insn "*arm_cmpsi_negshiftsi_si"
   [(set (reg:CC_Z CC_REGNUM)
 	(compare:CC_Z
 	 (neg:SI (match_operator:SI 1 "shift_operator"
@@ -7340,7 +8046,8 @@
 
 (define_insn "*deleted_compare"
   [(set (match_operand 0 "cc_register" "") (match_dup 0))]
-  "TARGET_ARM"
+;; APPLE LOCAL v7 support. Merge from mainline
+  "TARGET_32BIT"
   "\\t%@ deleted compare"
   [(set_attr "conds" "set")
    (set_attr "length" "0")]
@@ -7354,7 +8061,8 @@
 	(if_then_else (eq (match_dup 1) (const_int 0))
 		      (label_ref (match_operand 0 "" ""))
 		      (pc)))]
-  "TARGET_ARM"
+;; APPLE LOCAL v7 support. Merge from mainline
+  "TARGET_32BIT"
   "operands[1] = arm_gen_compare_reg (EQ, arm_compare_op0, arm_compare_op1);"
 )
 
@@ -7363,7 +8071,8 @@
 	(if_then_else (ne (match_dup 1) (const_int 0))
 		      (label_ref (match_operand 0 "" ""))
 		      (pc)))]
-  "TARGET_ARM"
+;; APPLE LOCAL v7 support. Merge from mainline
+  "TARGET_32BIT"
   "operands[1] = arm_gen_compare_reg (NE, arm_compare_op0, arm_compare_op1);"
 )
 
@@ -7372,7 +8081,8 @@
 	(if_then_else (gt (match_dup 1) (const_int 0))
 		      (label_ref (match_operand 0 "" ""))
 		      (pc)))]
-  "TARGET_ARM"
+;; APPLE LOCAL v7 support. Merge from mainline
+  "TARGET_32BIT"
   "operands[1] = arm_gen_compare_reg (GT, arm_compare_op0, arm_compare_op1);"
 )
 
@@ -7381,7 +8091,8 @@
 	(if_then_else (le (match_dup 1) (const_int 0))
 		      (label_ref (match_operand 0 "" ""))
 		      (pc)))]
-  "TARGET_ARM"
+;; APPLE LOCAL v7 support. Merge from mainline
+  "TARGET_32BIT"
   "operands[1] = arm_gen_compare_reg (LE, arm_compare_op0, arm_compare_op1);"
 )
 
@@ -7390,7 +8101,8 @@
 	(if_then_else (ge (match_dup 1) (const_int 0))
 		      (label_ref (match_operand 0 "" ""))
 		      (pc)))]
-  "TARGET_ARM"
+;; APPLE LOCAL v7 support. Merge from mainline
+  "TARGET_32BIT"
   "operands[1] = arm_gen_compare_reg (GE, arm_compare_op0, arm_compare_op1);"
 )
 
@@ -7399,7 +8111,8 @@
 	(if_then_else (lt (match_dup 1) (const_int 0))
 		      (label_ref (match_operand 0 "" ""))
 		      (pc)))]
-  "TARGET_ARM"
+;; APPLE LOCAL v7 support. Merge from mainline
+  "TARGET_32BIT"
   "operands[1] = arm_gen_compare_reg (LT, arm_compare_op0, arm_compare_op1);"
 )
 
@@ -7408,7 +8121,8 @@
 	(if_then_else (gtu (match_dup 1) (const_int 0))
 		      (label_ref (match_operand 0 "" ""))
 		      (pc)))]
-  "TARGET_ARM"
+;; APPLE LOCAL v7 support. Merge from mainline
+  "TARGET_32BIT"
   "operands[1] = arm_gen_compare_reg (GTU, arm_compare_op0, arm_compare_op1);"
 )
 
@@ -7417,7 +8131,8 @@
 	(if_then_else (leu (match_dup 1) (const_int 0))
 		      (label_ref (match_operand 0 "" ""))
 		      (pc)))]
-  "TARGET_ARM"
+;; APPLE LOCAL v7 support. Merge from mainline
+  "TARGET_32BIT"
   "operands[1] = arm_gen_compare_reg (LEU, arm_compare_op0, arm_compare_op1);"
 )
 
@@ -7426,7 +8141,8 @@
 	(if_then_else (geu (match_dup 1) (const_int 0))
 		      (label_ref (match_operand 0 "" ""))
 		      (pc)))]
-  "TARGET_ARM"
+;; APPLE LOCAL v7 support. Merge from mainline
+  "TARGET_32BIT"
   "operands[1] = arm_gen_compare_reg (GEU, arm_compare_op0, arm_compare_op1);"
 )
 
@@ -7435,7 +8151,8 @@
 	(if_then_else (ltu (match_dup 1) (const_int 0))
 		      (label_ref (match_operand 0 "" ""))
 		      (pc)))]
-  "TARGET_ARM"
+;; APPLE LOCAL v7 support. Merge from mainline
+  "TARGET_32BIT"
   "operands[1] = arm_gen_compare_reg (LTU, arm_compare_op0, arm_compare_op1);"
 )
 
@@ -7444,7 +8161,8 @@
 	(if_then_else (unordered (match_dup 1) (const_int 0))
 		      (label_ref (match_operand 0 "" ""))
 		      (pc)))]
-  "TARGET_ARM && TARGET_HARD_FLOAT && (TARGET_FPA || TARGET_VFP)"
+;; APPLE LOCAL v7 support. Merge from mainline
+  "TARGET_32BIT && TARGET_HARD_FLOAT && (TARGET_FPA || TARGET_VFP)"
   "operands[1] = arm_gen_compare_reg (UNORDERED, arm_compare_op0,
 				      arm_compare_op1);"
 )
@@ -7454,7 +8172,8 @@
 	(if_then_else (ordered (match_dup 1) (const_int 0))
 		      (label_ref (match_operand 0 "" ""))
 		      (pc)))]
-  "TARGET_ARM && TARGET_HARD_FLOAT && (TARGET_FPA || TARGET_VFP)"
+;; APPLE LOCAL v7 support. Merge from mainline
+  "TARGET_32BIT && TARGET_HARD_FLOAT && (TARGET_FPA || TARGET_VFP)"
   "operands[1] = arm_gen_compare_reg (ORDERED, arm_compare_op0,
 				      arm_compare_op1);"
 )
@@ -7464,7 +8183,8 @@
 	(if_then_else (ungt (match_dup 1) (const_int 0))
 		      (label_ref (match_operand 0 "" ""))
 		      (pc)))]
-  "TARGET_ARM && TARGET_HARD_FLOAT && (TARGET_FPA || TARGET_VFP)"
+;; APPLE LOCAL v7 support. Merge from mainline
+  "TARGET_32BIT && TARGET_HARD_FLOAT && (TARGET_FPA || TARGET_VFP)"
   "operands[1] = arm_gen_compare_reg (UNGT, arm_compare_op0, arm_compare_op1);"
 )
 
@@ -7473,7 +8193,8 @@
 	(if_then_else (unlt (match_dup 1) (const_int 0))
 		      (label_ref (match_operand 0 "" ""))
 		      (pc)))]
-  "TARGET_ARM && TARGET_HARD_FLOAT && (TARGET_FPA || TARGET_VFP)"
+;; APPLE LOCAL v7 support. Merge from mainline
+  "TARGET_32BIT && TARGET_HARD_FLOAT && (TARGET_FPA || TARGET_VFP)"
   "operands[1] = arm_gen_compare_reg (UNLT, arm_compare_op0, arm_compare_op1);"
 )
 
@@ -7482,7 +8203,8 @@
 	(if_then_else (unge (match_dup 1) (const_int 0))
 		      (label_ref (match_operand 0 "" ""))
 		      (pc)))]
-  "TARGET_ARM && TARGET_HARD_FLOAT && (TARGET_FPA || TARGET_VFP)"
+;; APPLE LOCAL v7 support. Merge from mainline
+  "TARGET_32BIT && TARGET_HARD_FLOAT && (TARGET_FPA || TARGET_VFP)"
   "operands[1] = arm_gen_compare_reg (UNGE, arm_compare_op0, arm_compare_op1);"
 )
 
@@ -7491,7 +8213,8 @@
 	(if_then_else (unle (match_dup 1) (const_int 0))
 		      (label_ref (match_operand 0 "" ""))
 		      (pc)))]
-  "TARGET_ARM && TARGET_HARD_FLOAT && (TARGET_FPA || TARGET_VFP)"
+;; APPLE LOCAL v7 support. Merge from mainline
+  "TARGET_32BIT && TARGET_HARD_FLOAT && (TARGET_FPA || TARGET_VFP)"
   "operands[1] = arm_gen_compare_reg (UNLE, arm_compare_op0, arm_compare_op1);"
 )
 
@@ -7502,7 +8225,8 @@
 	(if_then_else (uneq (match_dup 1) (const_int 0))
 		      (label_ref (match_operand 0 "" ""))
 		      (pc)))]
-  "TARGET_ARM && TARGET_HARD_FLOAT && (TARGET_FPA || TARGET_VFP)"
+;; APPLE LOCAL v7 support. Merge from mainline
+  "TARGET_32BIT && TARGET_HARD_FLOAT && (TARGET_FPA || TARGET_VFP)"
   "operands[1] = arm_gen_compare_reg (UNEQ, arm_compare_op0, arm_compare_op1);"
 )
 
@@ -7511,7 +8235,8 @@
 	(if_then_else (ltgt (match_dup 1) (const_int 0))
 		      (label_ref (match_operand 0 "" ""))
 		      (pc)))]
-  "TARGET_ARM && TARGET_HARD_FLOAT && (TARGET_FPA || TARGET_VFP)"
+;; APPLE LOCAL v7 support. Merge from mainline
+  "TARGET_32BIT && TARGET_HARD_FLOAT && (TARGET_FPA || TARGET_VFP)"
   "operands[1] = arm_gen_compare_reg (LTGT, arm_compare_op0, arm_compare_op1);"
 )
 
@@ -7525,7 +8250,8 @@
 	(if_then_else (uneq (match_operand 1 "cc_register" "") (const_int 0))
 		      (label_ref (match_operand 0 "" ""))
 		      (pc)))]
-  "TARGET_ARM && TARGET_HARD_FLOAT && (TARGET_FPA || TARGET_VFP)"
+;; APPLE LOCAL v7 support. Merge from mainline
+  "TARGET_32BIT && TARGET_HARD_FLOAT && (TARGET_FPA || TARGET_VFP)"
   "*
   gcc_assert (!arm_ccfsm_state);
 
@@ -7541,7 +8267,8 @@
 	(if_then_else (ltgt (match_operand 1 "cc_register" "") (const_int 0))
 		      (label_ref (match_operand 0 "" ""))
 		      (pc)))]
-  "TARGET_ARM && TARGET_HARD_FLOAT && (TARGET_FPA || TARGET_VFP)"
+;; APPLE LOCAL v7 support. Merge from mainline
+  "TARGET_32BIT && TARGET_HARD_FLOAT && (TARGET_FPA || TARGET_VFP)"
   "*
   gcc_assert (!arm_ccfsm_state);
 
@@ -7557,7 +8284,8 @@
 		       [(match_operand 2 "cc_register" "") (const_int 0)])
 		      (label_ref (match_operand 0 "" ""))
 		      (pc)))]
-  "TARGET_ARM"
+;; APPLE LOCAL v7 support. Merge from mainline
+  "TARGET_32BIT"
   "*
   if (arm_ccfsm_state == 1 || arm_ccfsm_state == 2)
     {
@@ -7608,7 +8336,8 @@
 		       [(match_operand 2 "cc_register" "") (const_int 0)])
 		      (pc)
 		      (label_ref (match_operand 0 "" ""))))]
-  "TARGET_ARM"
+;; APPLE LOCAL v7 support. Merge from mainline
+  "TARGET_32BIT"
   "*
   if (arm_ccfsm_state == 1 || arm_ccfsm_state == 2)
     {
@@ -7628,77 +8357,88 @@
 (define_expand "seq"
   [(set (match_operand:SI 0 "s_register_operand" "")
 	(eq:SI (match_dup 1) (const_int 0)))]
-  "TARGET_ARM"
+;; APPLE LOCAL v7 support. Merge from mainline
+  "TARGET_32BIT"
   "operands[1] = arm_gen_compare_reg (EQ, arm_compare_op0, arm_compare_op1);"
 )
 
 (define_expand "sne"
   [(set (match_operand:SI 0 "s_register_operand" "")
 	(ne:SI (match_dup 1) (const_int 0)))]
-  "TARGET_ARM"
+;; APPLE LOCAL v7 support. Merge from mainline
+  "TARGET_32BIT"
   "operands[1] = arm_gen_compare_reg (NE, arm_compare_op0, arm_compare_op1);"
 )
 
 (define_expand "sgt"
   [(set (match_operand:SI 0 "s_register_operand" "")
 	(gt:SI (match_dup 1) (const_int 0)))]
-  "TARGET_ARM"
+;; APPLE LOCAL v7 support. Merge from mainline
+  "TARGET_32BIT"
   "operands[1] = arm_gen_compare_reg (GT, arm_compare_op0, arm_compare_op1);"
 )
 
 (define_expand "sle"
   [(set (match_operand:SI 0 "s_register_operand" "")
 	(le:SI (match_dup 1) (const_int 0)))]
-  "TARGET_ARM"
+;; APPLE LOCAL v7 support. Merge from mainline
+  "TARGET_32BIT"
   "operands[1] = arm_gen_compare_reg (LE, arm_compare_op0, arm_compare_op1);"
 )
 
 (define_expand "sge"
   [(set (match_operand:SI 0 "s_register_operand" "")
 	(ge:SI (match_dup 1) (const_int 0)))]
-  "TARGET_ARM"
+;; APPLE LOCAL v7 support. Merge from mainline
+  "TARGET_32BIT"
   "operands[1] = arm_gen_compare_reg (GE, arm_compare_op0, arm_compare_op1);"
 )
 
 (define_expand "slt"
   [(set (match_operand:SI 0 "s_register_operand" "")
 	(lt:SI (match_dup 1) (const_int 0)))]
-  "TARGET_ARM"
+;; APPLE LOCAL v7 support. Merge from mainline
+  "TARGET_32BIT"
   "operands[1] = arm_gen_compare_reg (LT, arm_compare_op0, arm_compare_op1);"
 )
 
 (define_expand "sgtu"
   [(set (match_operand:SI 0 "s_register_operand" "")
 	(gtu:SI (match_dup 1) (const_int 0)))]
-  "TARGET_ARM"
+;; APPLE LOCAL v7 support. Merge from mainline
+  "TARGET_32BIT"
   "operands[1] = arm_gen_compare_reg (GTU, arm_compare_op0, arm_compare_op1);"
 )
 
 (define_expand "sleu"
   [(set (match_operand:SI 0 "s_register_operand" "")
 	(leu:SI (match_dup 1) (const_int 0)))]
-  "TARGET_ARM"
+;; APPLE LOCAL v7 support. Merge from mainline
+  "TARGET_32BIT"
   "operands[1] = arm_gen_compare_reg (LEU, arm_compare_op0, arm_compare_op1);"
 )
 
 (define_expand "sgeu"
   [(set (match_operand:SI 0 "s_register_operand" "")
 	(geu:SI (match_dup 1) (const_int 0)))]
-  "TARGET_ARM"
+;; APPLE LOCAL v7 support. Merge from mainline
+  "TARGET_32BIT"
   "operands[1] = arm_gen_compare_reg (GEU, arm_compare_op0, arm_compare_op1);"
 )
 
 (define_expand "sltu"
   [(set (match_operand:SI 0 "s_register_operand" "")
 	(ltu:SI (match_dup 1) (const_int 0)))]
-  "TARGET_ARM"
+;; APPLE LOCAL v7 support. Merge from mainline
+  "TARGET_32BIT"
   "operands[1] = arm_gen_compare_reg (LTU, arm_compare_op0, arm_compare_op1);"
 )
 
 (define_expand "sunordered"
   [(set (match_operand:SI 0 "s_register_operand" "")
 	(unordered:SI (match_dup 1) (const_int 0)))]
-  "TARGET_ARM && TARGET_HARD_FLOAT && (TARGET_FPA || TARGET_VFP)"
+;; APPLE LOCAL v7 support. Merge from mainline
+  "TARGET_32BIT && TARGET_HARD_FLOAT && (TARGET_FPA || TARGET_VFP)"
   "operands[1] = arm_gen_compare_reg (UNORDERED, arm_compare_op0,
 				      arm_compare_op1);"
 )
@@ -7706,7 +8446,8 @@
 (define_expand "sordered"
   [(set (match_operand:SI 0 "s_register_operand" "")
 	(ordered:SI (match_dup 1) (const_int 0)))]
-  "TARGET_ARM && TARGET_HARD_FLOAT && (TARGET_FPA || TARGET_VFP)"
+;; APPLE LOCAL v7 support. Merge from mainline
+  "TARGET_32BIT && TARGET_HARD_FLOAT && (TARGET_FPA || TARGET_VFP)"
   "operands[1] = arm_gen_compare_reg (ORDERED, arm_compare_op0,
 				      arm_compare_op1);"
 )
@@ -7714,7 +8455,8 @@
 (define_expand "sungt"
   [(set (match_operand:SI 0 "s_register_operand" "")
 	(ungt:SI (match_dup 1) (const_int 0)))]
-  "TARGET_ARM && TARGET_HARD_FLOAT && (TARGET_FPA || TARGET_VFP)"
+;; APPLE LOCAL v7 support. Merge from mainline
+  "TARGET_32BIT && TARGET_HARD_FLOAT && (TARGET_FPA || TARGET_VFP)"
   "operands[1] = arm_gen_compare_reg (UNGT, arm_compare_op0,
 				      arm_compare_op1);"
 )
@@ -7722,7 +8464,8 @@
 (define_expand "sunge"
   [(set (match_operand:SI 0 "s_register_operand" "")
 	(unge:SI (match_dup 1) (const_int 0)))]
-  "TARGET_ARM && TARGET_HARD_FLOAT && (TARGET_FPA || TARGET_VFP)"
+;; APPLE LOCAL v7 support. Merge from mainline
+  "TARGET_32BIT && TARGET_HARD_FLOAT && (TARGET_FPA || TARGET_VFP)"
   "operands[1] = arm_gen_compare_reg (UNGE, arm_compare_op0,
 				      arm_compare_op1);"
 )
@@ -7730,7 +8473,8 @@
 (define_expand "sunlt"
   [(set (match_operand:SI 0 "s_register_operand" "")
 	(unlt:SI (match_dup 1) (const_int 0)))]
-  "TARGET_ARM && TARGET_HARD_FLOAT && (TARGET_FPA || TARGET_VFP)"
+;; APPLE LOCAL v7 support. Merge from mainline
+  "TARGET_32BIT && TARGET_HARD_FLOAT && (TARGET_FPA || TARGET_VFP)"
   "operands[1] = arm_gen_compare_reg (UNLT, arm_compare_op0,
 				      arm_compare_op1);"
 )
@@ -7738,7 +8482,8 @@
 (define_expand "sunle"
   [(set (match_operand:SI 0 "s_register_operand" "")
 	(unle:SI (match_dup 1) (const_int 0)))]
-  "TARGET_ARM && TARGET_HARD_FLOAT && (TARGET_FPA || TARGET_VFP)"
+;; APPLE LOCAL v7 support. Merge from mainline
+  "TARGET_32BIT && TARGET_HARD_FLOAT && (TARGET_FPA || TARGET_VFP)"
   "operands[1] = arm_gen_compare_reg (UNLE, arm_compare_op0,
 				      arm_compare_op1);"
 )
@@ -7749,14 +8494,16 @@
 ; (define_expand "suneq"
 ;   [(set (match_operand:SI 0 "s_register_operand" "")
 ; 	(uneq:SI (match_dup 1) (const_int 0)))]
-;   "TARGET_ARM && TARGET_HARD_FLOAT && (TARGET_FPA || TARGET_VFP)"
+;; APPLE LOCAL v7 support. Merge from mainline
+;   "TARGET_32BIT && TARGET_HARD_FLOAT && (TARGET_FPA || TARGET_VFP)"
 ;   "gcc_unreachable ();"
 ; )
 ;
 ; (define_expand "sltgt"
 ;   [(set (match_operand:SI 0 "s_register_operand" "")
 ; 	(ltgt:SI (match_dup 1) (const_int 0)))]
-;   "TARGET_ARM && TARGET_HARD_FLOAT && (TARGET_FPA || TARGET_VFP)"
+;; APPLE LOCAL v7 support. Merge from mainline
+;   "TARGET_32BIT && TARGET_HARD_FLOAT && (TARGET_FPA || TARGET_VFP)"
 ;   "gcc_unreachable ();"
 ; )
 
@@ -7767,6 +8514,8 @@
   "TARGET_ARM"
   "mov%D1\\t%0, #0\;mov%d1\\t%0, #1"
   [(set_attr "conds" "use")
+;; APPLE LOCAL v7 support. Merge from Codesourcery
+   (set_attr "insn" "mov")
    (set_attr "length" "8")]
 )
 
@@ -7777,6 +8526,8 @@
   "TARGET_ARM"
   "mov%D1\\t%0, #0\;mvn%d1\\t%0, #0"
   [(set_attr "conds" "use")
+;; APPLE LOCAL v7 support. Merge from Codesourcery
+   (set_attr "insn" "mov")
    (set_attr "length" "8")]
 )
 
@@ -7787,6 +8538,8 @@
   "TARGET_ARM"
   "mov%D1\\t%0, #0\;mvn%d1\\t%0, #1"
   [(set_attr "conds" "use")
+;; APPLE LOCAL v7 support. Merge from Codesourcery
+   (set_attr "insn" "mov")
    (set_attr "length" "8")]
 )
 
@@ -7798,7 +8551,8 @@
 	(if_then_else:SI (match_operand 1 "arm_comparison_operator" "")
 			 (match_operand:SI 2 "arm_not_operand" "")
 			 (match_operand:SI 3 "arm_not_operand" "")))]
-  "TARGET_ARM"
+;; APPLE LOCAL v7 support. Merge from mainline
+  "TARGET_32BIT"
   "
   {
     enum rtx_code code = GET_CODE (operands[1]);
@@ -7817,7 +8571,8 @@
 	(if_then_else:SF (match_operand 1 "arm_comparison_operator" "")
 			 (match_operand:SF 2 "s_register_operand" "")
 			 (match_operand:SF 3 "nonmemory_operand" "")))]
-  "TARGET_ARM"
+;; APPLE LOCAL v7 support. Merge from mainline
+  "TARGET_32BIT"
   "
   {
     enum rtx_code code = GET_CODE (operands[1]);
@@ -7842,7 +8597,8 @@
 	(if_then_else:DF (match_operand 1 "arm_comparison_operator" "")
 			 (match_operand:DF 2 "s_register_operand" "")
 			 (match_operand:DF 3 "arm_float_add_operand" "")))]
-  "TARGET_ARM && TARGET_HARD_FLOAT && (TARGET_FPA || TARGET_VFP)"
+;; APPLE LOCAL v7 support. Merge from mainline
+  "TARGET_32BIT && TARGET_HARD_FLOAT && (TARGET_FPA || TARGET_VFP)"
   "
   {
     enum rtx_code code = GET_CODE (operands[1]);
@@ -7874,7 +8630,10 @@
    mvn%d3\\t%0, #%B1\;mov%D3\\t%0, %2
    mvn%d3\\t%0, #%B1\;mvn%D3\\t%0, #%B2"
   [(set_attr "length" "4,4,4,4,8,8,8,8")
-   (set_attr "conds" "use")]
+;; APPLE LOCAL begin v7 support. Merge from Codesourcery
+   (set_attr "conds" "use")
+   (set_attr "insn" "mov,mvn,mov,mvn,mov,mov,mvn,mvn")]
+;; APPLE LOCAL end v7 support. Merge from Codesourcery
 )
 
 (define_insn "*movsfcc_soft_insn"
@@ -7887,7 +8646,10 @@
   "@
    mov%D3\\t%0, %2
    mov%d3\\t%0, %1"
-  [(set_attr "conds" "use")]
+;; APPLE LOCAL begin v7 support. Merge from Codesourcery
+  [(set_attr "conds" "use")
+   (set_attr "insn" "mov")]
+;; APPLE LOCAL end v7 support. Merge from Codesourcery
 )
 
 
@@ -7917,10 +8679,38 @@
   [(set_attr "predicable" "yes")]
 )
 
+;; APPLE LOCAL begin v7 support. Merge from mainline
+(define_insn "*thumb2_jump"
+  [(set (pc)
+	(label_ref (match_operand 0 "" "")))]
+  "TARGET_THUMB2"
+  "*
+    if (arm_ccfsm_state == 1 || arm_ccfsm_state == 2)
+      {
+        arm_ccfsm_state += 2;
+        return \"\";
+      }
+    return \"b\\t%l0\";
+  "
+  [(set (attr "far_jump")
+        (if_then_else
+	    (eq_attr "length" "4")
+	    (const_string "yes")
+	    (const_string "no")))
+   (set (attr "length") 
+        (if_then_else
+	    (and (ge (minus (match_dup 0) (pc)) (const_int -2044))
+		 (le (minus (match_dup 0) (pc)) (const_int 2048)))
+  	    (const_int 2)
+	    (const_int 4)))]
+)
+;; APPLE LOCAL end v7 support. Merge from mainline
+
 (define_insn "*thumb_jump"
   [(set (pc)
 	(label_ref (match_operand 0 "" "")))]
-  "TARGET_THUMB"
+;; APPLE LOCAL v7 support. Merge from mainline
+  "TARGET_THUMB1"
   "*
   if (get_attr_length (insn) == 2)
     return \"b\\t%l0\";
@@ -8022,23 +8812,27 @@
    (set_attr "predicable" "yes")]
 )
 
-(define_insn "*call_reg_thumb_v5"
+;; APPLE LOCAL v7 support. Merge from mainline
+(define_insn "*call_reg_thumb1_v5"
   [(call (mem:SI (match_operand:SI 0 "register_operand" "l*r"))
 	 (match_operand 1 "" ""))
    (use (match_operand 2 "" ""))
    (clobber (reg:SI LR_REGNUM))]
-  "TARGET_THUMB && arm_arch5"
+;; APPLE LOCAL v7 support. Merge from mainline
+  "TARGET_THUMB1 && arm_arch5"
   "blx\\t%0"
   [(set_attr "length" "2")
    (set_attr "type" "call")]
 )
 
-(define_insn "*call_reg_thumb"
+;; APPLE LOCAL v7 support. Merge from mainline
+(define_insn "*call_reg_thumb1"
   [(call (mem:SI (match_operand:SI 0 "register_operand" "l*r"))
 	 (match_operand 1 "" ""))
    (use (match_operand 2 "" ""))
    (clobber (reg:SI LR_REGNUM))]
-  "TARGET_THUMB && !arm_arch5"
+;; APPLE LOCAL v7 support. Merge from mainline
+  "TARGET_THUMB1 && !arm_arch5"
   "*
   {
     if (!TARGET_CALLER_INTERWORKING)
@@ -8129,25 +8923,29 @@
    (set_attr "predicable" "yes")]
 )
 
-(define_insn "*call_value_reg_thumb_v5"
+;; APPLE LOCAL v7 support. Merge from mainline
+(define_insn "*call_value_reg_thumb1_v5"
   [(set (match_operand 0 "" "")
 	(call (mem:SI (match_operand:SI 1 "register_operand" "l*r"))
 	      (match_operand 2 "" "")))
    (use (match_operand 3 "" ""))
    (clobber (reg:SI LR_REGNUM))]
-  "TARGET_THUMB && arm_arch5"
+;; APPLE LOCAL v7 support. Merge from mainline
+  "TARGET_THUMB1 && arm_arch5"
   "blx\\t%1"
   [(set_attr "length" "2")
    (set_attr "type" "call")]
 )
 
-(define_insn "*call_value_reg_thumb"
+;; APPLE LOCAL v7 support. Merge from mainline
+(define_insn "*call_value_reg_thumb1"
   [(set (match_operand 0 "" "")
 	(call (mem:SI (match_operand:SI 1 "register_operand" "l*r"))
 	      (match_operand 2 "" "")))
    (use (match_operand 3 "" ""))
    (clobber (reg:SI LR_REGNUM))]
-  "TARGET_THUMB && !arm_arch5"
+;; APPLE LOCAL v7 support. Merge from mainline
+  "TARGET_THUMB1 && !arm_arch5"
   "*
   {
     if (!TARGET_CALLER_INTERWORKING)
@@ -8587,7 +9385,7 @@
    (match_operand:SI 3 "" "")			; table label
    (match_operand:SI 4 "" "")]			; Out of range label
 ;; APPLE LOCAL compact switch tables
-  "TARGET_ARM || TARGET_COMPACT_SWITCH_TABLES"
+  "TARGET_32BIT || TARGET_COMPACT_SWITCH_TABLES"
   "
   {
     rtx reg;
@@ -8600,16 +9398,29 @@
 	operands[0] = reg;
       }
 
+    /* APPLE LOCAL begin v7 support. Merge from mainline */
     /* APPLE LOCAL begin compact switch tables */
-    if (TARGET_ARM)
+    if (TARGET_32BIT)
       {
     /* APPLE LOCAL end compact switch tables */
-    if (!const_ok_for_arm (INTVAL (operands[2])))
-      operands[2] = force_reg (SImode, operands[2]);
+        if (!const_ok_for_arm (INTVAL (operands[2])))
+          operands[2] = force_reg (SImode, operands[2]);
 
-    emit_jump_insn (gen_casesi_internal (operands[0], operands[2], operands[3],
-					 operands[4]));
-    DONE;
+        if (TARGET_ARM)
+          {
+	    emit_jump_insn (gen_arm_casesi_internal (operands[0], operands[2], 
+                                                     operands[3], operands[4]));
+          }
+	/* APPLE LOCAL begin 6152801 SImode thumb2 switch table dispatch */
+	/* Removed specialized PIC handling */
+	/* APPLE LOCAL end 6152801 SImode thumb2 switch table dispatch */
+        else
+          {
+            emit_jump_insn (gen_thumb2_casesi_internal (operands[0], 
+                operands[2], operands[3], operands[4]));
+          }
+	DONE;
+    /* APPLE LOCAL end v7 support. Merge from mainline */
     /* APPLE LOCAL begin compact switch tables */
       }
     else
@@ -8632,7 +9443,8 @@
 
 ;; The USE in this pattern is needed to tell flow analysis that this is
 ;; a CASESI insn.  It has no other purpose.
-(define_insn "casesi_internal"
+;; APPLE LOCAL v7 support. Merge from mainline
+(define_insn "arm_casesi_internal"
   [(parallel [(set (pc)
 	       (if_then_else
 		(leu (match_operand:SI 0 "s_register_operand" "r")
@@ -8763,7 +9575,19 @@
   [(set (pc)
 	(match_operand:SI 0 "s_register_operand" ""))]
   "TARGET_EITHER"
-  ""
+;; APPLE LOCAL begin v7 support. Merge from mainline
+  "
+  /* Thumb-2 doesn't have mov pc, reg.  Explicitly set the low bit of the
+     address and use bx.  */
+  if (TARGET_THUMB2)
+    {
+      rtx tmp;
+      tmp = gen_reg_rtx (SImode);
+      emit_insn (gen_iorsi3 (tmp, operands[0], GEN_INT(1)));
+      operands[0] = tmp;
+    }
+  "
+;; APPLE LOCAL end v7 support. Merge from mainline
 )
 
 ;; NB Never uses BX.
@@ -8787,10 +9611,12 @@
 )
 
 ;; NB Never uses BX.
-(define_insn "*thumb_indirect_jump"
+;; APPLE LOCAL v7 support. Merge from mainline
+(define_insn "*thumb1_indirect_jump"
   [(set (pc)
 	(match_operand:SI 0 "register_operand" "l*r"))]
-  "TARGET_THUMB"
+;; APPLE LOCAL v7 support. Merge from mainline
+  "TARGET_THUMB1"
   "mov\\tpc, %0"
   [(set_attr "conds" "clob")
    (set_attr "length" "2")]
@@ -8802,11 +9628,15 @@
 (define_insn "nop"
   [(const_int 0)]
   "TARGET_EITHER"
+;; APPLE LOCAL begin v7 support. Merge from mainline
   "*
+  if (TARGET_UNIFIED_ASM)
+    return \"nop\";
   if (TARGET_ARM)
     return \"mov%?\\t%|r0, %|r0\\t%@ nop\";
   return  \"mov\\tr8, r8\";
   "
+;; APPLE LOCAL end v7 support. Merge from mainline
   [(set (attr "length")
 	(if_then_else (eq_attr "is_thumb" "yes")
 		      (const_int 2)
@@ -8862,7 +9692,8 @@
 	(match_op_dup 1 [(match_op_dup 3 [(match_dup 4) (match_dup 5)])
 			 (match_dup 2)]))]
   "TARGET_ARM"
-  "%i1%?s\\t%0, %2, %4%S3"
+;; APPLE LOCAL v7 support. Merge from mainline
+  "%i1%.\\t%0, %2, %4%S3"
   [(set_attr "conds" "set")
    (set_attr "shift" "4")
    (set (attr "type") (if_then_else (match_operand 5 "const_int_operand" "")
@@ -8880,7 +9711,8 @@
 			 (const_int 0)))
    (clobber (match_scratch:SI 0 "=r"))]
   "TARGET_ARM"
-  "%i1%?s\\t%0, %2, %4%S3"
+;; APPLE LOCAL v7 support. Merge from mainline
+  "%i1%.\\t%0, %2, %4%S3"
   [(set_attr "conds" "set")
    (set_attr "shift" "4")
    (set (attr "type") (if_then_else (match_operand 5 "const_int_operand" "")
@@ -8915,7 +9747,8 @@
 	(minus:SI (match_dup 1) (match_op_dup 2 [(match_dup 3)
 						 (match_dup 4)])))]
   "TARGET_ARM"
-  "sub%?s\\t%0, %1, %3%S2"
+;; APPLE LOCAL v7 support. Merge from mainline
+  "sub%.\\t%0, %1, %3%S2"
   [(set_attr "conds" "set")
    (set_attr "shift" "3")
    (set (attr "type") (if_then_else (match_operand 4 "const_int_operand" "")
@@ -8933,7 +9766,8 @@
 	 (const_int 0)))
    (clobber (match_scratch:SI 0 "=r"))]
   "TARGET_ARM"
-  "sub%?s\\t%0, %1, %3%S2"
+;; APPLE LOCAL v7 support. Merge from mainline
+  "sub%.\\t%0, %1, %3%S2"
   [(set_attr "conds" "set")
    (set_attr "shift" "3")
    (set (attr "type") (if_then_else (match_operand 4 "const_int_operand" "")
@@ -8951,6 +9785,8 @@
   "TARGET_ARM"
   "mov%D1\\t%0, #0\;and%d1\\t%0, %2, #1"
   [(set_attr "conds" "use")
+;; APPLE LOCAL v7 support. Merge from Codesourcery
+   (set_attr "insn" "mov")
    (set_attr "length" "8")]
 )
 
@@ -9028,6 +9864,8 @@
     return \"\";
   "
   [(set_attr "conds" "use")
+;; APPLE LOCAL v7 support. Merge from Codesourcery
+   (set_attr "insn" "mov")
    (set_attr "length" "4,4,8")]
 )
 
@@ -9075,6 +9913,8 @@
    (set_attr "length" "8,12")]
 )
 
+;; APPLE LOCAL v7 support. Merge from mainline
+;; ??? Is it worth using these conditional patterns in Thumb-2 mode?
 (define_insn "*cmp_ite0"
   [(set (match_operand 6 "dominant_cc_register" "")
 	(compare
@@ -9401,6 +10241,8 @@
 	(compare:CC_NOOV (and:SI (match_dup 4) (const_int 1))
 			 (const_int 0)))]
   "")
+;; APPLE LOCAL v7 support. Merge from mainline
+;; ??? The conditional patterns above need checking for Thumb-2 usefulness
 
 (define_insn "*negscc"
   [(set (match_operand:SI 0 "s_register_operand" "=r")
@@ -9490,6 +10332,8 @@
    (set_attr "length" "8,8,12")]
 )
 
+;; APPLE LOCAL v7 support. Merge from mainline
+;; ??? The patterns below need checking for Thumb-2 usefulness.
 (define_insn "*ifcompare_plus_move"
   [(set (match_operand:SI 0 "s_register_operand" "=r,r")
 	(if_then_else:SI (match_operator 6 "arm_comparison_operator"
@@ -9743,6 +10587,8 @@
    mov%d4\\t%0, %1\;mvn%D4\\t%0, %2
    mvn%d4\\t%0, #%B1\;mvn%D4\\t%0, %2"
   [(set_attr "conds" "use")
+;; APPLE LOCAL v7 support. Merge from Codesourcery
+   (set_attr "insn" "mvn")
    (set_attr "length" "4,8,8")]
 )
 
@@ -9775,6 +10621,8 @@
    mov%D4\\t%0, %1\;mvn%d4\\t%0, %2
    mvn%D4\\t%0, #%B1\;mvn%d4\\t%0, %2"
   [(set_attr "conds" "use")
+;; APPLE LOCAL v7 support. Merge from Codesourcery
+   (set_attr "insn" "mvn")
    (set_attr "length" "4,8,8")]
 )
 
@@ -9812,6 +10660,8 @@
   [(set_attr "conds" "use")
    (set_attr "shift" "2")
    (set_attr "length" "4,8,8")
+;; APPLE LOCAL v7 support. Merge from Codesourcery
+   (set_attr "insn" "mov")
    (set (attr "type") (if_then_else (match_operand 3 "const_int_operand" "")
 		      (const_string "alu_shift")
 		      (const_string "alu_shift_reg")))]
@@ -9851,6 +10701,8 @@
   [(set_attr "conds" "use")
    (set_attr "shift" "2")
    (set_attr "length" "4,8,8")
+;; APPLE LOCAL v7 support. Merge from Codesourcery
+   (set_attr "insn" "mov")
    (set (attr "type") (if_then_else (match_operand 3 "const_int_operand" "")
 		      (const_string "alu_shift")
 		      (const_string "alu_shift_reg")))]
@@ -9891,6 +10743,8 @@
   [(set_attr "conds" "use")
    (set_attr "shift" "1")
    (set_attr "length" "8")
+;; APPLE LOCAL v7 support. Merge from Codesourcery
+   (set_attr "insn" "mov")
    (set (attr "type") (if_then_else
 		        (and (match_operand 2 "const_int_operand" "")
                              (match_operand 4 "const_int_operand" ""))
@@ -9927,6 +10781,8 @@
   "TARGET_ARM"
   "mvn%d5\\t%0, %1\;%I6%D5\\t%0, %2, %3"
   [(set_attr "conds" "use")
+;; APPLE LOCAL v7 support. Merge from Codesourcery
+   (set_attr "insn" "mvn")
    (set_attr "length" "8")]
 )
 
@@ -9959,6 +10815,8 @@
   "TARGET_ARM"
   "mvn%D5\\t%0, %1\;%I6%d5\\t%0, %2, %3"
   [(set_attr "conds" "use")
+;; APPLE LOCAL v7 support. Merge from Codesourcery
+   (set_attr "insn" "mvn")
    (set_attr "length" "8")]
 )
 
@@ -10079,10 +10937,11 @@
       {
 	rtx ops[3];
 
+        /* APPLE LOCAL begin v7 support. Merge from mainline */
 	if (val1 == 4 || val2 == 4)
 	  /* Other val must be 8, since we know they are adjacent and neither
 	     is zero.  */
-	  output_asm_insn (\"ldm%?ib\\t%0, {%1, %2}\", ldm);
+	  output_asm_insn (\"ldm%(ib%)\\t%0, {%1, %2}\", ldm);
 	else if (const_ok_for_arm (val1) || const_ok_for_arm (-val1))
 	  {
 	    ldm[0] = ops[0] = operands[4];
@@ -10090,10 +10949,11 @@
 	    ops[2] = GEN_INT (val1);
 	    output_add_immediate (ops);
 	    if (val1 < val2)
-	      output_asm_insn (\"ldm%?ia\\t%0, {%1, %2}\", ldm);
+	      output_asm_insn (\"ldm%(ia%)\\t%0, {%1, %2}\", ldm);
 	    else
-	      output_asm_insn (\"ldm%?da\\t%0, {%1, %2}\", ldm);
+	      output_asm_insn (\"ldm%(da%)\\t%0, {%1, %2}\", ldm);
 	  }
+        /* APPLE LOCAL end v7 support. Merge from mainline */
 	else
 	  {
 	    /* Offset is out of range for a single add, so use two ldr.  */
@@ -10106,20 +10966,22 @@
 	    output_asm_insn (\"ldr%?\\t%0, [%1, %2]\", ops);
 	  }
       }
+    /* APPLE LOCAL begin v7 support. Merge from mainline */
     else if (val1 != 0)
       {
 	if (val1 < val2)
-	  output_asm_insn (\"ldm%?da\\t%0, {%1, %2}\", ldm);
+	  output_asm_insn (\"ldm%(da%)\\t%0, {%1, %2}\", ldm);
 	else
-	  output_asm_insn (\"ldm%?ia\\t%0, {%1, %2}\", ldm);
+	  output_asm_insn (\"ldm%(ia%)\\t%0, {%1, %2}\", ldm);
       }
     else
       {
 	if (val1 < val2)
-	  output_asm_insn (\"ldm%?ia\\t%0, {%1, %2}\", ldm);
+	  output_asm_insn (\"ldm%(ia%)\\t%0, {%1, %2}\", ldm);
 	else
-	  output_asm_insn (\"ldm%?da\\t%0, {%1, %2}\", ldm);
+	  output_asm_insn (\"ldm%(da%)\\t%0, {%1, %2}\", ldm);
       }
+    /* APPLE LOCAL end v7 support. Merge from mainline */
     output_asm_insn (\"%I3%?\\t%0, %1, %2\", arith);
     return \"\";
   }"
@@ -10257,16 +11119,20 @@
   operands[1] = GEN_INT (((unsigned long) INTVAL (operands[1])) >> 24);
   "
 )
+;; APPLE LOCAL v7 support. Merge from mainline
+;; ??? Check the patterns above for Thumb-2 usefulness
 
 (define_expand "prologue"
   [(clobber (const_int 0))]
   "TARGET_EITHER"
-  "if (TARGET_ARM)
+;; APPLE LOCAL begin v7 support. Merge from mainline
+  "if (TARGET_32BIT)
      arm_expand_prologue ();
    else
-     thumb_expand_prologue ();
+     thumb1_expand_prologue ();
   DONE;
   "
+;; APPLE LOCAL end v7 support. Merge from mainline
 )
 
 (define_expand "epilogue"
@@ -10275,8 +11141,10 @@
   "
   if (current_function_calls_eh_return)
     emit_insn (gen_prologue_use (gen_rtx_REG (Pmode, 2)));
-  if (TARGET_THUMB)
-    thumb_expand_epilogue ();
+  /* APPLE LOCAL begin v7 support. Merge from mainline */
+  if (TARGET_THUMB1)
+    thumb1_expand_epilogue ();
+  /* APPLE LOCAL end v7 support. Merge from mainline */
   else if (USE_RETURN_INSN (FALSE))
     {
       emit_jump_insn (gen_return ());
@@ -10298,7 +11166,8 @@
 (define_insn "sibcall_epilogue"
   [(parallel [(unspec:SI [(reg:SI LR_REGNUM)] UNSPEC_PROLOGUE_USE)
               (unspec_volatile [(return)] VUNSPEC_EPILOGUE)])]
-  "TARGET_ARM"
+;; APPLE LOCAL v7 support. Merge from mainline
+  "TARGET_32BIT"
   "*
   if (use_return_insn (FALSE, next_nonnote_insn (insn)))
     return output_return_instruction (const_true_rtx, FALSE, FALSE);
@@ -10316,12 +11185,14 @@
 (define_insn "*epilogue_insns"
   [(unspec_volatile [(return)] VUNSPEC_EPILOGUE)]
   "TARGET_EITHER"
+;; APPLE LOCAL begin v7 support. Merge from mainline
   "*
-  if (TARGET_ARM)
+  if (TARGET_32BIT)
     return arm_output_epilogue (NULL);
-  else /* TARGET_THUMB */
+  else /* TARGET_THUMB1 */
     return thumb_unexpanded_epilogue ();
   "
+;; APPLE LOCAL end v7 support. Merge from mainline
   ; Length is absolute worst case
   [(set_attr "length" "44")
    (set_attr "type" "block")
@@ -10358,6 +11229,11 @@
 ;; the conditional compare patterns would work.  However this conflicts to
 ;; some extent with the conditional data operations, so we have to split them
 ;; up again here.
+
+;; APPLE LOCAL begin v7 support. Merge from mainline
+;; ??? Need to audit these splitters for Thumb-2.  Why isn't normal
+;; conditional execution sufficient?
+;; APPLE LOCAL end v7 support. Merge from mainline
 
 (define_split
   [(set (match_operand:SI 0 "s_register_operand" "")
@@ -10482,6 +11358,8 @@
    mvn%D4\\t%0, %2
    mov%d4\\t%0, %1\;mvn%D4\\t%0, %2"
   [(set_attr "conds" "use")
+;; APPLE LOCAL v7 support. Merge from Codesourcery
+   (set_attr "insn" "mvn")
    (set_attr "length" "4,8")]
 )
 
@@ -10521,6 +11399,8 @@
   [(set_attr "conds" "clob")
    (set_attr "length" "12")]
 )
+;; APPLE LOCAL v7 support. Merge from mainline
+;; ??? The above patterns need auditing for Thumb-2
 
 ;; Push multiple registers to the stack.  Registers are in parallel (use ...)
 ;; expressions.  For simplicity, the first register is also in the unspec
@@ -10530,21 +11410,27 @@
     [(set (match_operand:BLK 0 "memory_operand" "=m")
 	  (unspec:BLK [(match_operand:SI 1 "s_register_operand" "r")]
 		      UNSPEC_PUSH_MULT))])]
-  "TARGET_ARM"
+;; APPLE LOCAL begin v7 support. Merge from mainline
+  "TARGET_32BIT"
   "*
   {
     int num_saves = XVECLEN (operands[2], 0);
      
     /* For the StrongARM at least it is faster to
-       use STR to store only a single register.  */
-    if (num_saves == 1)
+       use STR to store only a single register.
+       In Thumb mode always use push, and the assmebler will pick
+       something approporiate.  */
+    if (num_saves == 1 && TARGET_ARM)
       output_asm_insn (\"str\\t%1, [%m0, #-4]!\", operands);
     else
       {
 	int i;
 	char pattern[100];
 
-	strcpy (pattern, \"stmfd\\t%m0!, {%1\");
+	if (TARGET_ARM)
+	    strcpy (pattern, \"stmfd\\t%m0!, {%1\");
+	else
+	    strcpy (pattern, \"push\\t{%1\");
 
 	for (i = 1; i < num_saves; i++)
 	  {
@@ -10559,6 +11445,7 @@
 
     return \"\";
   }"
+;; APPLE LOCAL end v7 support. Merge from mainline
   [(set_attr "type" "store4")]
 )
 
@@ -10578,7 +11465,8 @@
     [(set (match_operand:BLK 0 "memory_operand" "=m")
 	  (unspec:BLK [(match_operand:XF 1 "f_register_operand" "f")]
 		      UNSPEC_PUSH_MULT))])]
-  "TARGET_ARM && TARGET_HARD_FLOAT && TARGET_FPA"
+;; APPLE LOCAL v7 support. Merge from mainline
+  "TARGET_32BIT && TARGET_HARD_FLOAT && TARGET_FPA"
   "*
   {
     char pattern[100];
@@ -10626,7 +11514,8 @@
 
 (define_insn "consttable_1"
   [(unspec_volatile [(match_operand 0 "" "")] VUNSPEC_POOL_1)]
-  "TARGET_THUMB"
+;; APPLE LOCAL v7 support. Merge from mainline
+  "TARGET_THUMB1"
   "*
   making_const_table = TRUE;
   assemble_integer (operands[0], 1, BITS_PER_WORD, 1);
@@ -10638,7 +11527,8 @@
 
 (define_insn "consttable_2"
   [(unspec_volatile [(match_operand 0 "" "")] VUNSPEC_POOL_2)]
-  "TARGET_THUMB"
+;; APPLE LOCAL v7 support. Merge from mainline
+  "TARGET_THUMB1"
   "*
   making_const_table = TRUE;
   assemble_integer (operands[0], 2, BITS_PER_WORD, 1);
@@ -10696,12 +11586,39 @@
   [(set_attr "length" "8")]
 )
 
+;; APPLE LOCAL begin v7 support. Merge from Codesourcery
+(define_insn "consttable_16"
+  [(unspec_volatile [(match_operand 0 "" "")] VUNSPEC_POOL_16)]
+  "TARGET_EITHER"
+  "*
+  {
+    making_const_table = TRUE;
+    switch (GET_MODE_CLASS (GET_MODE (operands[0])))
+      {
+       case MODE_FLOAT:
+        {
+          REAL_VALUE_TYPE r;
+          REAL_VALUE_FROM_CONST_DOUBLE (r, operands[0]);
+          assemble_real (r, GET_MODE (operands[0]), BITS_PER_WORD);
+          break;
+        }
+      default:
+        assemble_integer (operands[0], 16, BITS_PER_WORD, 1);
+        break;
+      }
+    return \"\";
+  }"
+  [(set_attr "length" "16")]
+)
+
+;; APPLE LOCAL end v7 support. Merge from Codesourcery
 ;; Miscellaneous Thumb patterns
 
 (define_expand "tablejump"
   [(parallel [(set (pc) (match_operand:SI 0 "register_operand" ""))
 	      (use (label_ref (match_operand 1 "" "")))])]
-  "TARGET_THUMB"
+;; APPLE LOCAL v7 support. Merge from mainline
+  "TARGET_THUMB1"
   "
   if (flag_pic)
     {
@@ -10716,10 +11633,12 @@
 )
 
 ;; NB never uses BX.
-(define_insn "*thumb_tablejump"
+;; APPLE LOCAL v7 support. Merge from mainline
+(define_insn "*thumb1_tablejump"
   [(set (pc) (match_operand:SI 0 "register_operand" "l*r"))
    (use (label_ref (match_operand 1 "" "")))]
-  "TARGET_THUMB"
+;; APPLE LOCAL v7 support. Merge from mainline
+  "TARGET_THUMB1"
   "mov\\t%|pc, %0"
   [(set_attr "length" "2")]
 )
@@ -10729,14 +11648,18 @@
 (define_insn "clzsi2"
   [(set (match_operand:SI 0 "s_register_operand" "=r")
 	(clz:SI (match_operand:SI 1 "s_register_operand" "r")))]
-  "TARGET_ARM && arm_arch5"
+;; APPLE LOCAL begin v7 support. Merge from mainline
+  "TARGET_32BIT && arm_arch5"
   "clz%?\\t%0, %1"
-  [(set_attr "predicable" "yes")])
+  [(set_attr "predicable" "yes")
+   (set_attr "insn" "clz")])
+;; APPLE LOCAL end v7 support. Merge from mainline
 
 (define_expand "ffssi2"
   [(set (match_operand:SI 0 "s_register_operand" "")
 	(ffs:SI (match_operand:SI 1 "s_register_operand" "")))]
-  "TARGET_ARM && arm_arch5"
+;; APPLE LOCAL v7 support. Merge from mainline
+  "TARGET_32BIT && arm_arch5"
   "
   {
     rtx t1, t2, t3;
@@ -10756,7 +11679,8 @@
 (define_expand "ctzsi2"
   [(set (match_operand:SI 0 "s_register_operand" "")
 	(ctz:SI (match_operand:SI 1 "s_register_operand" "")))]
-  "TARGET_ARM && arm_arch5"
+;; APPLE LOCAL v7 support. Merge from mainline
+  "TARGET_32BIT && arm_arch5"
   "
   {
     rtx t1, t2, t3;
@@ -10779,7 +11703,8 @@
   [(prefetch (match_operand:SI 0 "address_operand" "p")
 	     (match_operand:SI 1 "" "")
 	     (match_operand:SI 2 "" ""))]
-  "TARGET_ARM && arm_arch5e"
+;; APPLE LOCAL v7 support. Merge from mainline
+  "TARGET_32BIT && arm_arch5e"
   "pld\\t%a0")
 
 ;; General predication pattern
@@ -10788,7 +11713,8 @@
   [(match_operator 0 "arm_comparison_operator"
     [(match_operand 1 "cc_register" "")
      (const_int 0)])]
-  "TARGET_ARM"
+;; APPLE LOCAL v7 support. Merge from mainline
+  "TARGET_32BIT"
   ""
 )
 
@@ -10809,7 +11735,8 @@
   "TARGET_EITHER"
   "
   {
-    if (TARGET_ARM)
+    /* APPLE LOCAL v7 support. Merge from mainline */
+    if (TARGET_32BIT)
       emit_insn (gen_arm_eh_return (operands[0]));
     else
       emit_insn (gen_thumb_eh_return (operands[0]));
@@ -10837,7 +11764,8 @@
   [(unspec_volatile [(match_operand:SI 0 "s_register_operand" "l")]
 		    VUNSPEC_EH_RETURN)
    (clobber (match_scratch:SI 1 "=&l"))]
-  "TARGET_THUMB"
+;; APPLE LOCAL v7 support. Merge from mainline
+  "TARGET_THUMB1"
   "#"
   "&& reload_completed"
   [(const_int 0)]
@@ -11022,8 +11950,22 @@
 (include "fpa.md")
 ;; Load the Maverick co-processor patterns
 (include "cirrus.md")
+;; APPLE LOCAL begin v7 support. Merge from Codesourcery
+;; Vector bits common to IWMMXT and Neon
+(include "vec-common.md")
+;; APPLE LOCAL end v7 support. Merge from Codesourcery
 ;; Load the Intel Wireless Multimedia Extension patterns
 (include "iwmmxt.md")
 ;; Load the VFP co-processor patterns
 (include "vfp.md")
+;; APPLE LOCAL begin v7 support. Merge from mainline
+;; Thumb-2 patterns
+(include "thumb2.md")
+;; APPLE LOCAL end v7 support. Merge from mainline
+;; APPLE LOCAL begin v7 support. Merge from Codesourcery
+;; Neon patterns
+(include "neon.md")
+;; APPLE LOCAL end v7 support. Merge from Codesourcery
+;; APPLE LOCAL 6258536 atomic builtins
+(include "sync.md")
 

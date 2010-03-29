@@ -174,7 +174,8 @@ fetch_inferior_registers (int regno)
 
       if ((regno == -1) 
           || IS_FP_REGNUM_64 (regno)
-          || IS_VP_REGNUM_64 (regno))
+          || IS_VP_REGNUM_64 (regno)
+          || regno == REGS_64_MXCSR)
         {
           gdb_x86_float_state_t fp_regs;
           unsigned int fp_count = GDB_x86_FLOAT_STATE_COUNT;
@@ -267,7 +268,8 @@ store_inferior_registers (int regno)
 
       if ((regno == -1)
           || IS_FP_REGNUM_64 (regno)
-          || IS_VP_REGNUM_64 (regno))
+          || IS_VP_REGNUM_64 (regno)
+          || regno == REGS_64_MXCSR)
         {
           gdb_x86_float_state_t fp_regs;
           kern_return_t ret;

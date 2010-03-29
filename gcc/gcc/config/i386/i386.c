@@ -1253,7 +1253,8 @@ static bool ix86_pass_by_reference (CUMULATIVE_ARGS *, enum machine_mode,
 				    tree, bool);
 static void ix86_init_builtins (void);
 static rtx ix86_expand_builtin (tree, rtx, rtx, enum machine_mode, int);
-static const char *ix86_mangle_fundamental_type (tree);
+/* APPLE LOCAL mangle_type 7105099 */
+static const char *ix86_mangle_type (tree);
 static tree ix86_stack_protect_fail (void);
 static rtx ix86_internal_arg_pointer (void);
 static void ix86_dwarf_handle_frame_unspec (const char *, rtx, int);
@@ -1451,8 +1452,10 @@ static section *x86_64_elf_select_section (tree decl, int reloc,
 #define TARGET_INSERT_ATTRIBUTES SUBTARGET_INSERT_ATTRIBUTES
 #endif
 
-#undef TARGET_MANGLE_FUNDAMENTAL_TYPE
-#define TARGET_MANGLE_FUNDAMENTAL_TYPE ix86_mangle_fundamental_type
+/* APPLE LOCAL begin mangle_type 7105099 */
+#undef TARGET_MANGLE_TYPE
+#define TARGET_MANGLE_TYPE ix86_mangle_type
+/* APPLE LOCAL end mangle_type 7105099 */
 
 #undef TARGET_STACK_PROTECT_FAIL
 #define TARGET_STACK_PROTECT_FAIL ix86_stack_protect_fail
@@ -23353,6 +23356,12 @@ iasm_print_op (char *buf, tree arg, unsigned argnum, tree *uses,
 	      }
 	  }
 
+        /* Complicated expression as JMP or CALL target. */
+        if (e->modifier && strcmp(e->modifier, "A") == 0)
+          {
+            strcat (buf, "*");
+            e->modifier = 0;
+          }
 	e->as_immediate = true;
 	iasm_print_operand (buf, op1, argnum, uses,
 			    must_be_reg, must_not_be_reg, e);
@@ -23439,8 +23448,17 @@ iasm_print_op (char *buf, tree arg, unsigned argnum, tree *uses,
 /* Return the mangling of TYPE if it is an extended fundamental type.  */
 
 static const char *
-ix86_mangle_fundamental_type (tree type)
+/* APPLE LOCAL mangle_type 7105099 */
+ix86_mangle_type (tree type)
 {
+  /* APPLE LOCAL begin mangle_type 7105099 */
+  type = TYPE_MAIN_VARIANT (type);
+
+  if (TREE_CODE (type) != VOID_TYPE && TREE_CODE (type) != BOOLEAN_TYPE
+      && TREE_CODE (type) != INTEGER_TYPE && TREE_CODE (type) != REAL_TYPE)
+    return NULL;
+
+  /* APPLE LOCAL end mangle_type 7105099 */
   switch (TYPE_MODE (type))
     {
     case TFmode:

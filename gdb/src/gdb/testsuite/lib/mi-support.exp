@@ -787,7 +787,7 @@ proc mi_check_current_frame { func file line message } {
   global hex
 
   mi_gdb_test "-stack-list-frames 0 0" \
-             ".*\\^done,stack=\(\\\[|\{\)frame=\{level=\"0 *\",addr=\"$hex\",fp=\"$hex\",func=\"$func\",file=\".*$file\",line=\"$line\",dir=\".*\"\}\(\\\]|\}\)" \
+      ".*\\^done,stack=\(\\\[|\{\)frame=\{level=\"0 *\",addr=\"$hex\",fp=\"$hex\",func=\"$func\",optimized=\"\[0-9\]+\",file=\".*$file\",line=\"$line\",dir=\".*\"\}\(\\\]|\}\)" \
                $message
 }
 

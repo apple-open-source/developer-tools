@@ -1,3 +1,16 @@
+2009-05-27  Bob Wilson  <bob.wilson@apple.com>
+
+	Radar 6915254
+	* build_gcc: When the Legacy PDK (or whatever B&I uses) is not
+	available, fall back to use the internal iPhone SDK with the tools
+	from the iPhone platform directory.
+
+2009-02-25  Jim Grosbach <grosbach@apple.com>
+
+	Radar 6611402
+	* build_gcc (ARM_MAKEFLAGS, ARM_MULTILIB_ARCHS): New.
+	* build_libgcc (ARM_MAKEFLAGS, ARM_MULTILIB_ARCHS): New.
+
 2008-10-09  Devang Patel  <dpatel@apple.com>
 
        Radar 6184418
@@ -29,6 +42,19 @@
 	Radar 6123671
 	* driverdriver.c (main): Instead of aborting, print a fatal error when
 	there is no argument after -o.
+
+2008-08-07  Jim Grosbach <grosbach@apple.com>
+
+	* build_libgcc: enable building fat for v4/v6/v7
+
+2008-06-27  Josh Conner  <jconner@apple.com>
+
+	* build_libgcc: s/[^-]-enable-werror/--enable-werror/
+	Also, strip out --enable-werror for ARM builds.
+
+2008-06-19  Josh Conner  <jconner@apple.com>
+
+	* build_gcc: s/[^-]-enable-werror/--enable-werror/g
 
 2008-06-04  Josh Conner  <jconner@apple.com>
 

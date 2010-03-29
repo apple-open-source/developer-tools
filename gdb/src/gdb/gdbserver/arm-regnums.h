@@ -53,14 +53,35 @@ enum gdb_regnum {
   ARM_LAST_ARG_REGNUM = ARM_A4_REGNUM,
   ARM_NUM_FP_ARG_REGS = 4,
   ARM_LAST_FP_ARG_REGNUM = ARM_F3_REGNUM,
+
   /* APPLE LOCAL START: Support for VFP.  */
-  ARM_FIRST_VFP_REGNUM = 26,
-  ARM_LAST_VFP_REGNUM = 57,
+  /* The "VFP_REGNUM" registers are the VFPv1 register set of 32 
+     32-bit registers that hold either integers or single precision
+     floating point numbers (S0-S31).  */
+  ARM_VFP_REGNUM_S0 = 26,
+  ARM_VFP_REGNUM_S31 = 57,
   ARM_FPSCR_REGNUM = 58,
-  ARM_FIRST_VFP_PSEUDO_REGNUM = 59,
-  ARM_LAST_VFP_PSEUDO_REGNUM = 74,
-  ARM_NUM_VFP_ARG_REGS = 4,
-  ARM_NUM_VFP_PSEUDO_REGS = 16
+  /* The "VFPV3_REGNUM" registers are the VFPv3 registers that aren't
+     part of the VFPv1 registers (D16-D31). D0-D15 are numbered as pseudo
+     registers since they ovarlap with S0-S31, so for VFPv3, we only need
+     to define actual register values that do not overlap.   */
+  ARM_VFPV3_REGNUM_D16 = 59,	
+  ARM_VFPV3_REGNUM_D31 = 74,
+  
+  /* The VFP_PSEUDO registers are the "D variants" of the VFPv1 register set;
+     16 64-bit double-precision floating point registers D0-D15. They overlap
+     with the S0-S31 registers (S0 and S1 occupy the same space as D0).  */
+
+  ARM_VFP_PSEUDO_REGNUM_D0 = 75,
+  ARM_VFP_PSEUDO_REGNUM_D15 = 90,
+
+  /* The SIMD_PSEUDO registers are the quadword registers of the SIMD register set;
+     16 128-bit quadword registers registers referred to as Q0-Q15. The Q0-Q7
+     registers overlap with the S0-S31 / D0-D15, and the Q8-Q15 registers overlap
+     with the D16-D31 registers.  */
+
+  ARM_SIMD_PSEUDO_REGNUM_Q0 = 91,
+  ARM_SIMD_PSEUDO_REGNUM_Q15 = 106
   /* APPLE LOCAL END: Support for VFP. */
 };
 
@@ -105,6 +126,7 @@ enum gdb_regnum {
 #define NUM_GREGS	16	/* Number of general purpose registers.  */
 /* APPLE LOCAL: VFP support.  */
 #define NUM_VFPREGS     32      /* Number of VFP registers.  */
+#define NUM_VFPV3_REGS  16      /* Number of VFPv3 registers.  */
 
 /* Instruction condition field values.  */
 #define INST_EQ		0x0

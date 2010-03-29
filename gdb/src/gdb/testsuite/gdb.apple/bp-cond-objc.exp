@@ -67,4 +67,3 @@ gdb_test "info break" \
 
 gdb_exit
 return 0
-

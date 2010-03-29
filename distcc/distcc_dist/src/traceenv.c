@@ -1,27 +1,28 @@
-/* -*- c-file-style: "java"; indent-tabs-mode: nil -*-
- * 
+/* -*- c-file-style: "java"; indent-tabs-mode: nil; tab-width: 4; fill-column: 78 -*-
+ *
  * distcc -- A simple distributed compiler system
  *
  * Copyright (C) 2002, 2003 by Martin Pool <mbp@samba.org>
+ * Copyright 2007 Google Inc.
  *
  * This program is free software; you can redistribute it and/or
- * modify it under the terms of the GNU General Public License as
- * published by the Free Software Foundation; either version 2 of the
- * License, or (at your option) any later version.
+ * modify it under the terms of the GNU General Public License
+ * as published by the Free Software Foundation; either version 2
+ * of the License, or (at your option) any later version.
  *
- * This program is distributed in the hope that it will be useful, but
- * WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
- * General Public License for more details.
- * 
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ *
  * You should have received a copy of the GNU General Public License
  * along with this program; if not, write to the Free Software
- * Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA 02111-1307
- * USA
+ * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301,
+ * USA.
  */
 
 
-#include "config.h"
+#include <config.h>
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -52,37 +53,42 @@ void dcc_set_trace_from_env(void)
 {
     const char *logfile, *logfd_name;
     int fd;
+    int failed_to_open_logfile = 0;
+    int save_errno = 0;
+    int level = RS_LOG_WARNING; /* by default, warnings only */
+
+    /* let the decision on what to log rest on the loggers */
+    /* the email-an-error functionality in emaillog.c depends on this */
+    rs_trace_set_level(RS_LOG_DEBUG);
 
     if ((logfile = getenv("DISTCC_LOG")) && logfile[0]) {
-        rs_trace_set_level(RS_LOG_INFO);
-
         fd = open(logfile, O_WRONLY|O_APPEND|O_CREAT, 0666);
-        if (fd == -1) {
-            /* use stderr instead */
-            int save_errno = errno;
-            
-            rs_trace_set_level(RS_LOG_WARNING);
-            rs_add_logger(rs_logger_file, RS_LOG_DEBUG, NULL, STDERR_FILENO);
-
-            rs_log_error("failed to open logfile %s: %s",
-                         logfile, strerror(save_errno));
+        if (fd != -1) {
+            /* asked for a file, and we can open that file:
+               include info messages */
+            level = RS_LOG_INFO;
         } else {
-            rs_add_logger(rs_logger_file, RS_LOG_DEBUG, NULL, fd);
-            rs_trace_set_level(RS_LOG_INFO);
+            /* asked for a file, can't use it; use stderr instead */
+            fd = STDERR_FILENO;
+            save_errno = errno;
+            failed_to_open_logfile = 1;
         }
     } else {
+        /* not asked for file */
         if ((logfd_name = getenv("UNCACHED_ERR_FD")) == NULL ||
             (fd = atoi(logfd_name)) == 0) {
             fd = STDERR_FILENO;
         }
-            
-        rs_trace_set_level(RS_LOG_WARNING);
-        rs_add_logger(rs_logger_file, RS_LOG_DEBUG, NULL, fd);
     }
 
     if (dcc_getenv_bool("DISTCC_VERBOSE", 0)) {
-        rs_trace_set_level(RS_LOG_DEBUG);
+        level = RS_LOG_DEBUG;
+    }
+
+    rs_add_logger(rs_logger_file, level, NULL, fd);
+
+    if (failed_to_open_logfile) {
+        rs_log_error("failed to open logfile %s: %s",
+                     logfile, strerror(save_errno));
     }
 }
-
-

@@ -126,6 +126,8 @@ extern GTY(()) int darwin_ms_struct;
 
 #define TARGET_OPTION_TRANSLATE_TABLE \
   { "-all_load", "-Zall_load" },  \
+  /* APPLE LOCAL 7519550 -force_load */ \
+  { "-force_load", "-Zforce_load" },  \
   { "-allowable_client", "-Zallowable_client" },  \
   { "-arch_errors_fatal", "-Zarch_errors_fatal" },  \
   { "-bind_at_load", "-Zbind_at_load" },  \
@@ -239,6 +241,8 @@ do {					\
 #undef  WORD_SWITCH_TAKES_ARG
 #define WORD_SWITCH_TAKES_ARG(STR)              \
   (DEFAULT_WORD_SWITCH_TAKES_ARG (STR) ? 1 :    \
+   /* APPLE LOCAL 7519550 -force_load */ 	\
+   !strcmp (STR, "Zforce_load") ? 1 :     	\
    !strcmp (STR, "Zallowable_client") ? 1 :     \
    !strcmp (STR, "arch") ? 1 :                  \
    !strcmp (STR, "arch_only") ? 1 :             \
@@ -387,6 +391,8 @@ do {					\
      %{private_bundle:%e-private_bundle not allowed with -dynamiclib} \
     } \
    %{Zall_load:-all_load} \
+   "/* APPLE LOCAL 7519550 -force_load */" \
+   %{Zforce_load*:-force_load %*} \
    %{Zallowable_client*:-allowable_client %*} \
    %{Zbind_at_load:-bind_at_load} \
    %{Zarch_errors_fatal:-arch_errors_fatal} \
@@ -518,23 +524,30 @@ do {					\
   { "darwin_iphoneos_libgcc", DARWIN_IPHONEOS_LIBGCC_SPEC },
 
 /* APPLE LOCAL begin ARM 5683689 */
+/* APPLE LOCAL begin link optimizations 6999417 */
 #define DARWIN_DYLIB1_SPEC						\
-  "%{miphoneos-version-min=*: -ldylib1.o}				\
+  "%{miphoneos-version-min=*:						\
+    %:version-compare(< 3.1 miphoneos-version-min= -ldylib1.o)}		\
    %{!miphoneos-version-min=*:						\
      %:version-compare(!> 10.5 mmacosx-version-min= -ldylib1.o)		\
      %:version-compare(>= 10.5 mmacosx-version-min= -ldylib1.10.5.o)}"
 
 /* APPLE LOCAL begin link optimizations 6499452 */
 #define DARWIN_BUNDLE1_SPEC						\
-  "-lbundle1.o"
+  "%{miphoneos-version-min=*:						\
+    %:version-compare(< 3.1 miphoneos-version-min= -lbundle1.o)}	\
+   %{!miphoneos-version-min=*: -lbundle1.o }"
 /* APPLE LOCAL end link optimizations 6499452 */
 
 #define DARWIN_CRT1_SPEC						\
 /* APPLE LOCAL ARM 5823776 iphoneos should use crt1.o */		\
-  "%{miphoneos-version-min=*: -lcrt1.o}					\
+  "%{miphoneos-version-min=*:						\
+    %:version-compare(< 3.1 miphoneos-version-min= -lcrt1.o)		\
+    %:version-compare(>= 3.1 miphoneos-version-min= -lcrt1.3.1.o)}	\
    %{!miphoneos-version-min=*:						\
      %:version-compare(!> 10.5 mmacosx-version-min= -lcrt1.o)		\
      %:version-compare(>= 10.5 mmacosx-version-min= -lcrt1.10.5.o)}"
+/* APPLE LOCAL end link optimizations 6999417 */
 /* APPLE LOCAL end ARM 5683689 */
 
 /* APPLE LOCAL begin prefer -lSystem 6645902 */

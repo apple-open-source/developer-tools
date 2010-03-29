@@ -381,8 +381,12 @@ lookup_reference_type (struct type *type)
    If *TYPEPTR is zero, update it to point to the function type we return.
    We allocate new memory if needed.  */
 
+/* APPLE LOCAL begin Inform users about debugging optimized code  */
+/* Add parameter OPTIMIZED to indicate whether the new function type should be
+   flagged as optimized or not.  */
 struct type *
-make_function_type (struct type *type, struct type **typeptr)
+make_function_type (struct type *type, struct type **typeptr, int optimized)
+/* APPLE LOCAL end Inform users about debugging optimized code  */
 {
   struct type *ntype;	/* New type */
   struct objfile *objfile;
@@ -406,6 +410,11 @@ make_function_type (struct type *type, struct type **typeptr)
 
   TYPE_LENGTH_ASSIGN (ntype) = 1;
   TYPE_CODE (ntype) = TYPE_CODE_FUNC;
+  
+  /* APPLE LOCAL begin Inform users about debugging optimized code  */
+  if (optimized)
+    TYPE_FLAGS (ntype) |= TYPE_FLAG_OPTIMIZED;
+  /* APPLE LOCAL end Inform users about debugging optimized code  */
 
   return ntype;
 }
@@ -417,7 +426,8 @@ make_function_type (struct type *type, struct type **typeptr)
 struct type *
 lookup_function_type (struct type *type)
 {
-  return make_function_type (type, (struct type **) 0);
+  /* APPLE LOCAL - Inform users about debugging optimized code  */
+  return make_function_type (type, (struct type **) 0, 0);
 }
 
 /* Identify address space identifier by name --
@@ -1039,6 +1049,7 @@ struct type *
 create_set_type (struct type *result_type, struct type *domain_type)
 {
   LONGEST low_bound, high_bound, bit_length;
+  low_bound = 0;
   if (result_type == NULL)
     {
       result_type = alloc_type (TYPE_OBJFILE (domain_type));

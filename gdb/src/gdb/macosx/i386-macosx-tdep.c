@@ -422,6 +422,9 @@ i386_macosx_thread_state_addr_1 (CORE_ADDR start_of_func, CORE_ADDR pc,
   if (!push_ebp_addr || !mov_esp_ebp_addr)
     error ("Unable to analyze the prologue of _sigtramp(), giving up.");
 
+  /* A reasonable default value */
+
+  address_of_struct_sigframe = ebp + 4;
   if (pc <= push_ebp_addr)
     address_of_struct_sigframe = esp + 0;
 

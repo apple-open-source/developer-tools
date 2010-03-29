@@ -1,7 +1,7 @@
 /* APPLE LOCAL file Macintosh alignment */
 /* align-test-5*.c are all the same code but with different options.  */
 
-/* { dg-do run } */
+/* { dg-do run { target { powerpc*-*-darwin* i?86*-*-darwin* } } } */
 /* { dg-options "-malign-mac68k -DSIZE=10" } */
 
 /* { dg-skip-if "" { powerpc*-*-darwin* } { "-m64" } { "" } } */

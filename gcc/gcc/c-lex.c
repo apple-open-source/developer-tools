@@ -705,7 +705,12 @@ c_lex_with_flags (tree *value, location_t *loc, unsigned char *cpp_flags, int de
     /* APPLE LOCAL begin 4137741 */
   if (!no_more_pch
       && type != CPP_BINCL
-      && type != CPP_EINCL)
+      && type != CPP_EINCL
+      /* APPLE LOCAL begin distcc pch 7216809 */
+      && type != CPP_PRAGMA
+      && type != CPP_STRING
+      && type != CPP_PRAGMA_EOL)
+      /* APPLE LOCAL end distcc pch 7216809 */
     /* APPLE LOCAL end 4137741 */
     {
       no_more_pch = true;

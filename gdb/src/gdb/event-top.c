@@ -146,6 +146,9 @@ void *sigwinch_token;
 void *sigtstp_token;
 #endif
 
+/* APPLE LOCAL - Inform user about debugging optimized code  */
+int gdb_prompt_is_optimized = 0;
+
 /* Structure to save a partially entered command.  This is used when
    the user types '\' at the end of a command line. This is necessary
    because each line of input is handled by a different call to
@@ -256,6 +259,14 @@ display_gdb_prompt (char *new_prompt)
   int prompt_length = 0;
   char *gdb_prompt = get_prompt ();
   static int stdin_handler_removed = 0;
+
+  /* APPLE LOCAL begin Inform user about debugging optimized code  */
+  if (strcmp (gdb_prompt, "") != 0)
+    {
+      adjust_prompts_for_optimized_code ();
+      gdb_prompt = get_prompt ();
+    }
+  /* APPLE LOCAL end Inform user about debugging optimized code  */
 
   /* Each interpreter has its own rules on displaying the command
      prompt.  */
@@ -1164,7 +1175,22 @@ set_async_annotation_level (char *args, int from_tty, struct cmd_list_element *c
 void
 set_async_prompt (char *args, int from_tty, struct cmd_list_element *c)
 {
-  PROMPT (0) = savestring (new_async_prompt, strlen (new_async_prompt));
+  /* APPLE LOCAL begin Inform user about debugging optimized code  */
+  if (currently_inside_optimized_code
+      && the_prompts.top > 0
+      && (strstr (PROMPT (0), "[opt> ") != 0))
+    {
+      char *new_str;
+      pop_prompt ();
+      PROMPT (0) = savestring (new_async_prompt, strlen (new_async_prompt));
+      new_str = (char *) xmalloc (strlen (new_async_prompt) + 7);
+      sprintf (new_str, "%s[opt> ", new_async_prompt);
+      push_prompt ("", new_str, "");
+      xfree (new_str);
+    }
+  else
+  /* APPLE LOCAL end Inform user about debugging optimized code  */
+    PROMPT (0) = savestring (new_async_prompt, strlen (new_async_prompt));
 }
 
 /* Set things up for readline to be invoked via the alternate
@@ -1254,6 +1280,58 @@ gdb_disable_readline (void)
   rl_callback_handler_remove ();
   delete_file_handler (input_fd);
 }
+
+/* APPLE LOCAL begin Inform user about debugging optimized code  */
+void
+adjust_prompts_for_optimized_code (void)
+{
+
+  /* Case 1:  gdb_prompt_is_optimized == false.  */
+  if (!gdb_prompt_is_optimized)
+    {
+      /* If we're inside optimized code AND the user wants to be told
+	 about it, append '[opt> ' to the prompt.  Actually, create
+         a second duplicate prompt, and append to that.  This allows
+         for easy removal later.  */
+      if (dwarf2_inform_debugging_optimized_code
+	  && currently_inside_optimized_code)
+	{
+	  char *old_prompt = get_prompt ();
+	  char *new_prompt;
+	  if (strstr (old_prompt, "[opt> ") == 0)
+	    {
+	      new_prompt = (char *) xmalloc (strlen (old_prompt) + 7);
+	      sprintf (new_prompt, "%s[opt> ", old_prompt);
+	      push_prompt ("", new_prompt, "");
+	      xfree (new_prompt);
+	    }
+	  gdb_prompt_is_optimized = 1;
+	}
+    }
+
+  /* Case 2:  gdb_prompt_is_optimized == true.  */
+
+  else if (gdb_prompt_is_optimized)
+    {
+      /* If we're not inside optimized code, or the user does not
+	 want to be told about it, pop the '[opt> ' version of the
+         prompt from the prompt stack.  */
+      if (!dwarf2_inform_debugging_optimized_code
+	  || !currently_inside_optimized_code)
+	{
+	  if (the_prompts.top > 0
+	      && strstr (PROMPT (0), "[opt> ") != 0)
+	    {
+	      xfree (PREFIX (0));
+	      xfree (PROMPT (0));
+	      xfree (SUFFIX (0));
+	      the_prompts.top--;
+	    }
+	  gdb_prompt_is_optimized = 0;
+	}
+    }
+}
+/* APPLE LOCAL end Inform user about debugging optimized code  */
 
 /* Don't set up readline now, this is better done in the interpreter's
    resume method, since we will have to do this coming back & forth

@@ -24,6 +24,12 @@ Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA 02111-1307, USA.  */
 #include "tm-macosx.h"
 
 
+struct arm_macosx_tdep_inf_status {
+  CORE_ADDR macosx_half_step_pc;
+};
+
+typedef struct arm_macosx_tdep_inf_status arm_macosx_tdep_inf_status_t;
+
 int arm_macosx_fast_show_stack (unsigned int count_limit, 
 				unsigned int print_limit,
 				unsigned int *count,
@@ -37,9 +43,5 @@ char *arm_throw_catch_find_typeinfo (struct frame_info *curr_frame,
                                int exception_type);
 #define THROW_CATCH_FIND_TYPEINFO(curr_frame, exception_type) \
   (arm_throw_catch_find_typeinfo (curr_frame, exception_type))
-
-int arm_macosx_in_switch_glue (CORE_ADDR pc);
-#define IN_SWITCH_GLUE(pc) \
-  (arm_macosx_in_switch_glue (pc))
 
 #endif /* _TM_ARM_MACOSX_H_ */

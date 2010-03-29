@@ -1408,7 +1408,7 @@ pre_load_and_check_file (struct fixinfo *cur)
   struct objfile *new_objfile;
   struct cleanup *cleanups;
 
-  object_bfd = symfile_bfd_open_safe (cur->bundle_filename, 0);
+  object_bfd = symfile_bfd_open_safe (cur->bundle_filename, 0, GDB_OSABI_UNKNOWN);
   new_objfile = symbol_file_add_bfd_safe (object_bfd, 0, 0, 0, 0, 0, 
                                           OBJF_SYM_ALL, (CORE_ADDR) NULL, NULL,
                                           NULL);
@@ -1976,13 +1976,16 @@ force_psymtab_expansion (struct objfile *obj, const char *source_fn,
 static void
 expand_all_objfile_psymtabs (struct objfile *obj)
 {
-  struct partial_symtab *pst = obj->psymtabs;
+  struct partial_symtab *pst;
   ALL_OBJFILE_PSYMTABS_INCL_OBSOLETED (obj, pst)
     PSYMTAB_TO_SYMTAB (pst);
 }
 
 
-/* Returns 1 if the file is found.  0 if error or not found.  */
+/* Returns 1 if the file is found.  0 if error or not found.  
+   Directories return 0.  Soft-links are transversed by stat; use
+   lstat if we need to differentiate between a soft-link and the
+   file it points to.  */
 
 int
 file_exists_p (const char *filename)
@@ -1992,8 +1995,7 @@ file_exists_p (const char *filename)
   if (stat (filename, &sb) != 0)
     return 0;
 
-  if ((sb.st_mode & S_IFMT) | S_IFREG ||
-      (sb.st_mode & S_IFMT) | S_IFLNK)
+  if (sb.st_mode & S_IFREG)
     return 1;
   else
     return 0;
@@ -2195,6 +2197,8 @@ decode_fix_and_continue_trampoline (CORE_ADDR pc)
   relative_offset = extract_unsigned_integer (buf + 1, 4);
   pc += 5;  /* the relative offset is computed from next instruction */
   return pc + relative_offset;
+#else
+  return 0;
 #endif
 }
 

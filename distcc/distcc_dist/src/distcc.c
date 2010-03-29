@@ -1,36 +1,37 @@
-/* -*- c-file-style: "java"; indent-tabs-mode: nil -*-
- * 
+/* -*- c-file-style: "java"; indent-tabs-mode: nil; tab-width: 4; fill-column: 78 -*-
+ *
  * distcc -- A simple distributed compiler system
  *
  * Copyright (C) 2002, 2003, 2004 by Martin Pool <mbp@samba.org>
+ * Copyright 2007 Google Inc.
  *
  * This program is free software; you can redistribute it and/or
- * modify it under the terms of the GNU General Public License as
- * published by the Free Software Foundation; either version 2 of the
- * License, or (at your option) any later version.
+ * modify it under the terms of the GNU General Public License
+ * as published by the Free Software Foundation; either version 2
+ * of the License, or (at your option) any later version.
  *
- * This program is distributed in the hope that it will be useful, but
- * WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
- * General Public License for more details.
- * 
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ *
  * You should have received a copy of the GNU General Public License
  * along with this program; if not, write to the Free Software
- * Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA 02111-1307
- * USA
+ * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301,
+ * USA.
  */
 
 
-			/* 4: The noise of a multitude in the
-			 * mountains, like as of a great people; a
-			 * tumultuous noise of the kingdoms of nations
-			 * gathered together: the LORD of hosts
-			 * mustereth the host of the battle.
-			 *		-- Isaiah 13 */
+            /* 4: The noise of a multitude in the
+             * mountains, like as of a great people; a
+             * tumultuous noise of the kingdoms of nations
+             * gathered together: the LORD of hosts
+             * mustereth the host of the battle.
+             *        -- Isaiah 13 */
 
 
 
-#include "config.h"
+#include <config.h>
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -48,11 +49,11 @@
 #include "bulk.h"
 #include "implicit.h"
 #include "compile.h"
+#include "emaillog.h"
 
 
 /* Name of this program, for trace.c */
 const char *rs_program_name = "distcc";
-
 
 /**
  * @file
@@ -83,6 +84,9 @@ static void dcc_show_usage(void)
 "   COMPILER                   defaults to \"cc\"\n"
 "   --help                     explain usage and exit\n"
 "   --version                  show version and exit\n"
+"   --show-hosts               show host list and exit\n"
+"   -j                         calculate the concurrency level from\n"
+"                              the host list.\n"
 "\n"
 "Environment variables:\n"
 "   See the manual page for a complete list.\n"
@@ -101,6 +105,7 @@ static void dcc_show_usage(void)
 "   HOST:PORT                  TCP connection, specified port\n"
 "   @HOST                      SSH connection\n"
 "   USER@HOST                  SSH connection to specified host\n"
+"   --randomize                Randomize the server list before execution\n"
 "\n"
 "distcc distributes compilation jobs across volunteer machines running\n"
 "distccd.  Jobs that cannot be distributed, such as linking or \n"
@@ -121,7 +126,7 @@ static RETSIGTYPE dcc_client_signalled (int whichsig)
     rs_log_info("terminated by signal %d", whichsig);
 #endif
 
-    dcc_cleanup_tempfiles();
+    dcc_cleanup_tempfiles_from_signal_handler();
 
     raise(whichsig);
 
@@ -135,7 +140,46 @@ static void dcc_client_catch_signals(void)
     signal(SIGHUP, &dcc_client_signalled);
 }
 
+static void dcc_free_hostlist(struct dcc_hostdef *list) {
+    while (list) {
+        struct dcc_hostdef *l = list;
+        list = list->next;
+        dcc_free_hostdef(l);
+    }
+}
 
+static void dcc_show_hosts(void) {
+    struct dcc_hostdef *list, *l;
+    int nhosts;
+
+    if (dcc_get_hostlist(&list, &nhosts) != 0) {
+        rs_log_crit("Failed to get host list");
+        return;
+    }
+
+    for (l = list; l; l = l->next)
+        printf("%s\n", l->hostdef_string);
+
+    dcc_free_hostlist(list);
+}
+
+static void dcc_concurrency_level(void) {
+    struct dcc_hostdef *list, *l;
+    int nhosts;
+    int nslots = 0;
+
+    if (dcc_get_hostlist(&list, &nhosts) != 0) {
+        rs_log_crit("Failed to get host list");
+        return;
+    }
+
+    for (l = list; l; l = l->next)
+        nslots += l->n_slots;
+
+    dcc_free_hostlist(list);
+
+    printf("%i\n", nslots);
+}
 
 /**
  * distcc client entry point.
@@ -148,8 +192,8 @@ static void dcc_client_catch_signals(void)
 int main(int argc, char **argv)
 {
     int status, sg_level, tweaked_path = 0;
-    char **compiler_args;
-    char *compiler_name;
+    char **compiler_args = NULL; /* dynamically allocated */
+    char *compiler_name; /* points into argv[0] */
     int ret;
 
     dcc_client_catch_signals();
@@ -157,6 +201,7 @@ int main(int argc, char **argv)
     atexit(dcc_remove_state_file);
 
     dcc_set_trace_from_env();
+    dcc_setup_log_email();
 
     dcc_trace_version();
 
@@ -182,13 +227,34 @@ int main(int argc, char **argv)
             ret = 0;
             goto out;
         }
-        if (!strcmp(argv[1], "--host-info") && argc == 3) {
-            dcc_show_host_version(argv[2]);
+
+        if (!strcmp(argv[1], "--show-hosts")) {
+            dcc_show_hosts();
             ret = 0;
             goto out;
         }
-        
-        dcc_find_compiler(argv, &compiler_args);
+
+        if (!strcmp(argv[1], "-j")) {
+            dcc_concurrency_level();
+            ret = 0;
+            goto out;
+        }
+
+        if (!strcmp(argv[1], "--scan-includes")) {
+            dcc_scan_includes = 1;
+            argv++;
+        }
+
+#ifdef XCODE_INTEGRATION
+        if (!strcmp(argv[1], "--host-info") && argc == 3) {
+            ret = dcc_show_host_info(argv[2]);
+            goto out;
+        }
+#endif /* XCODE_INTEGRATION */
+
+        if ((ret = dcc_find_compiler(argv, &compiler_args)) != 0) {
+            goto out;
+        }
         /* compiler_args is now respectively either "cc -c hello.c" or
          * "gcc -c hello.c" */
 
@@ -204,9 +270,17 @@ int main(int argc, char **argv)
         if ((ret = dcc_support_masquerade(argv, compiler_name,
                                           &tweaked_path)) != 0)
             goto out;
-        
-        dcc_copy_argv(argv, &compiler_args, 0);
-        compiler_args[0] = compiler_name;
+
+        if ((ret = dcc_copy_argv(argv, &compiler_args, 0)) != 0) {
+            goto out;
+        }
+        free(compiler_args[0]);
+        compiler_args[0] = strdup(compiler_name);
+        if (!compiler_args[0]) {
+            rs_log_error("strdup failed - out of memory?");
+            ret = EXIT_OUT_OF_MEMORY;
+            goto out;
+        }
     }
 
     if (sg_level - tweaked_path > 0) {
@@ -216,7 +290,12 @@ int main(int argc, char **argv)
     }
 
     ret = dcc_build_somewhere_timed(compiler_args, sg_level, &status);
+    compiler_args = NULL; /* dcc_build_somewhere_timed already free'd it. */
 
     out:
+    if (compiler_args) {
+      dcc_free_argv(compiler_args);
+    }
+    dcc_maybe_send_email();
     dcc_exit(ret);
 }

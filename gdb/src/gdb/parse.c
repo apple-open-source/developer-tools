@@ -107,6 +107,10 @@ static void prefixify_subexp (struct expression *, struct expression *, int,
 static struct expression *parse_exp_in_context (char **, struct block *, int, 
 						int);
 
+/* APPLE LOCAL: Fix expressions containing references to variables the
+   compiler optimzied away.  */
+static void fix_references_to_optimized_out_variables (void);
+
 void _initialize_parse (void);
 
 /* Data structure for saving values of arglist_len for function calls whose
@@ -199,9 +203,27 @@ void
 write_exp_elt_sym (struct symbol *expelt)
 {
   union exp_element tmp;
+  int j;
+
+  /* APPLE LOCAL begin: If we are adding the symbol for a variable that
+     was optimized away by the compiler, make sure the expression for
+     the variable is the first thing in the vector (later on we will make
+     sure it is the ONLY thing in the vector).  */
+
+  if (expelt
+      && (SYMBOL_CLASS (expelt) == LOC_OPTIMIZED_OUT)
+      && (expout_ptr != 2))
+    {
+      expout->elts[0] = expout->elts[expout_ptr - 2]; /* Copy VAR_OP_VALUE  */
+      expout->elts[1] = expout->elts[expout_ptr - 1]; /* Copy block  */
+      for (j = 2; j <= expout_ptr; j++)
+	memset (&(expout->elts[j]), 0, sizeof (union exp_element));
+      expout_ptr = 2;
+    }
+  /* APPLE LOCAL end  */
 
   tmp.symbol = expelt;
-
+  
   write_exp_elt (tmp);
 }
 
@@ -1084,6 +1106,11 @@ parse_exp_in_context (char **stringptr, struct block *block, int comma,
   do_cleanups (hook_stop_chain);
   discard_cleanups (old_chain);
 
+  /* APPLE LOCAL: Check return expression for any "optimized away" variables;
+     fix it up if found.  */
+
+  fix_references_to_optimized_out_variables ();
+
   /* Record the actual number of expression elements, and then
      reallocate the expression memory so that we free up any
      excess elements. */
@@ -1344,6 +1371,47 @@ parser_fprintf (FILE *x, const char *y, ...)
     }
   va_end (args);
 }
+
+/* APPLE LOCAL begin - Fix references to variables the compiler
+   optimized away.  */
+
+/* This function makes sure that if the expression vector (expout)
+   contains any symbol whose class is LOC_OPTIMIZED_OUT, then anything
+   else that may have been in the vector gets removed, and the
+   expression vector is left containing ONLY the entry (4 elements)
+   for the symbol that was optimized away.  This symbol then gets
+   properly handled in value_check_printable.  */
+
+static void 
+fix_references_to_optimized_out_variables (void)
+{
+  int i;
+
+  /* If expout contains at most one variable value (4 elements), we're
+     already done.  */
+
+  if (expout_ptr < 4)
+    return;
+
+  /* We already made sure in write_exp_elt_sym, that if there were such
+     a variable it would be the first thing in the vector.  Now we
+     check for it.  */
+
+  if ((expout->elts[0].opcode == OP_VAR_VALUE)
+      && expout->elts[2].symbol
+      && (SYMBOL_CLASS (expout->elts[2].symbol) == LOC_OPTIMIZED_OUT))
+    {
+      /* We found one.  Blank out the rest of the vector.  */
+      for (i = 4; i <= expout_ptr; i++)
+	memset (&(expout->elts[i]), 0, sizeof (union exp_element));
+      expout->nelts = 4;
+      expout_ptr = 4;
+      parser_fprintf (stderr, "Unable to access variable \"%s\"\n",
+		      SYMBOL_LINKAGE_NAME (expout->elts[2].symbol));
+    }
+}
+/* APPLE LOCAL end - Fix references to variables the compiler
+   optimized away.  */
 
 void
 _initialize_parse (void)

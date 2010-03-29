@@ -252,7 +252,8 @@ strongarm*-*-*)
 	;;
 arm*-*-*)
 	cpu_type=arm
-	extra_headers="mmintrin.h"
+        # APPLE LOCAL ARM v7 support, merge from Codesourcery.
+	extra_headers="mmintrin.h arm_neon.h"
 	;;
 bfin*-*)
 	cpu_type=bfin
@@ -780,8 +781,8 @@ arm*-*-elf | ep9312-*-elf)
 arm*-*-darwin*)
 	extra_options="${extra_options} arm/darwin.opt"
         tm_file="${tm_file} arm/darwin.h"
-        tmake_file="${tmake_file} arm/t-darwin arm/t-slibgcc-iphoneos"
-	extra_headers=
+        tmake_file="${tmake_file} arm/t-slibgcc-iphoneos"
+	extra_headers="arm_neon.h"
         ;;
 # APPLE LOCAL end ARM darwin target
 arm*-wince-pe*)
@@ -2707,10 +2708,13 @@ case "${target}" in
 		done
 
 		case "$with_arch" in
+                # APPLE LOCAL begin ARM v7 support.
 		"" \
 		| armv[23456] | armv2a | armv3m | armv4t | armv5t \
 		| armv5te | armv6j |armv6k | armv6z | armv6zk \
+		| armv7-a \
 		| iwmmxt | ep9312)
+                # APPLE LOCAL end ARM v7 support.
 			# OK
 			;;
 		*)
@@ -2731,8 +2735,10 @@ case "${target}" in
 		esac
 
 		case "$with_fpu" in
+                # APPLE LOCAL begin ARM v7 support, merge from Codesourcery.
 		"" \
-		| fpa | fpe2 | fpe3 | maverick | vfp )
+		| fpa | fpe2 | fpe3 | maverick | vfp | vfp3 | neon)
+                # APPLE LOCAL end ARM v7 support, merge from Codesourcery.
 			# OK
 			;;
 		*)

@@ -44,6 +44,8 @@
 #include "exceptions.h"
 /* APPLE LOCAL - subroutine inlining  */
 #include "inlining.h"
+/* APPLE LOCAL - Inform users about debugging optimized code  */
+#include "top.h"
 
 static struct frame_info *get_prev_frame_1 (struct frame_info *this_frame);
 
@@ -946,6 +948,8 @@ void
 select_frame (struct frame_info *fi)
 {
   struct symtab *s;
+  /* APPLE LOCAL - Inform users about debugging optimized code  */
+  struct symbol *func_sym;
 
   deprecated_selected_frame = fi;
   /* NOTE: cagney/2002-05-04: FI can be NULL.  This occurs when the
@@ -985,6 +989,14 @@ select_frame (struct frame_info *fi)
 	{
 	  set_language (s->language);
 	}
+      /* APPLE LOCAL begin Inform users about debugging optimized code  */
+      func_sym = find_pc_function (get_frame_pc (fi));
+      if (func_sym)
+	currently_inside_optimized_code = 
+	                              TYPE_OPTIMIZED (SYMBOL_TYPE (func_sym));
+      else
+	currently_inside_optimized_code = 0;
+      /* APPLE LOCAL end Inform users about debugging optimized code  */
     }
 }
 	

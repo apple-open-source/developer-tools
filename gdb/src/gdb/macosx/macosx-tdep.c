@@ -60,6 +60,8 @@ the Free Software Foundation, 675 Mass Ave, Cambridge, MA 02139, USA.  */
 #include "completer.h"
 #include "exceptions.h"
 
+#include "gdbcore.h"
+
 #include <dirent.h>
 #include <libgen.h>
 #include <sys/types.h>
@@ -68,10 +70,13 @@ the Free Software Foundation, 675 Mass Ave, Cambridge, MA 02139, USA.  */
 #include <mach/machine.h>
 
 #include <CoreFoundation/CoreFoundation.h>
+#include <CoreFoundation/CFPropertyList.h>
 
 #include "readline/tilde.h" /* For tilde_expand */
 
 #include "macosx-nat-utils.h"
+
+#include "x86-shared-tdep.h"
 
 static char *find_info_plist_filename_from_bundle_name (const char *bundle,
                                                      const char *bundle_suffix);
@@ -81,6 +86,7 @@ extern CFArrayRef DBGCopyMatchingUUIDsForURL (CFURLRef path,
                                               int /* cpu_type_t */ cpuType,
                                            int /* cpu_subtype_t */ cpuSubtype);
 extern CFURLRef DBGCopyDSYMURLForUUID (CFUUIDRef uuid);
+extern CFDictionaryRef DBGCopyDSYMPropertyLists (CFURLRef dsym_url);
 #endif
 
 static const char dsym_extension[] = ".dSYM";
@@ -358,6 +364,12 @@ macosx_skip_trampoline_code (CORE_ADDR pc)
   newpc = dyld_symbol_stub_function_address (pc, NULL);
   if (newpc != 0)
     return newpc;
+
+#if defined (TARGET_I386)
+  newpc = x86_cxx_virtual_override_thunk_trampline (pc);
+  if (newpc != 0)
+    return newpc;
+#endif
 
   newpc = decode_fix_and_continue_trampoline (pc);
   if (newpc != 0)
@@ -754,11 +766,11 @@ gdb_DBGCopyMatchingUUIDsForURL (const char *path)
   CFAllocatorRef alloc = kCFAllocatorDefault;
   CFMutableArrayRef uuid_array = NULL;
   struct gdb_exception e;
-  bfd *abfd;
+  bfd *abfd = NULL;
 
   TRY_CATCH (e, RETURN_MASK_ERROR)
   {
-    abfd = symfile_bfd_open (path, 0);
+    abfd = symfile_bfd_open (path, 0, GDB_OSABI_UNKNOWN);
   }
   
   if (abfd == NULL || e.reason == RETURN_ERROR)
@@ -988,6 +1000,140 @@ locate_dsym_mach_in_bundle (CFUUIDRef uuid_ref, char *dsym_bundle_path)
 }
 
 #if USE_DEBUG_SYMBOLS_FRAMEWORK
+
+struct plist_filenames_search_baton {
+  CFPropertyListRef plist;
+  int found_it;
+  CFStringRef searching_for;
+};
+
+static void 
+plist_filenames_and_uuids_map_func (const void *in_key, const void *in_value, 
+                                    void *context)
+{
+  struct plist_filenames_search_baton *baton = (struct plist_filenames_search_baton *) context;
+  CFStringRef searching_for = baton->searching_for;
+  CFStringRef key = (CFStringRef) in_key;
+  CFPropertyListRef value = (CFPropertyListRef) in_value;
+
+  if (CFStringCompare (key, searching_for, 0))
+    {
+      baton->found_it = 1;
+      baton->plist = value;
+    }
+  return;
+}
+
+static void
+find_source_path_mappings (CFUUIDRef uuid, CFURLRef dsym)
+{
+  CFDictionaryRef plists = DBGCopyDSYMPropertyLists (dsym);
+  CFStringRef uuid_str = CFUUIDCreateString (kCFAllocatorDefault, uuid);
+  if (plists && uuid_str)
+    {
+      struct plist_filenames_search_baton results;
+      results.found_it = 0;
+      results.searching_for = uuid_str;
+      CFDictionaryApplyFunction (plists, plist_filenames_and_uuids_map_func, 
+                                 &results);
+      if (results.found_it)
+        {
+          const char *build_src_path = macosx_get_plist_posix_value 
+                                          (results.plist, "DBGBuildSourcePath");
+          const char *src_path = macosx_get_plist_posix_value 
+                                               (results.plist, "DBGSourcePath");
+          if (src_path)
+            {
+              const char *src_path_tilde_expanded = tilde_expand (src_path);
+              xfree (src_path);
+              src_path = src_path_tilde_expanded;
+            }
+          if (build_src_path && src_path)
+            {
+              add_one_pathname_substitution (build_src_path, src_path);
+            }
+        }
+    }
+  if (uuid_str)
+    CFRelease (uuid_str);
+  if (plists)
+    CFRelease (plists);
+}
+
+/* Given an OBJFILE, we've found a matching dSYM bundle at pathname DSYM
+   (the string in DSYM ends in ".dSYM").  This function creates CF 
+   representations of the UUID in the objfile and the dSYM pathname and
+   looks for a plist with pathname substitutions in it.  
+   If the pathname given in DSYM contains additional path components (inside
+   the dSYM bundle), those will be ignored.  */
+
+void
+find_source_path_mappings_posix (struct objfile *objfile, const char *dsym)
+{
+  unsigned char uuid[16];
+  CFURLRef dsym_ref;
+  CFStringRef dsym_str_ref;
+
+  /* Extract the UUID from the objfile.  */
+  if (!bfd_mach_o_get_uuid (objfile->obfd, uuid, sizeof (uuid)))
+    return;
+
+  /* Create a CFUUID object for use with DebugSymbols framework.  */
+  CFUUIDRef uuid_ref = CFUUIDCreateWithBytes (kCFAllocatorDefault, uuid[0],
+                                              uuid[1], uuid[2], uuid[3],
+                                              uuid[4], uuid[5], uuid[6],
+                                              uuid[7], uuid[8], uuid[9],
+                                              uuid[10], uuid[11], uuid[12],
+                                              uuid[13], uuid[14], uuid[15]);
+  if (uuid_ref == NULL)
+    return;
+
+  /* If the DSYM pathname passed in has stuff after the ".dSYM" component,
+     get rid of it.  Find the last ".dSYM" in the string, copy the string to
+     a local buffer.  */
+
+  const char *j, *i = strstr (dsym, ".dSYM");
+  if (i == NULL)
+    {
+      CFRelease (uuid_ref);
+      return;
+    }
+  while ((j = strstr (i + 1, ".dSYM")) != NULL)
+    i = j;
+
+  if (i[5] != '\0')
+    {
+      i += 5;  /* i now points past the ".dSYM" characters */
+      int len = i - dsym + 1;
+      char *n = alloca (len);
+      strlcpy (n, dsym, len);
+      dsym = n;
+    }
+
+  dsym_str_ref = CFStringCreateWithCString (NULL, dsym,
+                                            kCFStringEncodingUTF8);
+  if (dsym_str_ref == NULL)
+    {
+      CFRelease (uuid_ref);
+      return;
+    }
+
+  dsym_ref = CFURLCreateWithFileSystemPath (NULL, dsym_str_ref,
+                                            kCFURLPOSIXPathStyle, 0);
+  CFRelease (dsym_str_ref);
+
+  if (dsym_ref == NULL)
+    {
+      CFRelease (uuid_ref);
+      return;
+    }
+
+  find_source_path_mappings (uuid_ref, dsym_ref);
+
+  CFRelease (uuid_ref);
+  CFRelease (dsym_ref);
+}
+
 /* Locate a full path to the dSYM mach file within the dSYM bundle using
    OJBFILE's uuid and the DebugSymbols.framework. The DebugSymbols.framework 
    will used using the current set of global DebugSymbols.framework defaults 
@@ -1049,6 +1195,7 @@ locate_dsym_using_framework (struct objfile *objfile)
 		  dsym_path = xstrdup (path);
 		}
 	    }
+          find_source_path_mappings (uuid_ref, dsym_bundle_url);
 	  CFRelease (dsym_bundle_url);
 	  dsym_bundle_url = NULL;
 	}
@@ -1112,7 +1259,12 @@ macosx_locate_dsym (struct objfile *objfile)
       strcat (dsymfile, basename_str);
 	  
       if (file_exists_p (dsymfile))
-	return xstrdup (dsymfile);
+        {
+#if USE_DEBUG_SYMBOLS_FRAMEWORK
+          find_source_path_mappings_posix (objfile, dsymfile);
+#endif
+          return xstrdup (dsymfile);
+        }
       
       /* Now search for any parent directory that has a '.' in it so we can find
 	 Mac OS X applications, bundles, plugins, and any other kinds of files.  
@@ -1142,7 +1294,12 @@ macosx_locate_dsym (struct objfile *objfile)
 	      strcat (slash_ptr, APPLE_DSYM_EXT_AND_SUBDIRECTORY);
 	      strcat (slash_ptr, basename_str);
 	      if (file_exists_p (dsymfile))
-		return xstrdup (dsymfile);
+                {
+#if USE_DEBUG_SYMBOLS_FRAMEWORK
+                  find_source_path_mappings_posix (objfile, dsymfile);
+#endif
+		  return xstrdup (dsymfile);
+                }
 	    }
 	    
 	  /* NULL terminate the string at the '.' character and append
@@ -1151,7 +1308,12 @@ macosx_locate_dsym (struct objfile *objfile)
 	  strcat (dot_ptr, APPLE_DSYM_EXT_AND_SUBDIRECTORY);
 	  strcat (dot_ptr, basename_str);
 	  if (file_exists_p (dsymfile))
-	    return xstrdup (dsymfile);
+            {
+#if USE_DEBUG_SYMBOLS_FRAMEWORK
+              find_source_path_mappings_posix (objfile, dsymfile);
+#endif
+              return xstrdup (dsymfile);
+            }
 
 	  /* NULL terminate the string at the '.' locatated by the strrchr() 
              function again.  */
@@ -1576,18 +1738,57 @@ fast_show_stack_trace_prologue (unsigned int count_limit,
     {
       char *name;
       struct minimal_symbol *msymbol;
+      struct objfile *libsystem_objfile;
 
-      msymbol = lookup_minimal_symbol ("_sigtramp", NULL, NULL);
+      /* Grab the libSystem objfile.  */
+      libsystem_objfile = find_objfile_by_name ("libSystem.B.dylib", 0);
+
+      /* APPLE LOCAL - Check to see if the libSystem objfile has a
+	 separate debug info objfile */
+      if (libsystem_objfile) 
+	{
+	  if (libsystem_objfile->msymbols == NULL
+	      && libsystem_objfile->separate_debug_objfile_backlink)
+	    libsystem_objfile = libsystem_objfile->separate_debug_objfile_backlink;
+	  
+	  /* If libSystem isn't loaded yet, NULL it out so we don't look up 
+	     and cache incorrect un-slid or faux-slid address values.  */
+	  if (!target_check_is_objfile_loaded (libsystem_objfile))
+	    libsystem_objfile = NULL;
+	}
+
+      /* If we have libSystem and it was loaded we should lookup sigtramp.  */
+      if (libsystem_objfile)
+	{
+	  /* Raise the load level and lookup the sigtramp symbol.  */
+	  objfile_set_load_state (libsystem_objfile, OBJF_SYM_ALL, 1);
+	  msymbol = lookup_minimal_symbol ("_sigtramp", NULL, libsystem_objfile);
+	}
+      else
+	{
+	  /* We either don't have libSystem, or it isn't loaded yet. Lets not
+	     do anything WRT sigtramp yet.  */
+	  msymbol = NULL;
+	}
+      
       if (msymbol == NULL)
-        warning
-          ("Couldn't find minimal symbol for \"_sigtramp\" - "
-	   "backtraces may be unreliable");
+	{
+	  /* Only warn if we found libSystem and it was loaded.  */
+	  if (libsystem_objfile != NULL)
+	    warning ("Couldn't find minimal symbol for \"_sigtramp\" - "
+		     "backtraces may be unreliable");
+	}
       else
         {
+	  /* Shared libraries must be loaded for the code below to work since
+	     we are getting the MSYMBOL value, then using that to look the
+	     sigtramp range. If shared libraries aren't loaded, we could end
+	     up getting and un-slid or faux-slid value that we will then try
+	     and get the function bounds for which could return us the range
+	     for a totally different function.  */
           pc = SYMBOL_VALUE_ADDRESS (msymbol);
-          if (find_pc_partial_function_no_inlined (pc, &name,
-						   sigtramp_start_ptr, 
-						   sigtramp_end_ptr) == 0)
+          if (find_pc_partial_function (pc, &name, sigtramp_start_ptr, 
+					sigtramp_end_ptr) == 0)
             {
               warning
 		("Couldn't find minimal bounds for \"_sigtramp\" - "

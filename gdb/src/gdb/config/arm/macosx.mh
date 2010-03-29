@@ -54,7 +54,7 @@ XM_CLIBS = -framework Security
 _all: all
 
 excServer.c excUser.c: macosx.defs
-	$(NEXT_ROOT)/usr/bin/mig -I. $<
+	xcrun -sdk "$(SDKROOT)" mig -arch armv6 -isysroot "$(SDKROOT)" -I. $<
 
 clean::
 	rm -f excServer.c excUser.c exc.h

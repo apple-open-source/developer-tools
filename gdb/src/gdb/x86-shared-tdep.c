@@ -2,6 +2,7 @@
    targets.  These two architectures are similar enough that we can share 
    the same algorithms between them easily.  */
 
+#include <ctype.h>
 #include "defs.h"
 #include "gdb_assert.h"
 #include "dis-asm.h"
@@ -298,7 +299,7 @@ x86_mov_reg_to_local_stack_frame_p (CORE_ADDR memaddr, int *regnum, int *offset)
         return 0;
 
       int saved_reg = ((op >> 3) & 0x7) | source_reg_mod;
-      int off;
+      int off = 0;
       if (op_sans_dest_reg == 0x45)
         off = (int8_t) read_memory_unsigned_integer (memaddr + 2, 1);
       if (op_sans_dest_reg == 0x85)
@@ -359,7 +360,7 @@ x86_mov_func_arg_to_reg_p (CORE_ADDR memaddr, int *regnum, int *offset)
         return 0;
 
       int saved_reg = ((op >> 3) & 0x7) | source_reg_mod;
-      int off;
+      int off = 0;
       if (op_sans_dest_reg == 0x45)
         off = (int8_t) read_memory_unsigned_integer (memaddr + 2, 1);
       if (op_sans_dest_reg == 0x85)
@@ -943,7 +944,7 @@ x86_quickie_analyze_prologue (CORE_ADDR func_start_addr, CORE_ADDR limit,
                               struct x86_frame_cache *cache,
                               int potentially_frameless)
 {
-  gdb_byte buf[4];
+  ULONGEST buf;
 
   /* Should we look for Fix & Continue nop paddings?  */
 
@@ -962,15 +963,19 @@ x86_quickie_analyze_prologue (CORE_ADDR func_start_addr, CORE_ADDR limit,
      an accurate assumption here.  Maybe it would be best to just
      assume that we instruction stepped into something... */
 
-  if (func_start_addr == INVALID_ADDRESS && potentially_frameless == 1)
+  if (func_start_addr == INVALID_ADDRESS 
+      && potentially_frameless == 1
+      && limit != INVALID_ADDRESS)
     {
-      read_memory (limit, buf, 4);
-      if (memcmp (buf, i386_pat, sizeof (i386_pat)) == 0
-          || memcmp (buf, x86_64_pat, sizeof (x86_64_pat)) == 0)
+      if (safe_read_memory_unsigned_integer (limit, 4, &buf))
         {
-          cache->prologue_scan_status = quick_scan_succeeded;
-          cache->ebp_is_frame_pointer = 0;
-          return limit;
+          if (memcmp (&buf, i386_pat, sizeof (i386_pat)) == 0
+              || memcmp (&buf, x86_64_pat, sizeof (x86_64_pat)) == 0)
+            {
+              cache->prologue_scan_status = quick_scan_succeeded;
+              cache->ebp_is_frame_pointer = 0;
+              return limit;
+            }
         }
     }
 
@@ -984,10 +989,10 @@ x86_quickie_analyze_prologue (CORE_ADDR func_start_addr, CORE_ADDR limit,
       return limit;
     }
 
-  read_memory (func_start_addr, buf, 4);
+  read_memory (func_start_addr, &buf, 4);
   
-  int i386_matched = memcmp (buf, i386_pat, sizeof (i386_pat)) == 0;
-  int x86_64_matched = memcmp (buf, x86_64_pat, sizeof (x86_64_pat)) == 0;
+  int i386_matched = memcmp (&buf, i386_pat, sizeof (i386_pat)) == 0;
+  int x86_64_matched = memcmp (&buf, x86_64_pat, sizeof (x86_64_pat)) == 0;
   if (i386_matched || x86_64_matched)
     {
       if (limit == func_start_addr)
@@ -1337,6 +1342,62 @@ x86_frame_prev_register (struct frame_info *next_frame, void **this_cache,
     }
 }
 
+/* Documented in section 5.1.4 ("Other Special Functions and Entities")
+     http://www.codesourcery.com/public/cxx-abi/abi.html#mangling-special
+   these trampolines fix up the this pointer before calling the real function.
+   In both cases we disassemble forward a few instructions to look for an
+   unconditional jump instruction - that is the real function.  
+
+   These thunk trampolines have symbol names that begin either with
+   _ZThn[0-9] or _ZTv[0-9].  */
+
+CORE_ADDR
+x86_cxx_virtual_override_thunk_trampline (CORE_ADDR pc)
+{
+  struct minimal_symbol *msym;
+  int is_thunk = 0;
+
+  msym = lookup_minimal_symbol_by_pc (pc);
+  if (strncmp (SYMBOL_LINKAGE_NAME (msym), "_ZThn", 5) == 0)
+    {
+      if (isdigit ((SYMBOL_LINKAGE_NAME (msym))[5]))
+        is_thunk = 1;
+    }
+  else if (strncmp (SYMBOL_LINKAGE_NAME (msym), "_ZTv", 4) == 0)
+    {
+      if (isdigit ((SYMBOL_LINKAGE_NAME (msym))[4]))
+        is_thunk = 1;
+    }
+
+  if (is_thunk == 0)
+    return 0;
+
+  int insn_count = 0;
+  while (insn_count++ < 6)
+    {
+      /* Did we scan off into another minimal symbol?  */
+      if (lookup_minimal_symbol_by_pc (pc) != msym)
+        return 0;
+
+      gdb_byte op;
+      /* E9 is JMP with a 4-byte relative displacement.  */
+      op = read_memory_unsigned_integer (pc, 1);
+      if (op == 0xe9)
+        {
+          int64_t off = read_memory_integer (pc + 1, 4);
+          return pc + 5 + off;
+        }
+      /* EB is JMP with a 1-byte relative displacement.  */
+      if (op == 0xeb)
+        {
+          int64_t off = read_memory_integer (pc + 1, 1);
+          return pc + 1 + off;
+        }
+      pc += length_of_this_instruction (pc);
+    }
+
+  return 0;
+}
 
 void
 _initialize_x86_shared_tdep (void)

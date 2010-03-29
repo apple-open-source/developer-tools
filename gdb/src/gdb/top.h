@@ -23,6 +23,12 @@
 #ifndef TOP_H
 #define TOP_H
 
+/* APPLE LOCAL begin Inform users about debugging optimized code  */
+extern int dwarf2_inform_debugging_optimized_code;
+extern int currently_inside_optimized_code;
+extern int gdb_prompt_is_optimized;
+/* APPLE LOCAL end Inform users about debugging optimized code  */
+
 /* From top.c.  */
 extern char *line;
 extern int linesize;

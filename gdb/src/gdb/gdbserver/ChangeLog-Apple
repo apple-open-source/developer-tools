@@ -1,3 +1,25 @@
+2008-09-18  Greg Clayton  <gclayton@apple.com>
+
+	* arm-regnums.h (NUM_VFPV3_REGS): New define.
+	(collect_unsigned_int): Renamed to collect_uint32.
+	(supply_unsigned_int): Renamed to supply_uint32.
+	(arm_macosx_store_vfp_registers): Renamed to 
+	arm_macosx_store_vfpv1_registers.
+	(arm_macosx_fetch_vfp_registers): Renamed to 
+	arm_macosx_fetch_vfpv1_registers.
+	(arm_fetch_inferior_registers): Use renamed vfpv1 functions and 
+	defines.
+	(arm_store_inferior_registers): Ditto.
+	(read_register): Return uint32_t instead of unsigned long.
+
+2008-07-01  Greg Clayton  <gclayton@apple.com>
+
+	* arm-regnums.h (enum gdb_regnum): Modified the old VFP regnums and
+	added support for VFPv3 and SIMD registers.
+	* macosx-arm-low.c (arm_macosx_store_vfp_registers): Use new VFP
+	defines.
+	(arm_macosx_fetch_vfp_registers): Ditto.
+
 2008-04-24  Jason Molenda  (jmolenda@apple.com)
 
 	* macosx-mutils.c: Don't include dyld_debug.h.

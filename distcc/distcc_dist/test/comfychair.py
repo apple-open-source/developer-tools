@@ -2,21 +2,21 @@
 
 # Copyright (C) 2002, 2003 by Martin Pool <mbp@samba.org>
 # Copyright (C) 2003 by Tim Potter <tpot@samba.org>
-# 
+#
 # This program is free software; you can redistribute it and/or
-# modify it under the terms of the GNU General Public License as
-# published by the Free Software Foundation; either version 2 of the
-# License, or (at your option) any later version.
-# 
-# This program is distributed in the hope that it will be useful, but
-# WITHOUT ANY WARRANTY; without even the implied warranty of
-# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
-# General Public License for more details.
-# 
+# modify it under the terms of the GNU General Public License
+# as published by the Free Software Foundation; either version 2
+# of the License, or (at your option) any later version.
+#
+# This program is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
+#
 # You should have received a copy of the GNU General Public License
 # along with this program; if not, write to the Free Software
-# Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA 02111-1307
-# USA
+# Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301,
+# USA.
 
 """comfychair: a Python-based instrument of software torture.
 
@@ -31,7 +31,7 @@ For more information, see the file README.comfychair.
 To run a test suite based on ComfyChair, just run it as a program.
 """
 
-import sys, re
+import sys, re, shutil
 
 
 class TestCase:
@@ -55,13 +55,13 @@ class TestCase:
         self.basedir = os.getcwd()
         self.add_cleanup(self._restore_directory)
         self.rundir = os.path.join(self.basedir,
-                                   'testtmp', 
+                                   '_testtmp', 
                                    self.__class__.__name__)
         self.tmpdir = os.path.join(self.rundir, 'tmp')
-        os.system("rm -fr %s" % self.rundir)
+        shutil.rmtree(self.rundir, ignore_errors=1)
         os.makedirs(self.tmpdir)
-        os.system("mkdir -p %s" % self.rundir)
         os.chdir(self.rundir)
+	os.environ['LANG'] = 'C'
 
     def _restore_directory(self):
         import os
@@ -97,6 +97,25 @@ class TestCase:
         """Queue a cleanup to be run when the test is complete."""
         self._cleanups.append(c)
         
+    def apply_cleanups(self, debugger):
+        """Apply cleanup functions and return error code.
+
+        Returns:
+          0 on success; 2 if a KeyboardInterrupt occurs; 1 if any other exception
+          occurs.
+        """
+        while self._cleanups:
+            try:
+                apply(self._cleanups.pop())
+            except KeyboardInterrupt:
+                print "interrupted during cleanups"
+                _report_error(self, debugger)
+                return 2
+            except:
+                print "error during cleanups"
+                _report_error(self, debugger)
+                return 1
+        return 0
 
     def fail(self, reason = ""):
         """Say the test failed."""
@@ -299,6 +318,64 @@ def _report_error(case, debugger):
         debugger(tb)
 
 
+def runtest(testcase_class, ret, verbose=0, debugger=None, subtest=0):
+    """Instantiate test class, run it, and catch and report exceptions.
+
+    Inputs:
+       testcase_class  a class derived from TestCase
+       ret             return status, an integer
+       verbose         an integer (used as boolean)
+       debugger        debugger object to be applied to errors
+       subtest         an integer (used as boolean)
+    Returns:
+       a new return status
+    Raises:
+      KeyboardInterrupt
+
+    If subtest is true, then the ordinary information about the
+    test progress is not printed.  
+    """
+    if not subtest:
+        print "%-30s" % _test_name(testcase_class),
+        def failure_print(message):
+            print message
+    else:
+        def failure_print(message):
+            print '[%s %s]' % (_test_name(testcase_class), message)
+            
+    # flush now so that long running tests are easier to follow
+    sys.stdout.flush()
+
+    obj = None
+    try:
+        try:
+            # run test and sometimes show result
+            obj = testcase_class()
+            obj.setup()
+            obj.runtest()
+            if not subtest:
+                print "OK"
+        except KeyboardInterrupt:
+            failure_print("INTERRUPT")
+            if obj:
+                _report_error(obj, debugger)
+            raise
+        except NotRunError, msg:
+            failure_print("NOTRUN, %s" % msg.value)
+        except:
+            failure_print("FAIL")
+            if obj:
+                _report_error(obj, debugger)
+            return 1
+    finally:
+        if obj:
+            ret = obj.apply_cleanups(debugger) or ret
+    # Display log file if we're verbose
+    if ret == 0 and verbose:
+        obj.explain_failure()
+    return ret
+
+
 def runtests(test_list, verbose = 0, debugger = None):
     """Run a series of tests.
 
@@ -312,46 +389,13 @@ def runtests(test_list, verbose = 0, debugger = None):
     """
     import traceback
     ret = 0
-    for test_class in test_list:
-        print "%-30s" % _test_name(test_class),
-        # flush now so that long running tests are easier to follow
-        sys.stdout.flush()
-
-        obj = None
+    for testcase_class in test_list:
         try:
-            try: # run test and show result
-                obj = test_class()
-                obj.setup()
-                obj.runtest()
-                print "OK"
-            except KeyboardInterrupt:
-                print "INTERRUPT"
-                _report_error(obj, debugger)
-                ret = 2
-                break
-            except NotRunError, msg:
-                print "NOTRUN, %s" % msg.value
-            except:
-                print "FAIL"
-                _report_error(obj, debugger)
-                ret = 1
-        finally:
-            while obj and obj._cleanups:
-                try:
-                    apply(obj._cleanups.pop())
-                except KeyboardInterrupt:
-                    print "interrupted during teardown"
-                    _report_error(obj, debugger)
-                    ret = 2
-                    break
-                except:
-                    print "error during teardown"
-                    _report_error(obj, debugger)
-                    ret = 1
-        # Display log file if we're verbose
-        if ret == 0 and verbose:
-            obj.explain_failure()
-            
+            ret = runtest(testcase_class, ret, verbose=verbose,
+                          debugger=debugger)
+        except KeyboardInterrupt:
+            ret = 2
+            break
     return ret
 
 

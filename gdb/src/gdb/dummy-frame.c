@@ -238,9 +238,7 @@ static const struct frame_unwind dummy_frame_unwinder =
   dummy_frame_sniffer,
 };
 
-const struct frame_unwind *const dummy_frame_unwind = {
-  &dummy_frame_unwinder
-};
+const struct frame_unwind *const dummy_frame_unwind = &dummy_frame_unwinder;
 
 static void
 fprint_dummy_frames (struct ui_file *file)

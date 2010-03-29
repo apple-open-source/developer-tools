@@ -508,7 +508,13 @@ update_current_target (void)
       INHERIT (to_load_solib, t);
       /* APPLE LOCAL allocate memory in inferior */
 	INHERIT (to_allocate_memory, t);
-      INHERIT (to_get_thread_local_address, t);
+      /* APPLE LOCAL complex step support.  */
+      INHERIT (to_keep_going, t);
+      /* APPLE LOCAL target specific inferior_status support.  */
+      INHERIT (to_save_thread_inferior_status, t);
+      INHERIT (to_restore_thread_inferior_status, t);
+      INHERIT (to_free_thread_inferior_status, t);
+      
       INHERIT (to_magic, t);
     }
 #undef INHERIT
@@ -714,8 +720,16 @@ update_current_target (void)
   de_fault (to_allocate_memory, allocate_space_in_inferior_malloc);
   de_fault (to_check_is_objfile_loaded,
            (int (*) (struct objfile *)) return_one);
-  de_fault (to_load_solib,
-	    (void *(*) (char *,int)) return_zero);
+  /* APPLE LOCAL: How to load a shared library.  */
+  de_fault (to_load_solib, (struct value * (*) (char *, char *)) return_zero);
+  /* APPLE LOCAL complex step support.  */
+  de_fault (to_keep_going, (int (*) (CORE_ADDR)) return_zero);
+  
+  /* APPLE LOCAL target specific inferior_status support.  */
+  de_fault (to_save_thread_inferior_status, (void *(*)()) return_zero);
+  de_fault (to_restore_thread_inferior_status, (void (*)(void *)) target_ignore);
+  de_fault (to_free_thread_inferior_status, (void (*)(void *)) target_ignore);
+
   /* APPLE LOCAL end target */
 #undef de_fault
 
@@ -2599,6 +2613,50 @@ debug_load_solib (char *path, char *flags)
 }
 /* APPLE LOCAL end objfile loaded check */
 
+/* APPLE LOCAL complex step support.  */
+static int
+debug_keep_going (CORE_ADDR stop_pc)
+{
+  int retval = debug_target.to_keep_going (stop_pc);
+
+  fprintf_unfiltered (gdb_stdlog, "target_keep_going (0x%s) == %d\n", 
+		      paddr (stop_pc), retval);
+  return retval;
+
+}
+
+/* APPLE LOCAL target specific inferior_status support.  */
+static void *
+debug_save_thread_inferior_status ()
+{
+  void *retval = debug_target.to_save_thread_inferior_status ();
+
+  fprintf_unfiltered (gdb_stdlog, 
+		      "target_save_thread_inferior_status () == %p\n", 
+		      retval);
+  return retval;
+
+}
+static void
+debug_restore_thread_inferior_status (void *p)
+{
+  debug_target.to_restore_thread_inferior_status (p);
+
+  fprintf_unfiltered (gdb_stdlog, 
+		      "target_restore_thread_inferior_status (%p)\n", p);
+
+}
+
+static void
+debug_free_thread_inferior_status (void *p)
+{
+  debug_target.to_free_thread_inferior_status (p);
+
+  fprintf_unfiltered (gdb_stdlog, 
+		      "target_free_thread_inferior_status (%p)\n", p);
+
+}
+
 static void
 setup_target_debug (void)
 {
@@ -2658,6 +2716,10 @@ setup_target_debug (void)
   /* APPLE LOCAL */
   current_target.to_check_is_objfile_loaded = debug_check_is_objfile_loaded;
   current_target.to_load_solib = debug_load_solib;
+  current_target.to_keep_going = debug_keep_going;
+  current_target.to_save_thread_inferior_status = debug_save_thread_inferior_status;
+  current_target.to_restore_thread_inferior_status = debug_restore_thread_inferior_status;
+  current_target.to_free_thread_inferior_status = debug_free_thread_inferior_status;
   current_target.to_rcmd = debug_to_rcmd;
   current_target.to_find_exception_catchpoints 
     = debug_to_find_exception_catchpoints;

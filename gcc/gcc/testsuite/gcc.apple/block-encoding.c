@@ -1,7 +1,8 @@
 /* APPLE LOCAL file radar 5849129 */
 /* Test for encoding of a block pointer as '@'. */
 /* { dg-do compile } */
-/* { dg-options "-mmacosx-version-min=10.5 -ObjC" { target *-*-darwin* } } */
+/* { dg-options "-mmacosx-version-min=10.5 -ObjC" { target powerpc*-*-darwin* i?86*-*-darwin* } } */
+/* { dg-options "-iphoneos-version-min=4.0 -ObjC" { target arm*-*-darwin* } } */
 
 #import <Foundation/Foundation.h>
 

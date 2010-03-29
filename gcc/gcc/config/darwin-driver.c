@@ -143,13 +143,13 @@ darwin_default_min_version (int * argc_p, char *** argv_p,
   }
 
   /* For iPhone OS, if no version number is specified, we default to
-     2.0.  */
+     3.0.  */
   if (vers_type == DARWIN_VERSION_IPHONEOS)
     {
       ++*argc_p;
       *argv_p = xmalloc (sizeof (char *) * *argc_p);
       (*argv_p)[0] = argv[0];
-      (*argv_p)[1] = xstrdup ("-miphoneos-version-min=2.0");
+      (*argv_p)[1] = xstrdup ("-miphoneos-version-min=3.0");
       memcpy (*argv_p + 2, argv + 1, (argc - 1) * sizeof (char *));
       return;
     }

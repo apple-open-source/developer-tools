@@ -2,16 +2,16 @@ dnl Process this file with autoconf to produce a configure script
 
 #		"We are ugly but we have the music" 
 #			-- Leonard Cohen
-
+#
 # http://jerkcity.com/jerkcity1335.html
-
 
 # This is the configure script for distcc.
 # Copyright (C) 2002, 2003, 2004 by Martin Pool
 
 # As of 0.6cvs, distcc no longer uses automake, only autoconf.
 AC_PREREQ(2.53)
-AC_INIT(distcc, 2.18.5, [distcc@lists.samba.org])
+AC_INIT(distcc, 3.1-toolwhip.1, distcc@lists.samba.org)
+
 AC_CONFIG_HEADERS(src/config.h)
 AC_CANONICAL_HOST
 
@@ -87,7 +87,37 @@ AC_ARG_WITH(included-popt,
 
 AC_ARG_ENABLE(rfc2553,
 	AC_HELP_STRING([--enable-rfc2553], [use getaddrinfo, getnameinfo, etc]),
-        AC_DEFINE(ENABLE_RFC2553,1,[Use getaddrinfo(), getnameinfo(), etc]))
+        AS_IF([test x"$enableval" = xyes],
+              [AC_DEFINE(ENABLE_RFC2553, 1,
+                         [Use getaddrinfo(), getnameinfo(), etc])]))
+
+xcode_integration_default=no
+case "$host" in
+    *-apple-darwin*)
+        xcode_integration_default=yes
+        ;;
+esac
+
+AC_ARG_ENABLE(xcode-integration,
+              AC_HELP_STRING([--enable-xcode-integration],
+                             [enable Xcode integration ]
+                                 [(default enabled on Mac)]),
+              [],
+              [enable_xcode_integration=$xcode_integration_default])
+
+XCODE_INTEGRATION_COMMON_OBJS=
+XCODE_INTEGRATION_DISTCC_OBJS=
+XCODE_INTEGRATION_DISTCCD_OBJS=
+
+if test x"$enable_xcode_integration" = xyes ; then
+    AC_DEFINE(XCODE_INTEGRATION, 1, [Enable Xcode integration])
+    XCODE_INTEGRATION_COMMON_OBJS="src/xci_utils.o"
+    XCODE_INTEGRATION_DISTCCD_OBJS="src/xci_headermap.o src/xci_versinfo.o src/xci_zeroconf.o"
+fi
+
+AC_SUBST(XCODE_INTEGRATION_COMMON_OBJS)
+AC_SUBST(XCODE_INTEGRATION_DISTCC_OBJS)
+AC_SUBST(XCODE_INTEGRATION_DISTCCD_OBJS)
 
 
 AC_ARG_WITH(gnome,
@@ -115,6 +145,8 @@ then
     CFLAGS="$CFLAGS -pg -g"
 fi
 
+AC_ARG_ENABLE(Werror,
+        AC_HELP_STRING([--disable-Werror], [don't use gcc's -Werror option when building]))
 
 # Now get the package configuration information for whatever packages
 # we need.  It's faster to just do it once during configuration.
@@ -142,6 +174,7 @@ done
 if test x${with_gnome} = xyes -o x${with_gtk} = xyes 
 then
     INSTALL_GNOME="install-gnome-data"
+    UNINSTALL_GNOME="uninstall-gnome-data"
     AC_MSG_CHECKING([GNOME/GTK+ cflags])
     GNOME_CFLAGS="`pkg-config --cflags $GNOME_PACKAGES`" || AC_MSG_ERROR([failed to get cflags])
     AC_MSG_RESULT([${GNOME_CFLAGS}])
@@ -155,21 +188,62 @@ AC_SUBST(GNOME_PACKAGES)
 AC_SUBST(GNOME_CFLAGS)
 AC_SUBST(GNOME_LIBS)
 AC_SUBST(INSTALL_GNOME)
+AC_SUBST(UNINSTALL_GNOME)
 
 dnl Checks for programs
 AC_PROG_CC
-if test x"$GCC" = xyes 
+WERROR_CFLAGS=""
+POPT_CFLAGS=""
+PYTHON_CFLAGS=""
+if test x"$GCC" = xyes
 then
-    CFLAGS="$CFLAGS -W -Wall -Wimplicit \
+    CFLAGS="$CFLAGS -MD \
+-W -Wall -Wimplicit \
 -Wshadow -Wpointer-arith -Wcast-align -Wwrite-strings \
 -Waggregate-return -Wstrict-prototypes -Wmissing-prototypes \
--Wnested-externs -Wconversion -Wpointer-arith -Wmissing-declarations"
+-Wnested-externs -Wmissing-declarations"
+
+    # -Wuninitialized requires -O
+    case "$CFLAGS" in "-O"*|*" -O"*)
+        CFLAGS="$CFLAGS -Wuninitialized"
+        ;;
+    esac
+    # Would like -Wunreachable-code here, but it generates too many false
+    # positives.
+
+    # We want warnings to be treated as errors,
+    # unless the --disable-Werror configure option was used.
+    # Note that we can't include this in CFLAGS,
+    # because that would affect the configure tests,
+    # causing some of the tests to fail when they should succeed.
+    if test x"$enable_Werror" != xno
+    then
+      WERROR_CFLAGS="-Werror"
+    fi
+
+    # Additional flags for compiling Python extension modules.
+    # We disable -Wmissing-prototypes and -Wmissing-declarations,
+    # which don't apply to python extensions (it exports global fns via a
+    # pointer), and -Wwrite-strings, which just had too many false
+    # positives (for Python 2.2, anyway; looks like these may be fixed
+    # in Python 2.5).
+    # -Wp,-U_FORTIFY_SOURCE is to turn off _FORTIFY_SOURCE on systems where
+    # it's in the Python Makefile (and hence inherited by us).
+    # _FORTIFY_SOURCE gives compiler errors for some distcc routines that
+    # ignore the return value from libc functions (like getcwd).
+    # That would cause this code to not compile, which is no good.
+    PYTHON_CFLAGS="-Wno-missing-prototypes -Wno-missing-declarations \
+-Wno-write-strings -Wp,-U_FORTIFY_SOURCE"
+
+    # For popt/*.c, we disable unused variable warnings.
+    POPT_CFLAGS="-Wno-unused"
+
     AC_MSG_NOTICE([Adding gcc options: $CFLAGS])
 fi
+AC_SUBST(WERROR_CFLAGS)
+AC_SUBST(POPT_CFLAGS)
+AC_SUBST(PYTHON_CFLAGS)
 AC_ISC_POSIX
-
-# Would like -Wunreachable-code here, but it generates too many false
-# positives.
 
 
 # Apple's OS X gcc has a cpp-precomp "feature" that breaks standard
@@ -177,6 +251,7 @@ AC_ISC_POSIX
 
 
 # This is needed for our included version of popt.
+# TODO(csilvers): figure out what that above comment means, and if it's true.
 CPPFLAGS="$CPPFLAGS -DHAVE_CONFIG_H"
 
 # Needed to get various GNU-only functions.  They're all autodetected
@@ -187,17 +262,38 @@ CPPFLAGS="$CPPFLAGS -D_GNU_SOURCE"
 AC_PROG_MAKE_SET
 AC_PROG_INSTALL
 
-# TODO: Perhaps try to find a command name that invokes Python2.2, and
-# write that in to the makefile for use in running benchmarks, etc.
-# Perhaps it's reasonable to count on it always being "python2.2", but
-# that will break when we're on to a later version.
-
-AC_CHECK_PROGS(PYTHON, [python2.2 python-2.2 python2.3 python-2.3 python])
-AC_ARG_VAR(PYTHON, [Python interpreter to use for running tests])
+# We prefer to use the latest Python, but try to find an explicit
+# version to make sure we don't get a really old one.
+#
+# The include server requires python 2.4 or later, but the 'make test'
+# routines only require python 2.2.  Thus we have two separate
+# variables.  Each variable is the empty string if the python that we
+# haven't isn't recent enough for that use, or the path to a python
+# executable if it is recent enough.
+#
 # NB: Cannot use AC_CONFIG_LIBOBJ_DIR here, because it's not present
 # in autoconf 2.53.
-
+AC_PATH_PROGS(PYTHON, [python2.5 python-2.5 python2.4 python-2.4 python])
+AC_ARG_VAR(PYTHON, [Python interpreter])
+# Python 1 doesn't even support -V
+if ! "$PYTHON" -V 2>&1 | grep "^Python" >/dev/null; then
+  TEST_PYTHON=""
+  INCLUDESERVER_PYTHON=""
+elif "$PYTHON" -V 2>&1 | grep "^Python 2.1" >/dev/null; then
+  TEST_PYTHON=""
+  INCLUDESERVER_PYTHON=""
+elif "$PYTHON" -V 2>&1 | grep "^Python 2.[[23]]" >/dev/null; then
+  TEST_PYTHON="$PYTHON"
+  INCLUDESERVER_PYTHON=""
+else
+  TEST_PYTHON="$PYTHON"
+  INCLUDESERVER_PYTHON="$PYTHON"
+fi
+AC_SUBST(TEST_PYTHON)
+AC_SUBST(INCLUDESERVER_PYTHON)
+AC_SUBST(PYTHON_RELATIVE_LIB)
 AC_C_INLINE
+AC_C_BIGENDIAN
 
 ########################################################################
 ### Checks for header files
@@ -229,6 +325,8 @@ AC_CHECK_HEADERS([resolv.h], [], [],
 ])
 
 AC_CHECK_HEADERS([float.h mcheck.h alloca.h sys/mman.h sys/loadavg.h])
+AC_CHECK_HEADERS([elf.h])
+AC_CHECK_HEADERS([fnmatch.h])
 
 ######################################################################
 dnl Checks for types
@@ -280,10 +378,11 @@ then
     AC_MSG_RESULT($srcdir/popt)
     # popt_OBJS gets appended to distccd object list
     BUILD_POPT='$(popt_OBJS)'
-    CPPFLAGS="$CPPFLAGS -I$srcdir/popt"
+    POPT_INCLUDES='-I"$(srcdir)/popt"'
 else
     LIBS="$LIBS -lpopt"
     AC_MSG_RESULT(no)
+    POPT_INCLUDES=''
 fi
 
 
@@ -295,14 +394,23 @@ AC_TYPE_SIGNAL
 
 ########################################################################
 # Checks for library functions, using libraries discovered above
-CPPFLAGS="$CPPFLAGS -I$srcdir/src"
 
+# The line below was commented out: it should not be necessary for the
+# AC_CHECK_FUNCS, which link against libraries on the host. For the subsequent
+# explicit compilation tests below, no distcc libraries are used.
+# TODO(klarlund): remove the line.
+
+# CPPFLAGS="$CPPFLAGS -I$srcdir/src"
+
+AC_CHECK_FUNCS([getpagesize])
 AC_CHECK_FUNCS([sendfile setsid flock lockf hstrerror strerror setuid setreuid])
-AC_CHECK_FUNCS([getuid geteuid mcheck wait4 wait3 waitpid setgroups getcwd])
-AC_CHECK_FUNCS([snprintf vsnprintf vasprintf asprintf getcwd getwd])
+AC_CHECK_FUNCS([getuid geteuid mcheck wait4 wait3 waitpid setgroups])
+AC_CHECK_FUNCS([snprintf vsnprintf vasprintf asprintf getcwd getwd mkdtemp])
 AC_CHECK_FUNCS([getrusage strsignal gettimeofday])
 AC_CHECK_FUNCS([getaddrinfo getnameinfo inet_ntop inet_ntoa])
-AC_CHECK_FUNCS([strndup mmap strlcpy])
+AC_CHECK_FUNCS([strndup strsep mmap strlcpy])
+
+AC_CHECK_FUNCS([getloadavg])
 
 AC_CHECK_DECLS([snprintf, vsnprintf, vasprintf, asprintf, strndup])
 
@@ -333,12 +441,19 @@ AC_TRY_COMPILE([#define func(a, b...) do { } while (0)],
  AC_DEFINE(HAVE_VARARG_MACROS, , [Define if your cpp has vararg macros])],
 [AC_MSG_RESULT(no)])
 
-AC_CACHE_CHECK([for __va_copy],samba_cv_HAVE_VA_COPY,[
+AC_CACHE_CHECK([for va_copy],dcc_cv_HAVE_VA_COPY,[
+AC_TRY_LINK([#include <stdarg.h>
+va_list ap1,ap2;], [va_copy(ap1,ap2);],
+dcc_cv_HAVE_VA_COPY=yes,dcc_cv_HAVE_VA_COPY=no)])
+if test x"$dcc_cv_HAVE_VA_COPY" = x"yes"; then
+    AC_DEFINE(HAVE_VA_COPY,1,[Whether va_copy() is available])
+fi
+AC_CACHE_CHECK([for __va_copy],dcc_cv_HAVE_UNDERSCORE_UNDERSCORE_VA_COPY,[
 AC_TRY_LINK([#include <stdarg.h>
 va_list ap1,ap2;], [__va_copy(ap1,ap2);],
-samba_cv_HAVE_VA_COPY=yes,samba_cv_HAVE_VA_COPY=no)])
-if test x"$samba_cv_HAVE_VA_COPY" = x"yes"; then
-    AC_DEFINE(HAVE_VA_COPY,1,[Whether __va_copy() is available])
+dcc_cv_HAVE_UNDERSCORE_UNDERSCORE_VA_COPY=yes,dcc_cv_HAVE_UNDERSCORE_UNDERSCORE_VA_COPY=no)])
+if test x"$dcc_cv_HAVE_UNDERSCORE_UNDERSCORE_VA_COPY" = x"yes"; then
+    AC_DEFINE(HAVE_UNDERSCORE_UNDERSCORE_VA_COPY,1,[Whether __va_copy() is available])
 fi
 
 AC_CACHE_CHECK([for C99 vsnprintf],rsync_cv_HAVE_C99_VSNPRINTF,[
@@ -386,17 +501,71 @@ AC_CHECK_MEMBER([struct sockaddr_storage.ss_family],
     AC_DEFINE(HAVE_SOCKADDR_STORAGE, 1, [define if you have struct sockaddr_storage]),,
     [#include <sys/socket.h>])
 
+AC_ARG_WITH(avahi,
+        AC_HELP_STRING([--without-avahi], [build without avahi]))
+
+dnl check for avahi
+have_avahi=no
+if test x"$with_avahi" != xno; then
+    PKG_CHECK_MODULES(AVAHI, [avahi-client >= 0.6],
+    [AC_DEFINE(HAVE_AVAHI, 1, [defined if Avahi is available])
+    have_avahi=yes
+    CFLAGS="$CFLAGS $AVAHI_CFLAGS"
+    LIBS="$LIBS $AVAHI_LIBS"
+    ZEROCONF_COMMON_OBJS="src/zeroconf.o src/gcc-id.o"
+    ZEROCONF_DISTCC_OBJS=""
+    ZEROCONF_DISTCCD_OBJS="src/zeroconf-reg.o"],
+    [ZEROCONF_COMMON_OBJS=""
+    ZEROCONF_DISTCC_OBJS=""
+    ZEROCONF_DISTCCD_OBJS=""])
+    AC_SUBST(ZEROCONF_COMMON_OBJS)
+    AC_SUBST(ZEROCONF_DISTCC_OBJS)
+    AC_SUBST(ZEROCONF_DISTCCD_OBJS)
+fi
+
+dnl Check for dns_sd if Avahi is not present and Xcode integration is desired
+if test x"$have_avahi" = xno && test x"$enable_xcode_integration" = xyes ; then
+    AC_CHECK_HEADER(dns_sd.h,
+        [AC_SEARCH_LIBS(DNSServiceRegister, [dns_sd],
+            [AC_DEFINE(HAVE_DNSSD, 1, [Defined to use Bonjour DNS_SD])])])
+fi
+
+ACX_PTHREAD
+LIBS="$PTHREAD_LIBS $LIBS"
+CFLAGS="$CFLAGS $PTHREAD_CFLAGS"
+CC="$PTHREAD_CC"
+
+# PYTHON_SETUP_CFLAGS is the version of CFLAGS passed to the Python setup.py
+# script when building the include server.  -MD is removed from CFLAGS if
+# present on Macs because setup.py insists on providing multiple -arch
+# options, and multiple -arch options are incompatible with -MD.  Since
+# the include_server build is driven by setup.py and the Python distutils
+# module, and not by this Makefile, the dependency information generated by
+# -MD would not be used even if generated.
+case "$host" in
+    *-apple-darwin*)
+        PYTHON_SETUP_CFLAGS=`echo "$CFLAGS" | sed -e s/-MD//g`
+        ;;
+    *)
+        PYTHON_SETUP_CFLAGS="$CFLAGS"
+        ;;
+esac
+
 dnl ##### Output
 AC_SUBST(docdir)
 AC_SUBST(CFLAGS)
 AC_SUBST(LDFLAGS)
 AC_SUBST(CPPFLAGS)
+AC_SUBST(POPT_INCLUDES)
 AC_SUBST(BUILD_POPT)
 AC_SUBST(GNOME_BIN)
-dnl AC_DEFINE_UNQUOTED(PACKAGE, $PACKAGE, [Package name])
-dnl AC_DEFINE_UNQUOTED(VERSION, $VERSION, [Package version])
+AC_SUBST(PYTHON_SETUP_CFLAGS)
 AC_DEFINE_UNQUOTED(GNU_HOST, ["$host"], [Your gnu-style host triple])
-AC_OUTPUT([Makefile] popt/.stamp-conf lzo/.stamp-conf )
+# The '.stamp-conf' files force creation of the containing directories in the
+# build tree.
+AC_CONFIG_FILES([Makefile] popt/.stamp-conf lzo/.stamp-conf)
+AC_CONFIG_FILES([pump], [chmod +x pump])
+AC_OUTPUT
 
 
 ##### Finalization
@@ -410,22 +579,22 @@ cat <<EOF
     $PACKAGE_NAME $PACKAGE_VERSION configured
 
     Copyright (C) 2002, 2003, 2004 by Martin Pool <mbp@samba.org>
+    Portions Copyright 2005 Google Inc.
 
-    This program is free software; you can redistribute it and/or modify
-    it under the terms of the GNU General Public License as published by
-    the Free Software Foundation; either version 2 of the License, or
-    (at your option) any later version.  Unauthorized redistribution is 
-    prohibited by law.
-
+    This program is free software; you can redistribute it and/or
+    modify it under the terms of the GNU General Public License
+    as published by the Free Software Foundation; either version 2
+    of the License, or (at your option) any later version.
+    
     This program is distributed in the hope that it will be useful,
     but WITHOUT ANY WARRANTY; without even the implied warranty of
     MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
     GNU General Public License for more details.
-
+    
     You should have received a copy of the GNU General Public License
     along with this program; if not, write to the Free Software
-    Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
-
+    Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301,
+    USA.
 
 After installing distcc, please complete the survey in the file "survey.txt".
 

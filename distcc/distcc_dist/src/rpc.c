@@ -1,33 +1,34 @@
-/* -*- c-file-style: "java"; indent-tabs-mode: nil; fill-column: 78 -*-
- * 
+/* -*- c-file-style: "java"; indent-tabs-mode: nil; tab-width: 4; fill-column: 78 -*-
+ *
  * distcc -- A simple distributed compiler system
  *
  * Copyright (C) 2002, 2003 by Martin Pool <mbp@samba.org>
+ * Copyright 2007 Google Inc.
  *
  * This program is free software; you can redistribute it and/or
- * modify it under the terms of the GNU General Public License as
- * published by the Free Software Foundation; either version 2 of the
- * License, or (at your option) any later version.
+ * modify it under the terms of the GNU General Public License
+ * as published by the Free Software Foundation; either version 2
+ * of the License, or (at your option) any later version.
  *
- * This program is distributed in the hope that it will be useful, but
- * WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
- * General Public License for more details.
- * 
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ *
  * You should have received a copy of the GNU General Public License
  * along with this program; if not, write to the Free Software
- * Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA 02111-1307
- * USA
+ * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301,
+ * USA.
  */
 
 
-			/* 15 Every one that is found shall be thrust
-			 * through; and every one that is joined unto
-			 * them shall fall by the sword.
-			 *		-- Isaiah 13 */
+            /* 15 Every one that is found shall be thrust
+             * through; and every one that is joined unto
+             * them shall fall by the sword.
+             *        -- Isaiah 13 */
 
 
-#include "config.h"
+#include <config.h>
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -53,7 +54,7 @@
  * little packets each containing a 4-byte ascii token, an 8-byte hex
  * value or length, and optionally data corresponding to the length.
  *
- * 'x' means transmit, and 'r' means receive. 
+ * 'x' means transmit, and 'r' means receive.
  *
  * This builds on top of io.c and is called by the various routines
  * that handle communication.
@@ -120,9 +121,9 @@ int dcc_r_token(int ifd, char *buf)
  * some other network problem.  Whatever's happened, a bit more debugging
  * information would be handy.
  **/
-static int dcc_explain_mismatch(const char *buf,
-                                size_t buflen,
-                                int ifd)
+int dcc_explain_mismatch(const char *buf,
+                         size_t buflen,
+                         int ifd)
 {
     ssize_t ret;
     char extrabuf[200];
@@ -130,7 +131,7 @@ static int dcc_explain_mismatch(const char *buf,
     size_t l;
 
     memcpy(extrabuf, buf, buflen);
-    
+
     /* Read a bit more context, and find the printable prefix. */
     ret = read(ifd, extrabuf + buflen, sizeof extrabuf - 1 - buflen);
     if (ret == -1) {
@@ -145,7 +146,7 @@ static int dcc_explain_mismatch(const char *buf,
             *p = '\0';
             break;
         }
-    
+
     rs_log_error("error context: \"%s\"", extrabuf);
 
     return 0;                   /* i just feel really sad... */
@@ -165,7 +166,7 @@ int dcc_r_token_int(int ifd, const char *expected, unsigned *val)
 {
     char buf[13], *bum;
     int ret;
-    
+
     if (strlen(expected) != 4) {
         rs_log_error("expected token \"%s\" seems wrong", expected);
         return EXIT_PROTOCOL_ERROR;
@@ -176,7 +177,7 @@ int dcc_r_token_int(int ifd, const char *expected, unsigned *val)
                     expected);
         return ret;
     }
-    
+
     if (memcmp(buf, expected, 4)) {
         rs_log_error("protocol derailment: expected token \"%s\"", expected);
         dcc_explain_mismatch(buf, 12, ifd);
@@ -187,7 +188,7 @@ int dcc_r_token_int(int ifd, const char *expected, unsigned *val)
 
     *val = strtoul(&buf[4], &bum, 16);
     if (bum != &buf[12]) {
-        rs_log_error("failed to parse parameter of token \"%s\"", 
+        rs_log_error("failed to parse parameter of token \"%s\"",
                      expected);
         dcc_explain_mismatch(buf, 12, ifd);
         return EXIT_PROTOCOL_ERROR;
@@ -198,7 +199,42 @@ int dcc_r_token_int(int ifd, const char *expected, unsigned *val)
     return 0;
 }
 
+/**
+ * Read a token and value.  Fill in both token and value;
+ * unlike dcc_r_token_int this is for the case when we do not know what
+ * the next token will be.
+ *
+ * @param ifd      fd to read from
+ * @param token    receives the 4-char token
+ * @param val      receives the parameter value
+ **/
+int dcc_r_sometoken_int(int ifd, char *token, unsigned *val)
+{
+    char buf[13], *bum;
+    int ret;
 
+    if ((ret = dcc_readx(ifd, buf, 12))) {
+        rs_log_error("read failed while waiting for some token");
+        return ret;
+    }
+
+    strncpy(token, buf, 4);
+    token[4] = '\0';
+
+    buf[12] = '\0';             /* terminate */
+
+    *val = strtoul(&buf[4], &bum, 16);
+    if (bum != &buf[12]) {
+        rs_log_error("failed to parse parameter of token \"%s\"",
+                     token);
+        dcc_explain_mismatch(buf, 12, ifd);
+        return EXIT_PROTOCOL_ERROR;
+    }
+
+    rs_trace("got %s", buf);
+
+    return 0;
+}
 
 /**
  * Read a byte string of length @p l into a newly allocated buffer, returned in @p buf.
@@ -246,7 +282,7 @@ int dcc_x_token_string(int fd,
         return ret;
     if ((ret = dcc_writex(fd, buf, len)))
         return ret;
-
+    rs_trace("send string '%s'", buf);
     return 0;
 }
 
@@ -256,12 +292,52 @@ int dcc_r_token_string(int ifd, const char *expect_token,
 {
     unsigned a_len;
     int ret;
-        
+
     if ((ret = dcc_r_token_int(ifd, expect_token, &a_len)))
         return ret;
 
     if ((ret = dcc_r_str_alloc(ifd, a_len, p_str)))
         return ret;
-    
+
+    rs_trace("got '%s'", *p_str);
+
+    return 0;
+}
+
+/**
+ * Read an argv[] vector from the network.
+ **/
+int dcc_r_argv(int ifd, /*@out@*/ char ***argv)
+{
+    unsigned i;
+    unsigned argc;
+    char **a;
+    int ret;
+
+    *argv = NULL;
+
+    if (dcc_r_token_int(ifd, "ARGC", &argc))
+        return EXIT_PROTOCOL_ERROR;
+
+    rs_trace("reading %d arguments from job submission", argc);
+
+    /* Have to make the argv one element too long, so that it can be
+     * terminated by a null element. */
+    *argv = a = (char **) calloc((size_t) argc+1, sizeof a[0]);
+    if (a == NULL) {
+        rs_log_error("alloc failed");
+        return EXIT_OUT_OF_MEMORY;
+    }
+    a[argc] = NULL;
+
+    for (i = 0; i < argc; i++) {
+        if ((ret = dcc_r_token_string(ifd, "ARGV", &a[i])))
+            return ret;
+
+        rs_trace("argv[%d] = \"%s\"", i, a[i]);
+    }
+
+    dcc_trace_argv("got arguments", a);
+
     return 0;
 }

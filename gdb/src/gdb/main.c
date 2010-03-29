@@ -81,8 +81,6 @@ struct ui_file *gdb_stdtargerr;
 
 /* Whether to enable writing into executable and core files */
 extern int write_files;
-/* APPLE LOCAL: Set the osabi via option.  */
-void set_osabi_option (const char *osabi_str);
 
 static void print_gdb_help (struct ui_file *);
 
@@ -768,21 +766,51 @@ extern int gdbtk_test (char *);
 	  arch_string = "arm";
 	  osabi_string = "Darwin";
 	}
-      else if (strcmp (initial_arch, "armv6") == 0)
+      else if (strstr (initial_arch, "armv4") == initial_arch)
+	{
+	  arch_string = "armv4t";
+	  osabi_string = "Darwin";
+	}
+      else if (strstr (initial_arch, "armv6") == initial_arch)
 	{
 	  arch_string = "armv6";
 	  osabi_string = "DarwinV6";
 	}
+      else if (strstr (initial_arch, "armv7") == initial_arch)
+	{
+	  arch_string = "armv7";
+	  osabi_string = "DarwinV7";
+	}
       else
 	warning ("invalid argument \"%s\" for \"--arch\", should be one of "
-		 "\"armv\" or \"armv6\"\n", initial_arch);
+		 "\"arm\", \"armv4*\", \"armv6*\", or \"armv7*\"\n", 
+		 initial_arch);
 #endif
       if (arch_string != NULL)
 	{
 	  set_architecture_from_string (arch_string);
 	  set_osabi_from_string (osabi_string);
 	}
+      else
+	{
+#if defined (TARGET_ARM) && defined (NM_NEXTSTEP)
+	  /* Always set the OSABI so we are sure to pick up the right slices 
+	     for ARM.  */
+	  extern enum gdb_osabi arm_set_osabi_from_host_info ();
+	  arm_set_osabi_from_host_info ();
+#endif	
     }
+    }
+#if defined (TARGET_ARM) && defined (NM_NEXTSTEP)
+  else
+    {
+      /* Always set the OSABI so we are sure to pick up the right slices 
+         for ARM.  */
+      extern enum gdb_osabi arm_set_osabi_from_host_info ();
+      arm_set_osabi_from_host_info ();
+    }
+#endif	
+
 #else
   warning ("--arch option not supported in this gdb.");
 #endif

@@ -121,4 +121,7 @@ extern void (*after_char_processing_hook) (void);
 
 extern void cli_command_loop (void *data);
 
+/* APPLE LOCAL - Inform users about debugging optimized code  */
+extern void adjust_prompts_for_optimized_code (void);
+
 #endif

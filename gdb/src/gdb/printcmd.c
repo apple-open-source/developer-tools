@@ -283,6 +283,11 @@ decode_format (char **string_ptr, int oformat, int osize)
 	/* Characters default to one byte.  */
 	val.size = osize ? 'b' : osize;
 	break;
+      case 'i':
+	/* Instructions default to one byte, and we don't remember any old
+           values.  */
+	val.size = 'b';
+	break;
       default:
 	/* The default is the size most recently specified.  */
 	val.size = osize;
@@ -296,7 +301,7 @@ decode_format (char **string_ptr, int oformat, int osize)
    0 means print VAL according to its own type.
    SIZE is the letter for the size of datum being printed.
    This is used to pad hex numbers so they line up.  */
-
+char g_examine_i_size = 'b';
 static void
 print_formatted (struct value *val, int format, int size,
 		 struct ui_file *stream)
@@ -334,10 +339,18 @@ print_formatted (struct value *val, int format, int size,
          now do use _filtered, so I guess it's obsolete.
          --Yes, it does filter now, and so this is obsolete.  -JB  */
 
+      /* APPLE LOCAL: set a global to allow print_insn() functions to do 
+         something different if a different size is specified. The default
+         value is 'b' when no size is specified with the instruction format.  */
+      g_examine_i_size = size;
+
       /* We often wrap here if there are long symbolic names.  */
       wrap_here ("    ");
       next_address = VALUE_ADDRESS (val)
 	+ gdb_print_insn (VALUE_ADDRESS (val), stream);
+      /* APPLE LOCAL: reset a global to byte so print_insn() functions can do
+         what they normally do when printing/disassembling.  */
+      g_examine_i_size = 'b';
       break;
 
     default:
@@ -868,9 +881,9 @@ do_examine (struct format_data fmt, CORE_ADDR addr)
   count = fmt.count;
   next_address = addr;
 
-  /* String or instruction format implies fetch single bytes
-     regardless of the specified size.  */
-  if (format == 's' || format == 'i')
+  /* String format implies fetch single bytes regardless of the specified
+     size.  */
+  if (format == 's') /* APPLE LOCAL: permit 'i' to have custom size.  */
     size = 'b';
   /* APPLE LOCAL: OSType formatting */
   if (format == 'T')
@@ -1430,7 +1443,7 @@ x_command (char *exp, int from_tty)
          pointers to functions.  This makes "x/i main" work.  */
       if (/* last_format == 'i'  && */ 
 	  TYPE_CODE (value_type (val)) == TYPE_CODE_FUNC
-	   && VALUE_LVAL (val) == lval_memory)
+	  && VALUE_LVAL (val) == lval_memory)
 	next_address = VALUE_ADDRESS (val);
       else
 	next_address = value_as_address (val);

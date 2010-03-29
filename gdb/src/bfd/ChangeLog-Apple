@@ -1,7 +1,17 @@
-2009-06-16  Caroline Tice  <ctice@apple.com>
+2008-07-01  Greg Clayton  <gclayton@apple.com>
 
-        * configure.host (HDEFINES):   Add -D_DARWIN_UNLIMITED_STREAMS to
-        HDEFINES apple-darwin systems.
+	* archures.c: Added bfd_mach_arm_7.
+	* bfd-in2.h: Ditto.
+	* cpu-arm.c (arch_info_struct): Added armv7 arch info.
+	(architectures): Ditto.
+	* mach-o.c (bfd_mach_o_convert_architecture): Added armv7 subtype
+	support.
+	* mach-o.h (bfd_mach_o_cpu_subtype): Ditto.
+
+2009-06-05  Caroline Tice  <ctice@apple.com>
+
+	* configure.host (HDEFINES):   Add -D_DARWIN_UNLIMITED_STREAMS to
+	HDEFINES apple-darwin systems.
 
 2009-01-26  Jim Ingham  <jingham@apple.com>
 

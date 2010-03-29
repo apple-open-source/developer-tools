@@ -138,9 +138,6 @@ void (*window_hook) (FILE *, char *);
 int epoch_interface;
 int xgdb_verbose;
 
-/* gdb prints this when reading a command interactively */
-static char *gdb_prompt_string;	/* the global prompt string */
-
 /* Buffer used for reading command lines, and the size
    allocated for it so far.  */
 
@@ -193,9 +190,6 @@ int remote_debug = 0;
    breakpoint, for instance. This is a real indicator whether the
    target is off and running, which gdb is doing something else. */
 int target_executing = 0;
-
-/* Level of control structure.  */
-static int control_level;
 
 /* APPLE LOCAL begin gdb_quitting */
 /* Non-zero means gdb is quitting - some parts of gdb, for instance

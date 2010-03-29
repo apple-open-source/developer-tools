@@ -112,6 +112,10 @@ void _initialize_infrun (void);
 int inferior_ignoring_startup_exec_events = 0;
 int inferior_ignoring_leading_exec_events = 0;
 
+/* APPLE LOCAL begin Inform users about debugging optimized code  */
+int currently_inside_optimized_code = 0;
+/* APPLE LOCAL end Inform users about debugging optimized code  */
+
 /* When set, stop the 'step' command if we enter a function which has
    no line number information.  The normal behavior is that we step
    over such function.  */
@@ -986,9 +990,14 @@ proceed (CORE_ADDR addr, enum target_signal siggnal, int step)
     }
 
   if (debug_infrun)
-    fprintf_unfiltered (gdb_stdlog,
-			"infrun: proceed (addr=0x%s, signal=%d, step=%d)\n",
-			paddr_nz (addr), siggnal, step);
+    {
+      char *name;
+      if (!find_pc_partial_function_no_inlined (addr, &name, NULL, NULL))
+	name = "<unknown>";
+      fprintf_unfiltered (gdb_stdlog,
+			  "infrun: proceed (addr=0x%s, function=%s signal=%d, step=%d)\n",
+			  paddr_nz (addr), name, siggnal, step);
+    }
 
   /* In a multi-threaded task we may select another thread
      and then continue or step.
@@ -1181,8 +1190,6 @@ struct execution_control_state
   enum infwait_states infwait_state;
   ptid_t waiton_ptid;
   int wait_some_more;
-  /* APPLE LOCAL: Arm switch jumptable hackery.  */
-  int stepping_through_switch_glue;
 };
 
 void init_execution_control_state (struct execution_control_state *ecs);
@@ -1348,8 +1355,6 @@ init_execution_control_state (struct execution_control_state *ecs)
   /* APPLE LOCAL: Set code to -1 - means nothing interesting here.  */
   ecs->ws.code = -1;
   ecs->wp = &(ecs->ws);
-  /* APPLE LOCAL: Start off with 0  */
-  ecs->stepping_through_switch_glue = 0;
 }
 
 /* Return the cached copy of the last pid/waitstatus returned by
@@ -2260,7 +2265,7 @@ process_event_stop_test:
 	  target_terminal_ours_for_output ();
 	  print_stop_reason (SIGNAL_RECEIVED, stop_signal);
 	  /* APPLE LOCAL begin extra stop info */
-#ifdef NM_NEXTSTEP
+#ifdef TM_NEXTSTEP
 	  /* We have more interesting info on the target
 	     side to print here.  If you want to do this correctly,
 	     you would change print_stop_reason to take the full
@@ -2657,25 +2662,19 @@ extern void macosx_print_extra_stop_info (int, CORE_ADDR);
      test for stepping.  But, if not stepping,
      do not stop.  */
 
-  /* If we are currently stepping through the glue that implements
-     switch then keep going till we're out.  */
+  /* APPLE LOCAL: complex step support. Check if the target to see if it 
+     needs to keep going.  */
 
-#ifdef IN_SWITCH_GLUE
-  if (ecs->stepping_through_switch_glue)
+  if (target_keep_going(stop_pc))
     {
-      if (IN_SWITCH_GLUE (stop_pc))
-	{
 	  if (debug_infrun)
-	    fprintf_unfiltered (gdb_stdlog, "infrun: stepping through switch glue at %s.\n",
+	fprintf_unfiltered (gdb_stdlog, 
+			    "infrun: target_keep_going (%s) returned true.\n",
 				paddr_nz (stop_pc));
 	  ecs->another_trap = 1;
 	  keep_going (ecs);
 	  return;
 	}
-      else
-	ecs->stepping_through_switch_glue = 0;
-    }
-#endif /* IN_SWITCH_GLUE */
 
   /* Are we stepping to get the inferior out of the dynamic linker's
      hook (and possibly the dld itself) after catching a shlib
@@ -2893,18 +2892,6 @@ extern void macosx_print_extra_stop_info (int, CORE_ADDR);
       if (debug_infrun)
 	 fprintf_unfiltered (gdb_stdlog, "infrun: stepped into subroutine\n");
 
-#ifdef IN_SWITCH_GLUE
-      if (IN_SWITCH_GLUE (stop_pc))
-	{
-	  ecs->stepping_through_switch_glue = 1;
-	  if (debug_infrun)
-	    fprintf_unfiltered (gdb_stdlog, "infrun: stepped into switch glue at %s.\n",
-				paddr_nz (stop_pc));
-	  ecs->another_trap = 1;
-	  keep_going (ecs);
-	  return;
-	}
-#endif
       if ((step_over_calls == STEP_OVER_NONE)
 	  || ((step_range_end == 1)
 	      && in_prologue (prev_pc, ecs->stop_func_start)))
@@ -3529,7 +3516,7 @@ prepare_to_wait (struct execution_control_state *ecs)
 static void
 print_stop_reason (enum inferior_stop_reason stop_reason, int stop_info)
 {
-  struct cleanup *notify_cleanup;
+  struct cleanup *notify_cleanup = NULL;
 
   switch (stop_reason)
     {
@@ -3957,6 +3944,18 @@ done:
       maybe_create_checkpoint ();
   }
   /* APPLE LOCAL end checkpoints */
+
+  /* APPLE LOCAL begin Inform users about debugging optimized code  */
+  if (dwarf2_inform_debugging_optimized_code)
+  {
+    struct symbol *func_sym = find_pc_function (stop_pc);
+
+    if (func_sym)
+      currently_inside_optimized_code = TYPE_OPTIMIZED (SYMBOL_TYPE (func_sym));
+    else
+      currently_inside_optimized_code = 0;
+  }
+  /* APPLE LOCAL end Inform users about debugging optimzied code  */
 }
 
 /* APPLE LOCAL: Sometimes we don't want to
@@ -4432,6 +4431,9 @@ struct inferior_status
   int breakpoint_proceeded;
   int restore_stack_info;
   int proceed_to_finish;
+
+  /* APPLE LOCAL target specific inferior_status support.  */
+  void *tdep_inferior_status;
 };
 
 void
@@ -4491,6 +4493,9 @@ save_inferior_status (int restore_stack_info)
   /* APPLE LOCAL subroutine inlining  */
   inlined_subroutine_save_before_dummy_call ();
 
+  /* APPLE LOCAL target specific inferior_status support.  */
+  inf_status->tdep_inferior_status = target_save_thread_inferior_status ();
+  
   return inf_status;
 }
 
@@ -4577,6 +4582,12 @@ restore_inferior_status (struct inferior_status *inf_status)
 
     }
 
+  /* APPLE LOCAL target specific inferior_status support.  */
+  if (inf_status->tdep_inferior_status != NULL)
+    {
+      target_restore_thread_inferior_status (inf_status->tdep_inferior_status);
+      target_free_thread_inferior_status (inf_status->tdep_inferior_status);
+    }
   xfree (inf_status);
 }
 
@@ -4599,6 +4610,9 @@ discard_inferior_status (struct inferior_status *inf_status)
   bpstat_clear (&inf_status->stop_bpstat);
   regcache_xfree (inf_status->registers);
   regcache_xfree (inf_status->stop_registers);
+  /* APPLE LOCAL target specific inferior_status support.  */
+  if (inf_status->tdep_inferior_status != NULL)
+    target_free_thread_inferior_status (inf_status->tdep_inferior_status);
   xfree (inf_status);
 }
 

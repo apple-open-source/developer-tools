@@ -469,10 +469,12 @@ struct gcc_target
   /* Fold a target-specific builtin.  */
   tree (* fold_builtin) (tree fndecl, tree arglist, bool ignore);
 
-  /* For a vendor-specific fundamental TYPE, return a pointer to
-     a statically-allocated string containing the C++ mangling for
-     TYPE.  In all other cases, return NULL.  */
-  const char * (* mangle_fundamental_type) (tree type);
+  /* APPLE LOCAL begin mangle_type 7105099 */
+  /* For a vendor-specific TYPE, return a pointer to a statically-allocated
+     string containing the C++ mangling for TYPE.  In all other cases, return
+     NULL.  */
+  const char * (* mangle_type) (tree type);
+  /* APPLE LOCAL end mangle_type 7105099 */
 
   /* Make any adjustments to libfunc names needed for this target.  */
   void (* init_libfuncs) (void);

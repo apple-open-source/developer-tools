@@ -24,9 +24,52 @@ LIB2FUNCS_EXTRA = $(srcdir)/config/arm/_fixdfdi.c \
 	$(srcdir)/config/arm/_fixunssfdi.c 
 # APPLE LOCAL end 5316398 improved float/double -> int64 functions
 
-MULTILIB_OPTIONS     = march=armv6k
-MULTILIB_DIRNAMES    = v6
-MULTILIB_EXCEPTIONS  = 
-MULTILIB_MATCHES     =
-TARGET_LIBGCC2_CFLAGS = -fno-inline
+# APPLE LOCAL begin 6611402 configurable multilib architectures
+ifndef ARM_MULTILIB_ARCHS
+ARM_MULTILIB_ARCHS:=armv5 armv6 armv7
+endif
+
+MULTILIB_OPTIONS:=$(shell echo $(strip $(ARM_MULTILIB_ARCHS)) | \
+  sed -e s/armv5/march=armv5tej/ \
+      -e s/armv6/march=armv6k/ \
+      -e s/armv7/march=armv7a/ \
+      -e 's| |/|g')
+MULTILIB_DIRNAMES:=$(shell echo $(ARM_MULTILIB_ARCHS) | sed -e s/arm//g)
+MULTILIB_EXCEPTIONS =
+MULTILIB_MATCHES =
+
+ifneq (,$(findstring armv5,$(ARM_MULTILIB_ARCHS)))
+MULTILIB_MATCHES += \
+  march?armv5tej=march?armv5te \
+  march?armv5tej=mcpu?arm9e \
+  march?armv5tej=mcpu?arm946e-s \
+  march?armv5tej=mcpu?arm966e-s \
+  march?armv5tej=mcpu?arm968e-s \
+  march?armv5tej=mcpu?arm10e \
+  march?armv5tej=mcpu?arm1020e \
+  march?armv5tej=mcpu?arm1022e \
+  march?armv5tej=mcpu?xscale \
+  march?armv5tej=mcpu?iwmmxt \
+  march?armv5tej=mcpu?arm926ej-s \
+  march?armv5tej=mcpu?arm1026ej-s
+endif
+
+ifneq (,$(findstring armv6,$(ARM_MULTILIB_ARCHS)))
+MULTILIB_MATCHES += \
+  march?armv6k=march?armv6zk \
+  march?armv6k=mcpu?arm1176jz-s \
+  march?armv6k=mcpu?arm1176jzf-s \
+  march?armv6k=mcpu?mpcorenovfp \
+  march?armv6k=mcpu?mpcore
+endif
+
+ifneq (,$(findstring armv7,$(ARM_MULTILIB_ARCHS)))
+MULTILIB_MATCHES += \
+  march?armv7a=march?armv7-a \
+  march?armv7a=mcpu?cortex-a8
+endif
+
+# APPLE LOCAL end 6611402 configurable multilib architectures
+# APPLE LOCAL 7442004 Always build multilib libgcc functions ARM mode.
+TARGET_LIBGCC2_CFLAGS = -fno-inline -marm
 

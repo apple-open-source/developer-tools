@@ -113,7 +113,8 @@ foo (int *ip, unsigned int *uip, short int *hp, unsigned short int *uhp,
   scanf ("\0"); /* { dg-warning "embedded" "warning for embedded NUL" } */
   scanf ("%d\0", ip); /* { dg-warning "embedded" "warning for embedded NUL" } */
   scanf ("%d\0%d", ip, ip); /* { dg-warning "embedded|too many" "warning for embedded NUL" } */
-  scanf (NULL); /* { dg-warning "null" "null format string warning" } */
+  /* APPLE LOCAL 6821124 string arg is not non-null */
+  /* removed line */
   scanf ("%"); /* { dg-warning "trailing" "trailing % warning" } */
   scanf ("%d", (int *)0); /* { dg-warning "null" "writing into NULL" } */
 }

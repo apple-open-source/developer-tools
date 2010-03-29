@@ -1,29 +1,29 @@
-/* -*- c-file-style: "java"; indent-tabs-mode: nil; fill-column: 78 -*-
- * 
+/* -*- c-file-style: "java"; indent-tabs-mode: nil; tab-width: 4; fill-column: 78 -*-
+ *
  * distcc -- A simple distributed compiler system
  *
  * Copyright (C) 2003 by Martin Pool <mbp@samba.org>
  *
  * This program is free software; you can redistribute it and/or
- * modify it under the terms of the GNU General Public License as
- * published by the Free Software Foundation; either version 2 of the
- * License, or (at your option) any later version.
+ * modify it under the terms of the GNU General Public License
+ * as published by the Free Software Foundation; either version 2
+ * of the License, or (at your option) any later version.
  *
- * This program is distributed in the hope that it will be useful, but
- * WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
- * General Public License for more details.
- * 
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ *
  * You should have received a copy of the GNU General Public License
  * along with this program; if not, write to the Free Software
- * Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA 02111-1307
- * USA
+ * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301,
+ * USA.
  */
 
 /* Thanks to Dimitri PAPADOPOULOS-ORFANOS for researching many of the methods
  * in this file. */
 
-#include "config.h"
+#include <config.h>
 
 #include <stdio.h>
 #include <string.h>
@@ -52,7 +52,7 @@
 
 int dcc_ncpus(int *ncpus)
 {
-    struct pst_dynamic psd; 
+    struct pst_dynamic psd;
     if (pstat_getdynamic(&psd, sizeof(psd), 1, 0) != -1) {
         *ncpus = psd.psd_proc_cnt;
         return 0;
@@ -88,37 +88,6 @@ char_varying(66) module_name;
           *ncpus = 1;    /* safe guess... */
      else *ncpus = mi.n_user_cpus;
      return 0;
-}
-
-#elif defined(__APPLE__)
-#include <sys/types.h>
-#include <sys/sysctl.h>
-
-int dcc_cpuspeed(unsigned long long *speed)
-{
-    size_t len = sizeof(*speed);
-    if (sysctlbyname("hw.cpufrequency", speed, &len, NULL, 0) == 0)
-        return 0;
-    else {
-        rs_log_error("sysctlbyname(\"hw.cpufrequency\") failed: %s",
-                     strerror(errno));
-        *speed = 1;
-        return EXIT_DISTCC_FAILED;
-    }
-}
-
-
-int dcc_ncpus(int *ncpus)
-{
-    size_t len = sizeof(*ncpus);
-    if (sysctlbyname("hw.logicalcpu_max", ncpus, &len, NULL, 0) == 0)
-        return 0;
-    else {
-        rs_log_error("sysctlbyname(\"hw.logicalcpu_max\") failed: %s",
-                     strerror(errno));
-        *ncpus = 1;
-        return EXIT_DISTCC_FAILED;
-    }
 }
 
 #elif defined(__FreeBSD__) || defined(__OpenBSD__) || defined(__NetBSD__) || defined(__APPLE__) || defined(__bsdi__)
@@ -168,18 +137,78 @@ int dcc_ncpus(int *ncpus)
 #warning "Please port this function"
     *ncpus = -1;                /* unknown */
 #endif
-    
+
     if (*ncpus == -1) {
         rs_log_error("sysconf(_SC_NPROCESSORS_ONLN) failed: %s",
                      strerror(errno));
         *ncpus = 1;
         return EXIT_DISTCC_FAILED;
     } else if (*ncpus == 0) {
-	/* if there are no cpus, what are we running on?  But it has
+    /* if there are no cpus, what are we running on?  But it has
          * apparently been observed to happen on ARM Linux */
-	*ncpus = 1;
+    *ncpus = 1;
     }
 
     return 0;
 }
 #endif
+
+#ifdef XCODE_INTEGRATION
+
+/**
+ * Obtain the CPU speed in Hz.
+ **/
+int dcc_cpuspeed(unsigned long long *speed)
+{
+
+#if defined(__APPLE__)
+
+    size_t len = sizeof(*speed);
+    if (sysctlbyname("hw.cpufrequency", speed, &len, NULL, 0) == 0)
+        return 0;
+
+    rs_log_error("sysctlbyname(\"hw.cpufrequency\") failed: %s",
+                 strerror(errno));
+    *speed = 1;
+    return EXIT_DISTCC_FAILED;
+
+#elif defined(linux)
+
+    /* This fetches the maximum speed for cpu0, on the assumption that all
+     * CPUs in the system are the same speed, and the maximum speed is the
+     * speed that the CPU will run at if needed.  The maximum speed may be
+     * greater than the current speed due to scaling. */
+    FILE *f;
+    long long khz;
+    int rv;
+
+    f = fopen("/sys/devices/system/cpu/cpu0/cpufreq/cpuinfo_max_freq", "r");
+    if (!f) {
+        rs_log_error("open cpuinfo_max_freq failed: %s", strerror(errno));
+        *speed = 1;
+        return EXIT_DISTCC_FAILED;
+    }
+
+    rv = fscanf(f, "%lld", &khz);
+    fclose(f);
+
+    if (rv != 1 || khz <= 0) {
+        rs_log_error("cpuinfo_max_freq makes no sense");
+        *speed = 1;
+        return EXIT_DISTCC_FAILED;
+    }
+
+    *speed = khz * 1000;
+    return 0;
+
+#else /* linux */
+
+#warning "Please port this function"
+    *speed = 1;
+    return EXIT_DISTCC_FAILED;
+
+#endif /* linux */
+
+}
+
+#endif /* XCODE_INTEGRATION */

@@ -61,23 +61,48 @@ enum gdb_regnum {
   ARM_LAST_FP_ARG_REGNUM = ARM_F3_REGNUM,
 
   /* APPLE LOCAL START: Support for VFP.  */
-  /* The "VFP_REGNUM" registers are the VFPv1 register set of 32 
+  /* The "ARM_VFP_REGNUM" registers are the VFPv1 register set of 32 
      32-bit registers that hold either integers or single precision
-     floating point numbers (S0-S31).  */
-  ARM_FIRST_VFP_REGNUM = 26,
-  ARM_LAST_VFP_REGNUM = 57,
-  ARM_FPSCR_REGNUM = 58,
+     floating point numbers (S0-S31), plus the floating point status control
+     register (fpscr).  */
+  ARM_VFP_REGNUM_S0 = 26,
+  ARM_VFP_REGNUM_S31 = 57,
+  ARM_VFP_REGNUM_FPSCR = 58,
 
-  /* The VFP_PSEUDO registers are the "D variants" of the VFPv1 register set;
-     16 64-bit double-precision floating point registers usually referred to as
-     D0-D15.  They overlap with the S0-S31 registers so for instance S0 and S1
-     may occupy the same space as D0.  */
+  /* The "ARM_VFPV1_PSEUDO_REGNUM" registers are any VFPv1 registers that
+     overlap with S0-S31 and FPSCR. Here the D0-D15 registers overlap with
+     S0-S31 and the pseudo numbers are different from VFPv3 as there are more
+     actual registers in VFPv3 (D16 - D31).  */
+  ARM_VFPV1_PSEUDO_REGNUM_D0 = 59,
+  ARM_VFPV1_PSEUDO_REGNUM_D15 = 74,
 
-  ARM_FIRST_VFP_PSEUDO_REGNUM = 59,
-  ARM_LAST_VFP_PSEUDO_REGNUM = 74,
+  /* The "VFPV3_REGNUM" registers are the VFPv3 registers that aren't
+     part of the VFPv1 registers (D16-D31). D0-D15 are numbered as pseudo
+     registers since they ovarlap with S0-S31, so for VFPv3, we only need
+     to define actual register values that do not overlap.   */
+  ARM_VFPV3_REGNUM_D16 = 59,	
+  ARM_VFPV3_REGNUM_D31 = 74,
 
+  /* The "ARM_VFPV3_PSEUDO" registers are the "D variants" of the VFPv1 
+     register set: 16 64-bit double-precision floating point registers D0-D15. 
+     They overlap with the S0-S31 registers (S0 and S1 occupy the same 
+     space as D0), but their pseudo numbers are higher in VFPv3 since they
+     must come after the extra real registers (D16-D31).  */
+
+  ARM_VFPV3_PSEUDO_REGNUM_D0 = 75,
+  ARM_VFPV3_PSEUDO_REGNUM_D15 = 90,
+
+  /* The SIMD_PSEUDO registers are the quadword registers of the SIMD register
+     set: 16 128-bit quadword registers registers referred to as Q0-Q15. The 
+     Q0-Q7 registers overlap with the S0-S31 / D0-D15, and the Q8-Q15 
+     registers overlap with the D16-D31 registers.  */
+
+  ARM_SIMD_PSEUDO_REGNUM_Q0 = 91,
+  ARM_SIMD_PSEUDO_REGNUM_Q15 = 106,
+  
   ARM_NUM_VFP_ARG_REGS = 4,
-  ARM_NUM_VFP_PSEUDO_REGS = 16
+  ARM_NUM_VFPV1_PSEUDO_REGS = 16,
+  ARM_NUM_VFPV3_PSEUDO_REGS = 32
   /* APPLE LOCAL END: Support for VFP. */
 };
 
@@ -111,6 +136,8 @@ enum gdb_regnum {
 #define NUM_GREGS	16	/* Number of general purpose registers.  */
 /* APPLE LOCAL BEGIN: VFP support.  */
 #define NUM_VFPREGS     32      /* Number of VFP registers.  */
+#define NUM_VFPV3_REGS  16      /* Number of VFPv3 registers (in addition to
+                                   VFP regs).  */
 
 /* Instruction condition field values.  */
 #define INST_EQ		0x0
@@ -149,10 +176,20 @@ enum gdb_regnum {
 #define ARM_DATA_PROC_OP_BIC  14  /* Bit Clear                    */
 #define ARM_DATA_PROC_OP_MVN  15  /* Move Negative                */
 
-#define FLAG_N		0x80000000
-#define FLAG_Z		0x40000000
-#define FLAG_C		0x20000000
-#define FLAG_V		0x10000000
+/* Program Status Register (PSR) definitions.  */
+#define FLAG_MODE_MASK	0x0000001f
+#define FLAG_T		(1<<5)
+#define FLAG_F		(1<<6)
+#define FLAG_I		(1<<7)
+#define FLAG_A		(1<<8)
+#define FLAG_E		(1<<9)
+#define FLAG_GE_MASK	0x000f0000
+#define FLAG_J		(1<<24)
+#define FLAG_Q		(1<<27)
+#define FLAG_V		(1<<28)
+#define FLAG_C		(1<<29)
+#define FLAG_Z		(1<<30)
+#define FLAG_N		(1<<31)
 
 /* Type of floating-point code in use by inferior.  There are really 3 models
    that are traditionally supported (plus the endianness issue), but gcc can
@@ -176,6 +213,14 @@ enum arm_float_model
   ARM_FLOAT_LAST	/* Keep at end.  */
 };
 
+enum arm_vfp_version
+{
+  ARM_VFP_UNSUPPORTED = 0,
+  ARM_VFP_VERSION_1,
+  ARM_VFP_VERSION_2,
+  ARM_VFP_VERSION_3
+};
+
 /* ABI used by the inferior.  */
 enum arm_abi_kind
 {
@@ -193,7 +238,8 @@ struct gdbarch_tdep
   enum arm_abi_kind arm_abi;
 
   enum arm_float_model fp_model; /* Floating point calling conventions.  */
-
+  enum arm_vfp_version vfp_version; /* Version for the VFP (when fp_model == 
+				       ARM_FLOAT_VFP).  */
   CORE_ADDR lowest_pc;		/* Lowest address at which instructions 
 				   will appear.  */
 
@@ -209,6 +255,15 @@ struct gdbarch_tdep
   int wordsize;                 /* APPLE LOCAL: Add this because the dyld code needs it.  */
 };
 
+struct register_info
+{
+  char *name;
+  int offset;
+  struct type **type;
+};
+
+typedef struct register_info register_info_t;
+
 #ifndef LOWEST_PC
 #define LOWEST_PC (gdbarch_tdep (current_gdbarch)->lowest_pc)
 #endif
@@ -221,5 +276,14 @@ int arm_pc_is_thumb (CORE_ADDR);
 CORE_ADDR thumb_get_next_pc (CORE_ADDR);
 
 CORE_ADDR arm_get_next_pc (CORE_ADDR);
+
+enum {
+  arm_single_step_mode_auto = 0,
+  arm_single_step_mode_software = 1,
+  arm_single_step_mode_hardware = 2
+};
+
+int get_arm_single_step_mode ();
+int set_arm_single_step_mode (struct gdbarch *gdbarch, int single_step_mode);
 
 #endif

@@ -1,23 +1,23 @@
-/* -*- c-file-style: "java"; indent-tabs-mode: nil; fill-column: 78 -*- 
+/* -*- c-file-style: "java"; indent-tabs-mode: nil; fill-column: 78 -*-
  *
  * distcc -- A simple distributed compiler system
  *
  * Copyright (C) 2002, 2003, 2004 by Martin Pool <mbp@samba.org>
  *
  * This program is free software; you can redistribute it and/or
- * modify it under the terms of the GNU General Public License as
- * published by the Free Software Foundation; either version 2 of the
- * License, or (at your option) any later version.
+ * modify it under the terms of the GNU General Public License
+ * as published by the Free Software Foundation; either version 2
+ * of the License, or (at your option) any later version.
  *
- * This program is distributed in the hope that it will be useful, but
- * WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
- * General Public License for more details.
- * 
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ *
  * You should have received a copy of the GNU General Public License
  * along with this program; if not, write to the Free Software
- * Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA 02111-1307
- * USA
+ * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301,
+ * USA.
  */
 
 
@@ -37,7 +37,7 @@
  */
 
 
-#include "config.h"
+#include <config.h>
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -53,6 +53,8 @@
 #include "util.h"
 #include "exitcode.h"
 
+/* Globals for -x support */
+const char *dcc_optx_ext = NULL;
 
 /**
  * Return true if argv contains needle as an argument.
@@ -60,16 +62,16 @@
 int dcc_argv_search(char **a,
                     const char *needle)
 {
-    for (; *a; a = a++) 
+    for (; *a; a++)
         if (!strcmp(*a, needle))
             return 1;
     return 0;
 }
 
 
-int dcc_argv_len(char **a)
+unsigned int dcc_argv_len(char **a)
 {
-    int i;
+    unsigned int i;
 
     for (i = 0; a[i]; i++)
         ;
@@ -84,7 +86,7 @@ void dcc_free_argv(char **argv)
     char **a;
 
     for (a = argv; *a != NULL; a++)
-        free(a);
+        free(*a);
     free(argv);
 }
 
@@ -101,7 +103,7 @@ int dcc_copy_argv(char **from, char ***out, int delta)
     b = malloc((l+1+delta) * (sizeof from[0]));
     if (b == NULL) {
         rs_log_error("failed to allocate copy of argv");
-        exit(EXIT_OUT_OF_MEMORY);
+        return EXIT_OUT_OF_MEMORY;
     }
     for (i = 0; i < l; i++) {
         if ((b[i] = strdup(from[i])) == NULL) {
@@ -110,7 +112,7 @@ int dcc_copy_argv(char **from, char ***out, int delta)
         }
     }
     b[l] = NULL;
-    
+
     *out = b;
 
     return 0;
@@ -131,7 +133,7 @@ char *dcc_argv_tostr(char **a)
 {
     int l, i;
     char *s, *ss;
-    
+
     /* calculate total length */
     for (l = 0, i = 0; a[i]; i++) {
         l += strlen(a[i]) + 3;  /* two quotes and space */
@@ -142,7 +144,7 @@ char *dcc_argv_tostr(char **a)
         rs_log_crit("failed to allocate %d bytes", l+1);
         exit(EXIT_OUT_OF_MEMORY);
     }
-    
+
     for (i = 0; a[i]; i++) {
         /* kind of half-assed quoting; won't handle strings containing
          * quotes properly, but good enough for debug messages for the
@@ -161,5 +163,3 @@ char *dcc_argv_tostr(char **a)
 
     return s;
 }
-
-

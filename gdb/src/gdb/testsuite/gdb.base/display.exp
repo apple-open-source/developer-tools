@@ -196,7 +196,7 @@ if [istarget "hppa*-hp-hpux*"] {
 }
 gdb_test "print/0 j" ".*Item count other than 1 is meaningless.*" "print/0 j"
 gdb_test "print/s sum" ".*Format letter.*is meaningless.*" " no s"
-gdb_test "print/i sum" ".*Format letter.*is meaningless.*.*" "no i"
+gdb_test "print/i sum" ".*Size letter.*are meaningless.*.*" "no i"
 gdb_test "print/a &sum" ".*= $hex.*<sum>.*"
 # If the constant below is larger than the length of main, then
 # this test will (incorrectly) fail.  So use a small number.

@@ -324,6 +324,8 @@ static void mark_life (int, enum machine_mode, int);
 static void post_mark_life (int, enum machine_mode, int, int, int);
 static int no_conflict_p (rtx, rtx, rtx);
 static int requires_inout (const char *);
+/* APPLE LOCAL 7511696 pic register reuse */
+static void dump_inheritance (FILE *);
 
 /* Allocate a new quantity (new within current basic block)
    for register number REGNO which is born at index BIRTH
@@ -387,12 +389,21 @@ local_alloc (void)
   update_equiv_regs ();
 
   /* APPLE LOCAL begin 5695218 */
+  /* APPLE LOCAL begin 7511696 pic register reuse */
+  if (reg_inheritance_matrix)
+    reg_inheritance ();
+  if (dump_file)
+    {
+      timevar_push (TV_DUMP);
+      dump_inheritance (dump_file);
+      timevar_pop (TV_DUMP);
+    }
   if (reg_inheritance_matrix)
     {
-      reg_inheritance ();
       sbitmap_vector_free (reg_inheritance_matrix);
       reg_inheritance_matrix = (sbitmap *)0;
     }
+  /* APPLE LOCAL end 7511696 pic register reuse */
   /* APPLE LOCAL end 5695218 */
 
   /* This sets the maximum number of quantities we can have.  Quantity
@@ -2623,18 +2634,32 @@ LargestAlignmentOfVariables (void)
 /* APPLE LOCAL end radar 4216496, 4229407, 4120689, 4095567 */
 
 /* APPLE LOCAL begin 5695218 */
-static void dump_inheritance (FILE *);
 static void
 dump_inheritance (FILE *dumpfile)
 {
   sbitmap_iterator sbiter;
   unsigned int ui;
   int emitted, width;
-  fprintf (dumpfile, ";; FIRST_PSEUDO_REGISTER = %d, max_regno = %d\n", FIRST_PSEUDO_REGISTER, max_regno);
-  dump_sbitmap_vector (dumpfile, ";; register inheritance matrix:", ";; register", reg_inheritance_matrix, max_regno);
+  /* APPLE LOCAL begin 7511696 pic register reuse */
+  const char *funcname = (IDENTIFIER_POINTER
+                          (DECL_ASSEMBLER_NAME (current_function_decl)));
+  if (!reg_inheritance_matrix)
+    {
+      fprintf (dumpfile, ";; pic_rtx_inheritance omitted (function %s).\n"
+               ";; Function too large.\n", funcname);
+      return;
+    }
+  fprintf (dumpfile, ";; FIRST_PSEUDO_REGISTER = %d, max_regno = %d\n",
+           FIRST_PSEUDO_REGISTER, max_regno);
+  dump_sbitmap_vector (dumpfile, ";; register inheritance matrix:",
+                       ";; register", reg_inheritance_matrix, max_regno);
+  /* APPLE LOCAL end 7511696 pic register reuse */
   if (pic_rtx_inheritance)
     {
-      fprintf (dumpfile, "\n;; pic_rtx_inheritance bitmap:\n");
+      /* APPLE LOCAL begin 7511696 pic register reuse */
+      fprintf (dumpfile, "\n;; pic_rtx_inheritance bitmap (function %s):\n",
+               funcname);
+      /* APPLE LOCAL end 7511696 pic register reuse */
       dump_sbitmap (dumpfile, pic_rtx_inheritance);
       fprintf (dumpfile, "\n;; pseudo-regs that inherit PIC_OFFSET_TABLE_REGNUM (=%d):\n",
 	       PIC_OFFSET_TABLE_REGNUM);
@@ -2653,7 +2678,8 @@ dump_inheritance (FILE *dumpfile)
       fprintf (dumpfile, "\n\n");
     }
   else
-    fprintf (dumpfile, ";; pic_rtx_inheritance=0\n");
+    /* APPLE LOCAL 7511696 pic register reuse */
+    fprintf (dumpfile, ";; pic_rtx_inheritance=0 (function %s)\n", funcname);
 }
 void debug_inheritance (void);
 void
@@ -2671,19 +2697,24 @@ reg_inheritance_1 (rtx *px, void *data)
 
   dstregno = (int)data;
 #ifdef TARGET_386
-  /* Ugly special case: When moving a DImode constant into an FP
-     register, GCC will use the movdf_nointeger pattern, pushing the
-     DImode constant into memory and loading into the '387.  It looks
-     like this: (set (reg:DF) (subreg:DF (reg:DI))).  We're choosing
-     to match the subreg; hope this is sufficient.
+  /*
+    Ugly special case: When moving a DI/SI/mode constant into an FP
+    register, GCC will use the mov/df/sf/_nointeger pattern, pushing
+    the DI/SI/mode constant into memory and loading therefrom into an
+    FP register ('387 or SSE).  It looks like this: (set (reg:DF)
+    (subreg:DF (reg:DI))).  We're choosing to match the subreg; hope
+    this is sufficient.  See Radars 6050374 and 6951876.
   */
-  if (GET_CODE (x) == SUBREG
-      && GET_MODE (x) == DFmode
-      && GET_MODE (SUBREG_REG (x)) == DImode)
-    {
-      SET_BIT (reg_inheritance_matrix[dstregno], PIC_OFFSET_TABLE_REGNUM);
-      return 0;
-    }
+  if (GET_CODE (x) == SUBREG)
+    if ((GET_MODE (x) == DFmode
+	 && GET_MODE (SUBREG_REG (x)) == DImode)
+	||
+	(GET_MODE (x) == SFmode
+	 && GET_MODE (SUBREG_REG (x)) == SImode))
+      {
+	SET_BIT (reg_inheritance_matrix[dstregno], PIC_OFFSET_TABLE_REGNUM);
+	return 0;
+      }
 #endif
   if (GET_CODE (x) == SUBREG)
     x = SUBREG_REG (x);
@@ -2745,12 +2776,8 @@ reg_inheritance (void)
 	  changing = true;
 	}
   } while (changing);  
-  if (dump_file)
-    {
-      timevar_push (TV_DUMP);
-      dump_inheritance (dump_file);
-      timevar_pop (TV_DUMP);
-    }
+  /* APPLE LOCAL 7511696 pic register reuse */
+  /* Lines deleted */
 }
 /* APPLE LOCAL end 5695218 */
 

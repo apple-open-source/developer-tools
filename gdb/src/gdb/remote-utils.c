@@ -499,8 +499,8 @@ gr_create_inferior (char *execfile, char *args, char **env)
 int
 gr_multi_scan (char *list[], int passthrough)
 {
-  char *swallowed = NULL;	/* holding area */
-  char *swallowed_p = swallowed;	/* Current position in swallowed.  */
+  char *swallowed;
+  char *swallowed_p;
   int ch;
   int ch_handled;
   int i;

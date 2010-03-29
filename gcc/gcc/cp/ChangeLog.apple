@@ -1,3 +1,15 @@
+2010-01-05  Jim Grosbach <grosbach@apple.com>
+
+	Radar 7465602
+	* semantics.c (finish_id_expression): Add check for "unavailable"
+	attribute.
+
+2009-06-15  Fariborz Jahanian <fjahanian@apple.com>
+
+	Radar 6936421
+	* cvt.c (force_rvalue): Convert property reference 
+        expression to its getter call before converting to rvalue.
+
 2009-02-11  Fariborz Jahanian <fjahanian@apple.com>
 
         Radar 6573923

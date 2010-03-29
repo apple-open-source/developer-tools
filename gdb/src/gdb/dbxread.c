@@ -42,6 +42,8 @@
 #include <fcntl.h>
 #endif
 
+#include <ctype.h>
+
 /* APPLE LOCAL ? */
 static int read_type_psym_p = 1;
 static int end_fun_absolute_p = 0;
@@ -69,6 +71,12 @@ static int end_fun_absolute_p = 0;
 
 /* APPLE LOCAL */
 #include "block.h"
+
+/* APPLE LOCAL: prototype for macosx_get_osabi_from_dyld_entry */
+#ifdef MACOSX_DYLD
+#include "macosx-nat-dyld.h"
+#endif
+
 
 #include "gdb_assert.h"
 #include "gdb_string.h"
@@ -620,7 +628,7 @@ dbx_symfile_read (struct objfile *objfile, int mainline)
   int dbx_symtab_count;
   /* APPLE LOCAL: timers */
   static int timer = -1;
-  struct cleanup *timer_cleanup;
+  struct cleanup *timer_cleanup = NULL;
 
   /* APPLE LOCAL: If this is a dSYM that has minimal symbols, don't read the
      minsyms or we'll end up with duplicated minsyms.  */
@@ -655,7 +663,14 @@ dbx_symfile_read (struct objfile *objfile, int mainline)
      || (0 == strncmp (bfd_get_target (sym_bfd), "nlm", 3)));
 
   /* APPLE LOCAL shared cache begin.  */
-  if (bfd_mach_o_in_shared_cached_memory (objfile->obfd))
+  /* FIXME: On SnowLeopard and later systems, this is not true.  The
+     shared cache mach-o's are pretty much the same as the on disk
+     ones.  To be truely correct here we would need to check whether
+     we are on Leopard, or looking at a Leopard core file.  But till
+     we need to deploy this on Leopard I'm just going to turn it off
+     by hand here.  */
+
+  if (0) /* bfd_mach_o_in_shared_cached_memory (objfile->obfd))  */
     {
       /* All shared libraries being read from memory that are in the new 
          shared cache share a single large symbol and string table. These
@@ -3375,7 +3390,7 @@ struct bfd *
 open_bfd_from_oso (struct partial_symtab *pst, int *cached)
 {
   struct bfd *oso_bfd, *retval;
-  long mtime;
+  long mtime = 0;
   char *oso_name;
   long oso_mtime;
   char *archive_name;
@@ -3383,6 +3398,8 @@ open_bfd_from_oso (struct partial_symtab *pst, int *cached)
 
   *cached = 0;
 
+  oso_bfd = NULL;
+  retval = NULL;
   oso_name = PSYMTAB_OSO_NAME (pst);
   oso_mtime = PSYMTAB_OSO_MTIME (pst);
 
@@ -3399,7 +3416,12 @@ open_bfd_from_oso (struct partial_symtab *pst, int *cached)
         }
       if (bfd_check_format (oso_bfd, bfd_archive))
 	{
-	  oso_bfd = open_bfd_matching_arch (oso_bfd, bfd_object);
+	  enum gdb_osabi oso_osabi = GDB_OSABI_UNKNOWN;
+#ifdef MACOSX_DYLD
+	  if (pst->objfile && pst->objfile->obfd)
+	    oso_osabi = macosx_get_osabi_from_dyld_entry (pst->objfile->obfd);
+#endif
+	  oso_bfd = open_bfd_matching_arch (oso_bfd, bfd_object, oso_osabi);
 	  if (oso_bfd == NULL)
 	    {
 	      warning ("Could not open OSO file matching current "
@@ -3451,7 +3473,13 @@ open_bfd_from_oso (struct partial_symtab *pst, int *cached)
 	  /* GRRR...  Archives of type mach-o-fat are fat files, not 
 	     .a files.  So look for the .a file matching the current'
 	     architecture.  */
-	  archive_bfd = open_bfd_matching_arch (archive_bfd, bfd_archive);
+	  enum gdb_osabi oso_osabi = GDB_OSABI_UNKNOWN;
+#ifdef MACOSX_DYLD
+	  if (pst->objfile && pst->objfile->obfd)
+	    oso_osabi = macosx_get_osabi_from_dyld_entry (pst->objfile->obfd);
+#endif
+	  archive_bfd = open_bfd_matching_arch (archive_bfd, bfd_archive, 
+					        oso_osabi);
 
 	  if (archive_bfd == NULL)
 	    {
@@ -3542,7 +3570,7 @@ oso_scan_partial_symtab (struct partial_symtab *pst)
   unsigned char type;
   const char *prefix;
   int current_list_element = -1;
-  struct partial_symtab *current_pst;
+  struct partial_symtab *current_pst = NULL;
   struct objfile *objfile;
   char leading_char;
   /* Index within current psymtab dependency list */
@@ -3887,9 +3915,24 @@ read_oso_nlists (bfd *oso_bfd, struct partial_symtab *pst,
           /* If the dot is followed by a number, we're probably looking
              at a function static variable, e.g "foo () {static int myvar;}"
              will give you a linker symbol name of myvar.3821 or some similarly
-             unique name.  */
-          if (name_has_dot && *(c + 1) >= '0' && *(c + 1) <= '9')
-                name_dot_followed_by_digit = 1;
+             unique name.
+             The match is restricted to data/bss section symbols to help avoid
+             some other random symbol heading down this path.  
+             Ignore names *starting* with a dot - those may be something like
+             .objc_class_name_MyClass (from fix-small-objc.exp) which we must
+             not match by accident.  */
+          if (name_has_dot 
+              && (namestring[0] != '.')
+              && (isalnum (*(c + 1)) || *(c + 1) == '_')
+              && (((nlist.n_type & N_DATA) == N_DATA)
+                  || ((nlist.n_type & N_BSS) == N_BSS)))
+            {
+                /* Don't match ".eh" exception handling symbols here.  */
+                if (*(c + 2) == '\0')
+                  name_dot_followed_by_digit = 1;
+                else if (*(c + 1) != 'e' && *(c + 2) != 'h' && *(c + 3) != '\0')
+                  name_dot_followed_by_digit = 1;
+            }
 
           if (name_has_dot 
               && !name_is_anon_namespace 
@@ -4590,7 +4633,7 @@ read_ofile_symtab_from_oso (struct partial_symtab *pst, struct bfd *oso_bfd)
        symnum < num_syms;
        symnum++)
     {
-      CORE_ADDR offset;
+      CORE_ADDR offset = 0;
 
       QUIT;			/* Allow this to be interruptable */
 
@@ -4615,7 +4658,7 @@ read_ofile_symtab_from_oso (struct partial_symtab *pst, struct bfd *oso_bfd)
       if (type == N_BNSYM)
 	{
 	  struct internal_nlist tmp_nlist;
-	  struct partial_symbol *fun_psym;
+	  struct partial_symbol *fun_psym = NULL;
 	  char *fun_namestring;
 	  int scan_ptr = symnum;
 	  int old_symbuf_idx = symbuf_idx;

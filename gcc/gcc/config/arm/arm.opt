@@ -49,8 +49,10 @@ march=
 Target RejectNegative Joined
 Specify the name of the target architecture
 
+; APPLE LOCAL begin 6150882 use thumb2 by default for v7
 marm
-Target RejectNegative InverseMask(THUMB) Undocumented
+Target RejectNegative VarExists Var(thumb_option, 0) Undocumented
+; APPLE LOCAL end 6150882 use thumb2 by default for v7
 
 mbig-endian
 Target Report RejectNegative Mask(BIG_END)
@@ -140,9 +142,11 @@ mstructure-size-boundary=
 Target RejectNegative Joined Var(structure_size_string)
 Specify the minimum bit alignment of structures
 
+; APPLE LOCAL begin 6150882 use thumb2 by default for v7
 mthumb
-Target Report Mask(THUMB)
+Target Report Var(thumb_option) Init(-1)
 Compile for the Thumb not the ARM
+; APPLE LOCAL end 6150882 use thumb2 by default for v7
 
 ; APPLE LOCAL begin ARM interworking
 mthumb-interwork
@@ -175,3 +179,9 @@ mms-bitfields
 Target Report Mask(MS_BITFIELD_LAYOUT)
 Use Microsoft structure layout
 ; APPLE LOCAL end 5946347 ms_struct support
+; APPLE LOCAL begin v7 support. Merge from Codesourcery
+
+mvectorize-with-neon-quad
+Target Report Mask(NEON_VECTORIZE_QUAD)
+Use Neon quad-word (rather than double-word) registers for vectorization
+; APPLE LOCAL end v7 support. Merge from Codesourcery

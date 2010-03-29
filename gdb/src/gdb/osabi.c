@@ -74,6 +74,7 @@ static const char * const gdb_osabi_names[] =
   "Darwin",
   "Darwin64",
   "DarwinV6",
+  "DarwinV7",
   /* APPLE LOCAL end Darwin */
 
   "QNX Neutrino",

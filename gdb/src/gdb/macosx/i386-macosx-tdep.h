@@ -35,6 +35,8 @@
 #define LAST_VP_REGNUM_64 55
 #define NUM_VP_REGS_64 ((LAST_VP_REGNUM_64 + 1) - FIRST_VP_REGNUM_64)
 
+#define REGS_64_MXCSR (LAST_VP_REGNUM_64 + 1)
+
 /* All fetch functions below that don't end with '_raw' assume that the
    register structure argument is in host endian byte order and, if
    needed, endian swap the values into target endian format and store 

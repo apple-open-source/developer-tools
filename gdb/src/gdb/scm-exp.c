@@ -401,7 +401,7 @@ tryagain:
       while ('\"' != (c = *lexptr++))
 	{
 	  if (c == '\\')
-	    switch (c = *lexptr++)
+	    switch (*lexptr++)
 	      {
 	      case '\0':
 		error ("non-terminated string literal");

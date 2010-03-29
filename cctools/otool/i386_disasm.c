@@ -1,23 +1,31 @@
 /*
- * Copyright (c) 1999 Apple Computer, Inc. All rights reserved.
+ * Copyright © 2009 Apple Inc. All rights reserved.
  *
  * @APPLE_LICENSE_HEADER_START@
  * 
- * This file contains Original Code and/or Modifications of Original Code
- * as defined in and that are subject to the Apple Public Source License
- * Version 2.0 (the 'License'). You may not use this file except in
- * compliance with the License. Please obtain a copy of the License at
- * http://www.opensource.apple.com/apsl/ and read it before using this
- * file.
+ * Redistribution and use in source and binary forms, with or without
+ * modification, are permitted provided that the following conditions are met:
  * 
- * The Original Code and all software distributed under the License are
- * distributed on an 'AS IS' basis, WITHOUT WARRANTY OF ANY KIND, EITHER
- * EXPRESS OR IMPLIED, AND APPLE HEREBY DISCLAIMS ALL SUCH WARRANTIES,
- * INCLUDING WITHOUT LIMITATION, ANY WARRANTIES OF MERCHANTABILITY,
- * FITNESS FOR A PARTICULAR PURPOSE, QUIET ENJOYMENT OR NON-INFRINGEMENT.
- * Please see the License for the specific language governing rights and
- * limitations under the License.
+ * 1.  Redistributions of source code must retain the above copyright notice,
+ * this list of conditions and the following disclaimer. 
+ * 2.  Redistributions in binary form must reproduce the above copyright notice,
+ * this list of conditions and the following disclaimer in the documentation
+ * and/or other materials provided with the distribution. 
+ * 3.  Neither the name of Apple Inc. ("Apple") nor the names of its
+ * contributors may be used to endorse or promote products derived from this
+ * software without specific prior written permission. 
  * 
+ * THIS SOFTWARE IS PROVIDED BY APPLE AND ITS CONTRIBUTORS "AS IS" AND ANY
+ * EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED
+ * WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE
+ * DISCLAIMED. IN NO EVENT SHALL APPLE OR ITS CONTRIBUTORS BE LIABLE FOR ANY
+ * DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES
+ * (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES;
+ * LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND
+ * ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
+ * (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF
+ * THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+ *
  * @APPLE_LICENSE_HEADER_END@
  */
 /*
@@ -160,7 +168,7 @@ static void immediate(
 static void displacement(
     const char **symadd,
     const char **symsub,
-    uint32_t *value,
+    uint64_t *value,
     const uint32_t value_size,
     const char *sect,
     uint64_t sect_addr,
@@ -2149,7 +2157,7 @@ enum bool verbose)
 		else if(prefix_byte == 0xf2)
 		    printf("movddup\t");
 		else if(prefix_byte == 0xf3)
-		    printf("%movsldup\t");
+		    printf("movsldup\t");
 		else{ /* no prefix_byte */
 		    if(mode == REG_ONLY)
 			printf("%shlps\t", mnemonic);
@@ -3215,11 +3223,11 @@ enum bool verbose)
 	/* single operand, a 16/32 bit displacement */
 	case D:
 	    value0_size = OPSIZE(data16, LONGOPERAND, 0);
-	    DISPLACEMENT(&symadd0, &symsub0, &value0, value0_size);
+	    DISPLACEMENT(&symadd0, &symsub0, &imm0, value0_size);
 	    printf("%s\t", mnemonic);
-	    print_operand(seg, symadd0, symsub0, value0, value0_size, "", "");
+	    print_operand(seg, symadd0, symsub0, imm0, value0_size, "", "");
 	    if(verbose){
-		indirect_symbol_name = guess_indirect_symbol(value0,
+		indirect_symbol_name = guess_indirect_symbol(imm0,
 		    ncmds, sizeofcmds, load_commands, object_byte_sex,
 		    indirect_symbols, nindirect_symbols, symbols, symbols64,
 		    nsymbols, strings,strings_size);
@@ -3231,6 +3239,15 @@ enum bool verbose)
 
 	/* indirect to memory or register operand */
 	case INM:
+	    /*
+	     * If this is call (near) in a 64-bit object the FF /2 opcode
+	     * results in a 64-bit operand even without a rex prefix byte.
+	     * So to get the 64-bit register names in the disassembly we
+	     * set the REX.W bit to indicate 64-bit operand size.
+	     */
+	    if((cputype & CPU_ARCH_ABI64) == CPU_ARCH_ABI64 &&
+	       opcode1 == 0xf && opcode2 == 0xf && opcode3 == 2)
+		rex |= 0x8;
 	    wbit = LONGOPERAND;
 	    GET_OPERAND(&symadd0, &symsub0, &value0, &value0_size, result0);
 	    if((mode == 0 && (r_m == 5 || r_m == 4)) || mode == 1 ||
@@ -3269,9 +3286,9 @@ enum bool verbose)
 	/* jmp/call. single operand, 8 bit displacement */
 	case BD:
 	    value0_size = sizeof(char);
-	    DISPLACEMENT(&symadd0, &symsub0, &value0, value0_size);
+	    DISPLACEMENT(&symadd0, &symsub0, &imm0, value0_size);
 	    printf("%s\t", mnemonic);
-	    print_operand(seg, symadd0, symsub0, value0, sizeof(int32_t), "",
+	    print_operand(seg, symadd0, symsub0, imm0, sizeof(int32_t), "",
 			  "\n");
 	    return(length);
 
@@ -3660,7 +3677,7 @@ void
 displacement(
 const char **symadd,
 const char **symsub,
-uint32_t *value,
+uint64_t *value,
 const uint32_t value_size,
 
 const char *sect,

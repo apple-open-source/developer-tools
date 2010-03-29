@@ -1,3 +1,33 @@
+Changes for the 5.27 release (the cctools-772 release):
+- Added getsectiondata() API to mach-o/getsect.h . Radar bug #5724145.
+
+Changes for the 5.27 release (the cctools-769 release):
+- Changed round() in stuff/round.h to take and return uint64_t types.  Radar
+  bug #7245879.
+
+Changes for the 5.26 release (the cctools-760 release):
+- Changed the sources so the armv7 stuff is a no longer #ifndef __OPEN_SOURCE__
+  Radar bug #7016121.
+  - Changed the Makefile and removed #ifndef __OPEN_SOURCE__ for "opcode/arm.h".
+  - Removed the #ifndef __OPEN_SOURCE__ in "mach/machine.h" that bracket armv7.
+
+Changes for the 5.26 release (the cctools-758 release):
+- Backed out the change for Radar bug #6511482:
+  - Left in ARM_THUMB_32BIT_BRANCH in <mach-o/arm/reloc.h> but added a comment
+    to say it is obsolete.
+  Radar bug #6945428.
+
+Changes for the 5.26 release (the cctools-756 release):
+- Added add_execute_list_with_prefix() to "stuff/execute.h" to add a string
+  prefixed with the executable's path.  Radar bug #6821441.
+
+Changes for the 5.26 release (the cctools-752 release):
+- Ported to build with clang.
+  - Added a #define for __STDBOOL_H to "stuff/bool.h" to allow building with
+    clang. Radar bug #6753135.
+  - Fixed a warning about extra tokens at end of #endif directive in 
+    "mach/machine.h" by putting __OPEN_SOURCE__ in a comment.
+
 Changes for the 5.26 release (the cctools-750 release):
 - Added lto_get_nlist_64() to stuff/lto.h for use by nm(1) print information
   from llvm bit code files.  Radar bug #6067110.

@@ -1,29 +1,30 @@
-/* -*- c-file-style: "java"; indent-tabs-mode: nil; fill-column: 78 -*-
- * 
+/* -*- c-file-style: "java"; indent-tabs-mode: nil; tab-width: 4; fill-column: 78 -*-
+ *
  * distcc -- A simple distributed compiler system
  *
  * Copyright (C) 2002, 2003, 2004 by Martin Pool
+ * Copyright 2007 Google Inc.
  *
  * This program is free software; you can redistribute it and/or
- * modify it under the terms of the GNU General Public License as
- * published by the Free Software Foundation; either version 2 of the
- * License, or (at your option) any later version.
+ * modify it under the terms of the GNU General Public License
+ * as published by the Free Software Foundation; either version 2
+ * of the License, or (at your option) any later version.
  *
- * This program is distributed in the hope that it will be useful, but
- * WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
- * General Public License for more details.
- * 
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ *
  * You should have received a copy of the GNU General Public License
  * along with this program; if not, write to the Free Software
- * Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA 02111-1307
- * USA
+ * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301,
+ * USA.
  */
 
                 /* He who waits until circumstances completely favour *
                  * his undertaking will never accomplish anything.    *
                  *              -- Martin Luther                      */
-   
+
 
 /**
  * @file
@@ -51,7 +52,7 @@
 
 
 
-#include "config.h"
+#include <config.h>
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -61,6 +62,8 @@
 #include <fcntl.h>
 #include <errno.h>
 #include <signal.h>
+#include <string.h>
+#include <time.h>
 
 #include <sys/stat.h>
 #include <sys/types.h>
@@ -70,10 +73,12 @@
 #endif /* HAVE_SYS_SIGNAL_H */
 #include <sys/param.h>
 #include <sys/socket.h>
+#include <sys/time.h>
 
 #include "distcc.h"
 #include "trace.h"
 #include "util.h"
+#include "stats.h"
 #include "rpc.h"
 #include "exitcode.h"
 #include "snprintf.h"
@@ -83,10 +88,13 @@
 #include "srvnet.h"
 #include "hosts.h"
 #include "daemon.h"
-#include "versinfo.h"
+#include "stringmap.h"
+#include "dotd.h"
+#include "fix_debug_info.h"
 
-/* From indirect_server.c */
-extern int dcc_ensure_pch_cache_size_mb(int min_size_in_mb);
+#ifdef XCODE_INTEGRATION
+#  include "xci.h"
+#endif
 
 /**
  * We copy all serious distccd messages to this file, as well as sending the
@@ -107,7 +115,7 @@ static int dcc_add_log_to_file(const char *err_fname)
         rs_log_crit("compile log already open?");
         return 0;               /* continue? */
     }
-    
+
     dcc_compile_log_fd = open(err_fname, O_WRONLY|O_CREAT|O_TRUNC, 0600);
     if (dcc_compile_log_fd == -1) {
         rs_log_error("failed to open %s: %s", err_fname, strerror(errno));
@@ -153,18 +161,17 @@ int dcc_service_job(int in_fd,
 {
     int ret;
 
+    dcc_job_summary_clear();
+
     /* Log client name and check access if appropriate.  For ssh connections
      * the client comes from a unix-domain socket and that's always
      * allowed. */
     if ((ret = dcc_check_client(cli_addr, cli_len, opt_allowed)) != 0)
         goto out;
 
-	/* Ensure that we have at least pullfile_min_free_space MB (--min-disk-free)
-	 * on the volume holding the PCH cache, and fail if pruning doesn't alleviate
-	 * the pressure. */
-	if ((ret = dcc_ensure_free_space()) != 0)
-		goto out;
     ret = dcc_run_job(in_fd, out_fd);
+
+    dcc_job_summary();
 
 out:
     return ret;
@@ -175,7 +182,7 @@ static int dcc_input_tmpnam(char * orig_input,
                             char **tmpnam_ret)
 {
     const char *input_exten;
-    
+
     rs_trace("input file %s", orig_input);
     input_exten = dcc_find_extension(orig_input);
     if (input_exten)
@@ -185,6 +192,83 @@ static int dcc_input_tmpnam(char * orig_input,
     return dcc_make_tmpnam("distccd", input_exten, tmpnam_ret);
 }
 
+
+
+/**
+ * Check argv0 against a list of allowed commands, and possibly map it to a new value.
+ * If *compiler_name is changed, the original value is free'd, and a new value is malloc'd.
+ *
+ * If the environment variable DISTCC_CMDLIST is set,
+ * load a list of supported commands from the file named by DISTCC_CMDLIST, and
+ * refuse to serve any command whose last DISTCC_CMDLIST_NUMWORDS last words
+ * don't match those of a command in that list.
+ * Each line of the file is simply a filename.
+ * This is chiefly useful for those few installations which have so many
+ * compilers available such that the compiler must be specified with an absolute pathname.
+ *
+ * Example: if the compilers are installed in a different location on
+ * this server, e.g. if they've been copied from a shared NFS directory onto a
+ * local hard drive, you might have lines like
+ *   /local/tools/blort/sh4-linux/gcc-3.3.3-glibc-2.2.5/bin/sh4-linux-gcc
+ *   /local/tools/blort/sh4-linux/gcc-2.95.3-glibc-2.2.5/bin/sh4-linux-gcc
+ * and set DISTCC_CMDLIST_NUMWORDS=3; that way e.g. any of the commands
+ *   /local/tools/gcc-3.3.3-glibc-2.2.5/bin/sh4-linux-gcc
+ *   /shared/tools/gcc-3.3.3-glibc-2.2.5/bin/sh4-linux-gcc
+ *   /zounds/gcc-3.3.3-glibc-2.2.5/bin/sh4-linux-gcc
+ * will invoke
+ *   /local/tools/blort/sh4-linux/gcc-3.3.3-glibc-2.2.5/bin/sh4-linux-gcc
+ *
+ * Returns 0 (which will abort the compile) if compiler not in list.
+ * (This is because the list is intended to be complete,
+ * and any attempt to use a command not in the list indicates a confused user.
+ * FIXME: should probably give user the option of changing this
+ * behavior at runtime, so normal command lookup can continue even if command
+ * not found in table.)
+ **/
+static int dcc_remap_compiler(char **compiler_name)
+{
+    static int cmdlist_checked=0;
+    static stringmap_t *map=0;
+    const char *newname;
+
+    /* load file if not already */
+    if (!cmdlist_checked) {
+        char *filename;
+        cmdlist_checked = 1;
+        filename = getenv("DISTCC_CMDLIST");
+        if (filename) {
+            const char *nw = getenv("DISTCC_CMDLIST_NUMWORDS");
+            int numFinalWordsToMatch=1;
+            if (nw)
+                numFinalWordsToMatch = atoi(nw);
+            map = stringmap_load(filename, numFinalWordsToMatch);
+            if (map) {
+                rs_trace("stringmap_load(%s, %d) found %d commands", filename, numFinalWordsToMatch, map->n);
+            } else {
+                rs_log_error("stringmap_load(%s, %d) failed: %s", filename, numFinalWordsToMatch, strerror(errno));
+                return EXIT_IO_ERROR;
+            }
+        }
+    }
+
+    if (!map)
+        return 1;    /* no list of allowed names, so ok */
+
+    /* Find what this compiler maps to */
+    newname = stringmap_lookup(map, *compiler_name);
+    if (!newname) {
+        rs_log_warning("lookup of %s in DISTCC_CMDLIST failed", *compiler_name);
+        return 0;    /* not in list, so forbidden.  FIXME: make failure an option */
+    }
+
+    /* If mapping is not the identity mapping, replace the original name */
+    if (strcmp(newname, *compiler_name)) {
+        rs_trace("changed compiler from %s to %s", *compiler_name, newname);
+        free(*compiler_name);
+        *compiler_name = strdup(newname);
+    }
+    return 1;
+}
 
 
 /**
@@ -207,9 +291,9 @@ static int dcc_check_compiler_masq(char *compiler_name)
     int len;
     char linkbuf[MAXPATHLEN];
 
-    if (compiler_name[0] == '/') 
+    if (compiler_name[0] == '/')
         return 0;
-    
+
     if (!(envpath = getenv("PATH"))) {
         rs_trace("PATH seems not to be defined");
         return 0;
@@ -224,7 +308,7 @@ static int dcc_check_compiler_masq(char *compiler_name)
             n = p + len;
         }
         if (asprintf(&buf, "%.*s/%s", len, p, compiler_name) == -1) {
-            rs_log_crit("asnprintf failed");
+            rs_log_crit("asprintf failed");
             return EXIT_DISTCC_FAILED;
         }
 
@@ -237,7 +321,7 @@ static int dcc_check_compiler_masq(char *compiler_name)
         if ((len = readlink(buf, linkbuf, sizeof linkbuf)) <= 0)
             continue;
         linkbuf[len] = '\0';
-        
+
         if (strstr(linkbuf, "distcc")) {
             rs_log_warning("%s on distccd's path is %s and really a link to %s",
                            compiler_name, buf, linkbuf);
@@ -252,110 +336,212 @@ static int dcc_check_compiler_masq(char *compiler_name)
     return 0;
 }
 
-static int dcc_send_system_info(int out_fd)
-{
-    char *info = dcc_get_system_version();
-    if (!info)
-        info = "";
-    return dcc_x_token_string(out_fd, "SINF", info);
-}
+static const char *include_options[] = {
+    "-I",
+    "-F",
+    "-include",
+    "-imacros",
+    "-idirafter",
+    "-iframework",
+    "-iprefix",
+    "-iwithprefix",
+    "-iwithprefixbefore",
+    "-isystem",
+    "-iquote",
+    NULL
+};
 
-static int dcc_send_compiler_version(int out_fd, char *compiler)
-{
-    char *info = dcc_get_compiler_version(compiler);
-    if (!info)
-        info = "";
-    return dcc_x_token_string(out_fd, "CVER", info);
-}
 
 /**
- * Send down the host info. This includes the OS version, hardware info, and compiler versions.
- */
-int dcc_send_host_info(int out_fd)
+ * Prepend @p root_dir string to source file if absolute.
+ **/
+static int tweak_input_argument_for_server(char **argv,
+                                           const char *root_dir)
 {
-    int ret;
-    char *sysKey = "SYSTEM=";
-    char *compilerKey = "COMPILER=";
-    char *ncpusKey = "CPUS=";
-    char *cpuSpeedKey = "CPUSPEED=";
-    char *maxJobsKey = "JOBS=";
-    char *priorityKey = "PRIORITY=";
-    char *distcc = "DISTCC=" PACKAGE_VERSION "\n";
-    char *sysInfo = dcc_get_system_version();
-    char **compilers = dcc_get_all_compiler_versions();
-    int ncpus;
-    unsigned long long cpuSpeed;
-    
-    if (dcc_ncpus(&ncpus))
-        ncpus = 0;
-    if (dcc_cpuspeed(&cpuSpeed))
-        cpuSpeed = 0;
-    
-    int i, len = 0;
-    char *msg;
-    if (sysInfo) {
-        len += strlen(sysInfo) + strlen(sysKey) + 1;
-    }
-    if (distcc)
-        len += strlen(distcc);
-    if (compilers) {
-        for (i=0; compilers && compilers[i] != NULL; i++) {
-            len += strlen(compilers[i]) + strlen(compilerKey) + 1;
+    unsigned i;
+    /* Look for the source file and act if absolute. Note: dcc_scan_args
+     * rejects compilations with more than one source file. */
+    for (i=0; argv[i]; i++)
+        if (dcc_is_source(argv[i]) && argv[i][0]=='/') {
+            unsigned j = 0;
+            char *prefixed_name;
+            while (argv[i][j] == '/') j++;
+            if (asprintf(&prefixed_name, "%s/%s",
+                         root_dir,
+                         argv[i] + j) == -1) {
+                rs_log_crit("asprintf failed");
+                return EXIT_OUT_OF_MEMORY;
+            }
+            rs_trace("changed input from \"%s\" to \"%s\"", argv[i],
+                     prefixed_name);
+            free(argv[i]);
+            argv[i] = prefixed_name;
+            dcc_trace_argv("command after", argv);
+            return 0;
+        }
+    return 0;
+}
+
+
+/**
+ * Prepend @p root_dir to arguments of include options that are absolute.
+ **/
+static int tweak_include_arguments_for_server(char **argv,
+                                              const char *root_dir)
+{
+    int index_of_first_filename_char = 0;
+    const char *include_option;
+    unsigned int i, j;
+    for (i = 0; argv[i]; ++i) {
+        for (j = 0; include_options[j]; ++j) {
+            if (str_startswith(include_options[j], argv[i])) {
+                if (strcmp(argv[i], include_options[j]) == 0) {
+                    /* "-I foo" , change the next argument */
+                    ++i;
+                    include_option = "";
+                    index_of_first_filename_char = 0;
+                } else {
+                    /* "-Ifoo", change this argument */
+                    include_option = include_options[j];
+                    index_of_first_filename_char = strlen(include_option);
+                }
+                if (argv[i] != NULL) {  /* in case of a dangling -I */
+                    if (argv[i][index_of_first_filename_char] == '/') {
+                        char *buf;
+                        asprintf(&buf, "%s%s%s",
+                                 include_option,
+                                 root_dir,
+                                 argv[i] + index_of_first_filename_char);
+                        if (buf == NULL) {
+                            return EXIT_OUT_OF_MEMORY;
+                        }
+                        free(argv[i]);
+                        argv[i] = buf;
+                    }
+                }
+                break;  /* from the inner loop; go look at the next argument */
+            }
         }
     }
-    if (ncpus > 0) {
-        len += strlen(ncpusKey) + 8; // 7 digits for cpu count should be plenty
-    }
-    if (cpuSpeed > 0) {
-        len += strlen(cpuSpeedKey) + 32; // 31 digits for cpu speed
-    }
-    if (dcc_max_kids > 0) {
-        len += strlen(maxJobsKey) + 8; // 7 digits for job count should be plenty
-    }
-    if (build_machine_priority > 0) {
-        len += strlen(maxJobsKey) + 32; // 31 digits for priority
-    }
-    msg = malloc(len+1);
-    msg[0] = 0;
-    if (sysInfo) {
-        strcat(msg, sysKey);
-        strcat(msg, sysInfo);
-        strcat(msg, "\n");
-    }
-    if (distcc)
-        strcat(msg, distcc);
-    if (compilers) {
-        for (i=0; compilers && compilers[i]!=NULL; i++) {
-            strcat(msg, compilerKey);
-            strcat(msg, compilers[i]);
-            strcat(msg, "\n");
+    return 0;
+}
+
+/* The -MT command line flag does not work as advertised for distcc:
+ * it augments, rather than replace, the list of targets in the dotd file.
+ * The behavior we want though, is the replacing behavior.
+ * So here we delete the "-MT target" arguments, and we return the target,
+ * for use in the .d rewritting in dotd.c.
+ */
+static int dcc_convert_mt_to_dotd_target(char **argv, char **dotd_target)
+{
+    int i;
+    *dotd_target = NULL;
+
+    for (i = 0; argv[i]; ++i) {
+        if (strcmp(argv[i], "-MT") == 0) {
+            break;
         }
-        free(compilers);
     }
-    if (ncpus > 0) {
-        strcat(msg, ncpusKey);
-        sprintf(&msg[strlen(msg)], "%d\n", ncpus);
+
+    /* if we reached the end without finding -MT, fine. */
+    if (argv[i] == NULL)
+        return 0;
+
+    /* if we find -MT but only at the very end, that's an error. */
+    if (argv[i+1] == NULL) {
+        rs_trace("found -MT at the end of the command line");
+        return 1;
     }
-    if (cpuSpeed > 0) {
-        strcat(msg, cpuSpeedKey);
-        sprintf(&msg[strlen(msg)], "%llu\n", cpuSpeed);
+
+    /* the dotd_target is the argument of -MT */
+    *dotd_target = argv[i+1];
+
+    /* copy the next-next argument on top of this. */
+    for (; argv[i+2]; ++i) {
+        argv[i] = argv[i+2];
     }
-    if (dcc_max_kids > 0) {
-        strcat(msg, maxJobsKey);
-        sprintf(&msg[strlen(msg)], "%d\n", dcc_max_kids);
+
+    /* and then put the terminal null in. */
+    argv[i] = argv[i+2];
+
+    return 0;
+}
+
+
+/**
+ * Find what the dotd target should be (if any).
+ * Prepend @p root_dir to every command
+ * line argument that refers to a file/dir by an absolute name.
+ **/
+static int tweak_arguments_for_server(char **argv,
+                                      const char *root_dir,
+                                      const char *deps_fname,
+                                      char **dotd_target,
+                                      char ***tweaked_argv,
+                                      int *send_back_dotd)
+{
+    int ret, parsed_needs_dotd = 0, parsed_sets_dotd_target = 0;
+    char *parsed_deps_fname = NULL, *parsed_dotd_target = NULL;
+    *dotd_target = 0;
+    if ((ret = dcc_copy_argv(argv, tweaked_argv, 3)))
+        return 1;
+
+    dcc_get_dotd_info(argv, &parsed_deps_fname, &parsed_needs_dotd,
+                      &parsed_sets_dotd_target, &parsed_dotd_target);
+    if (parsed_deps_fname)
+        free(parsed_deps_fname);
+  
+    /* If the client wanted a deps file, tweak it to work on the server. */
+    if (parsed_needs_dotd) {
+        if ((ret = dcc_convert_mt_to_dotd_target(*tweaked_argv, dotd_target)))
+            return 1;
+
+        dcc_argv_append(*tweaked_argv, strdup("-MMD"));
+        dcc_argv_append(*tweaked_argv, strdup("-MF"));
+        dcc_argv_append(*tweaked_argv, strdup(deps_fname));
     }
-    if (build_machine_priority > 0) {
-        strcat(msg, priorityKey);
-        sprintf(&msg[strlen(msg)], "%d\n", build_machine_priority);
-    }
-    
-    // a bit of a hack - if we are writing to stdout then just print the string
-    if (out_fd == 1)
-        ret = write(out_fd, msg, len)==len;
-    else
-        ret = dcc_x_token_string(out_fd, "HINF", msg);
-    free(msg);
-    return ret;
+    *send_back_dotd = parsed_needs_dotd;
+
+    tweak_include_arguments_for_server(*tweaked_argv, root_dir);
+    tweak_input_argument_for_server(*tweaked_argv, root_dir);
+    return 0;
+}
+
+
+/**
+ * Read the client working directory from in_fd socket,
+ * and set up the server side directory corresponding to that.
+ * Inputs:
+ *   @p in_fd: the file descriptor for the socket.
+ * Outputs:
+ *   @p temp_dir: a temporary directory on the server,
+ *                corresponding to the client's root directory (/),
+ *   @p client_side_cwd: the current directory on the client
+ *   @p server_side_cwd: the corresponding directory on the server;
+ *                server_side_cwd = temp_dir + client_side_cwd
+ **/
+static int make_temp_dir_and_chdir_for_cpp(int in_fd,
+        char **temp_dir, char **client_side_cwd, char **server_side_cwd)
+{
+
+        int ret = 0;
+
+        if ((ret = dcc_get_new_tmpdir(temp_dir)))
+            return ret;
+        if ((ret = dcc_r_cwd(in_fd, client_side_cwd)))
+            return ret;
+
+        asprintf(server_side_cwd, "%s%s", *temp_dir, *client_side_cwd);
+        if (*server_side_cwd == NULL) {
+            ret = EXIT_OUT_OF_MEMORY;
+        } else if ((ret = dcc_mk_tmp_ancestor_dirs(*server_side_cwd))) {
+            ; /* leave ret the way it is */
+        } else if ((ret = dcc_mk_tmpdir(*server_side_cwd))) {
+            ; /* leave ret the way it is */
+        } else if (chdir(*server_side_cwd) == -1) {
+            ret = EXIT_IO_ERROR;
+        }
+        return ret;
 }
 
 
@@ -365,21 +551,41 @@ int dcc_send_host_info(int out_fd)
 static int dcc_run_job(int in_fd,
                        int out_fd)
 {
-    char **argv;
-    int status;
-    char *temp_i, *temp_o, *err_fname, *out_fname;
-    int ret, compile_ret;
-    char *orig_input, *orig_output;
+    char **argv = NULL;
+    char **tweaked_argv = NULL;
+    int status = 0;
+    char *temp_i = NULL, *temp_o = NULL;
+    char *err_fname = NULL, *out_fname = NULL, *deps_fname = NULL;
+    char *temp_dir = NULL; /* for receiving multiple files */
+    int ret = 0, compile_ret = 0;
+    char *orig_input = NULL, *orig_output = NULL;
+    char *orig_input_tmp, *orig_output_tmp;
+    char *dotd_target = NULL;
     pid_t cc_pid;
     enum dcc_protover protover;
     enum dcc_compress compr;
-    dcc_indirection indirect;
-    
+    struct timeval start, end;
+    int time_ms;
+    char *time_str;
+    int job_result = -1;
+    enum dcc_cpp_where cpp_where;
+    char *server_cwd = NULL;
+    char *client_cwd = NULL;
+    int send_back_dotd = 0;
+#ifdef XCODE_INTEGRATION
+    const char *host_info;
+#endif
+
+    gettimeofday(&start, NULL);
+
+    if ((ret = dcc_make_tmpnam("distcc", ".deps", &deps_fname)))
+        goto out_cleanup;
     if ((ret = dcc_make_tmpnam("distcc", ".stderr", &err_fname)))
         goto out_cleanup;
     if ((ret = dcc_make_tmpnam("distcc", ".stdout", &out_fname)))
         goto out_cleanup;
-    
+
+    dcc_remove_if_exists(deps_fname);
     dcc_remove_if_exists(err_fname);
     dcc_remove_if_exists(out_fname);
 
@@ -396,66 +602,229 @@ static int dcc_run_job(int in_fd,
     /* Allow output to accumulate into big packets. */
     tcp_cork_sock(out_fd, 1);
 
-    if ((ret = dcc_r_request_header(in_fd, &protover))
-        || (ret = dcc_r_argv(in_fd, &argv))
-        || (ret = dcc_scan_args(argv, &orig_input, &orig_output, &argv)))
+    if ((ret = dcc_r_request_header(in_fd, &protover)))
         goto out_cleanup;
-    
-    if (strcmp(argv[0],"--host-info") == 0) {
-        if ((ret = dcc_x_result_header(out_fd, protover)) ||
-            (ret = dcc_send_host_info(out_fd)))
-            dcc_x_token_int(out_fd, "DOTO", 0);
+
+    dcc_get_features_from_protover(protover, &compr, &cpp_where);
+
+    if (cpp_where == DCC_CPP_ON_SERVER)
+        if ((ret = make_temp_dir_and_chdir_for_cpp(in_fd,
+                          &temp_dir, &client_cwd, &server_cwd)))
+            goto out_cleanup;
+
+    if ((ret = dcc_r_argv(in_fd, &argv))
+        || (ret = dcc_xci_unmask_developer_dir_in_argv(argv))
+        || (ret = dcc_scan_args(argv, &orig_input_tmp, &orig_output_tmp,
+                                &tweaked_argv, &dcc_optx_ext)))
+        goto out_cleanup;
+
+#ifdef XCODE_INTEGRATION
+    if (!strcmp(argv[0], "--host-info") && !argv[1]) {
+        host_info = dcc_xci_host_info_string();
+        ret = !host_info ||
+              dcc_x_result_header(out_fd, protover) ||
+              dcc_x_token_string(out_fd, "HINF", host_info);
+
+        /* Uncork now, since we're jumping straight to out_cleanup and
+         * skipping over the uncork that happens when a real job is done. */
+        tcp_cork_sock(out_fd, 0);
+
+        goto out_cleanup;
+    }
+#endif /* XCODE_INTEGRATION */
+
+    /* The orig_input_tmp and orig_output_tmp values returned by dcc_scan_args()
+     * are aliased with some element of tweaked_argv.  We need to copy them,
+     * because the calls to dcc_set_input() and dcc_set_output() below will
+     * free those elements. */
+    orig_input = strdup(orig_input_tmp);
+    orig_output = strdup(orig_output_tmp);
+    if (orig_input == NULL || orig_output == NULL) {
+      ret = EXIT_OUT_OF_MEMORY;
+      goto out_cleanup;
+    }
+
+    /* Our new argv is what dcc_scan_args put into tweaked_argv */
+    /* Put tweaked_argv into argv, and free old argv */
+    dcc_free_argv(argv);
+    argv = tweaked_argv;
+    tweaked_argv = NULL;
+
+    rs_trace("output file %s", orig_output);
+    if ((ret = dcc_make_tmpnam("distccd", ".o", &temp_o)))
+        goto out_cleanup;
+
+    /* if the protocol is multi-file, then we need to do the following
+     * in a loop.
+     */
+    if (cpp_where == DCC_CPP_ON_SERVER) {
+        if (dcc_r_many_files(in_fd, temp_dir, compr)
+            || dcc_set_output(argv, temp_o)
+            || tweak_arguments_for_server(argv, temp_dir, deps_fname,
+                                          &dotd_target, &tweaked_argv,
+                                          &send_back_dotd))
+            goto out_cleanup;
+        /* Repeat the switcharoo trick a few lines above. */
+        dcc_free_argv(argv);
+        argv = tweaked_argv;
+        tweaked_argv = NULL;
     } else {
-        
-        rs_trace("output file %s", orig_output);
-        
         if ((ret = dcc_input_tmpnam(orig_input, &temp_i)))
             goto out_cleanup;
-        if ((ret = dcc_make_tmpnam("distccd", ".o", &temp_o)))
-            goto out_cleanup;
-        
-        compr = (protover == 2) ? DCC_COMPRESS_LZO1X : DCC_COMPRESS_NONE;
-        
         if ((ret = dcc_r_token_file(in_fd, "DOTI", temp_i, compr))
             || (ret = dcc_set_input(argv, temp_i))
             || (ret = dcc_set_output(argv, temp_o)))
             goto out_cleanup;
-        
-        if ((ret = dcc_check_compiler_masq(argv[0])))
-            goto out_cleanup;
-        
-        indirect.in_fd = in_fd;
-        indirect.out_fd = out_fd;
-        if ((compile_ret = dcc_spawn_child(argv, &cc_pid,
-                                           "/dev/null", out_fname, err_fname, &indirect))
-            || (compile_ret = dcc_collect_child("cc", cc_pid, &status))) {
-            /* We didn't get around to finding a wait status from the actual compiler */
-            status = W_EXITCODE(compile_ret, 0);
-        }
-        
-        if ((ret = dcc_x_result_header(out_fd, protover))
-            || (ret = dcc_send_system_info(out_fd))
-            || (ret = dcc_send_compiler_version(out_fd, argv[0]))
-            || (ret = dcc_x_cc_status(out_fd, status))
-            || (ret = dcc_x_file(out_fd, err_fname, "SERR", compr, NULL))
-            || (ret = dcc_x_file(out_fd, out_fname, "SOUT", compr, NULL))
-            || WIFSIGNALED(status)
-            || WEXITSTATUS(status)) {
-            /* Something went wrong, so send DOTO 0 */
-            dcc_x_token_int(out_fd, "DOTO", 0);
-        } else {
-            ret = dcc_x_file(out_fd, temp_o, "DOTO", compr, NULL);
-        }
-        
-        dcc_critique_status(status, argv[0], orig_input, dcc_hostdef_local, 0);
     }
+
+    if (!dcc_remap_compiler(&argv[0]))
+    goto out_cleanup;
+
+    if ((ret = dcc_check_compiler_masq(argv[0])))
+        goto out_cleanup;
+
+    if ((compile_ret = dcc_spawn_child(argv, &cc_pid,
+                                       "/dev/null", out_fname, err_fname))
+        || (compile_ret = dcc_collect_child("cc", cc_pid, &status, in_fd))) {
+        /* We didn't get around to finding a wait status from the actual
+         * compiler */
+        status = W_EXITCODE(compile_ret, 0);
+    }
+
+    if ((ret = dcc_x_result_header(out_fd, protover))
+        || (ret = dcc_x_cc_status(out_fd, status))
+        || (ret = dcc_x_file(out_fd, err_fname, "SERR", compr, NULL))
+        || (ret = dcc_x_file(out_fd, out_fname, "SOUT", compr, NULL))
+        || WIFSIGNALED(status)
+        || WEXITSTATUS(status)) {
+        /* Something went wrong, so send DOTO 0 */
+        dcc_x_token_int(out_fd, "DOTO", 0);
+
+    if (job_result == -1)
+            job_result = STATS_COMPILE_ERROR;
+    } else {
+        if (cpp_where == DCC_CPP_ON_SERVER) {
+          rs_trace("fixing up debug info");
+          /*
+           * We update the debugging information, replacing all occurrences
+           * of temp_dir (the server temp directory that corresponds to the
+           * client's root directory) with "/", to convert server path
+           * names to client path names.  This is safe to do only because
+           * temp_dir is of the form "/var/tmp/distccd-XXXXXX" where XXXXXX
+           * is randomly chosen by mkdtemp(), which makes it inconceivably
+           * unlikely that this pattern could occur in the debug info by
+           * chance.
+           */
+          if ((ret = dcc_fix_debug_info(temp_o, "/", temp_dir)))
+            goto out_cleanup;
+        }
+        if ((ret = dcc_x_file(out_fd, temp_o, "DOTO", compr, NULL)))
+            goto out_cleanup;
+
+        if (cpp_where == DCC_CPP_ON_SERVER) {
+            if (send_back_dotd) {
+                char *cleaned_dotd;
+                ret = dcc_cleanup_dotd(deps_fname,
+                                       &cleaned_dotd,
+                                       temp_dir,
+                                       dotd_target ? dotd_target : orig_output,
+                                       temp_o);
+                if (ret) goto out_cleanup;
+                ret = dcc_x_file(out_fd, cleaned_dotd, "DOTD", compr, NULL);
+                free(cleaned_dotd);
+            } else {
+                /* The current client always expects a DOTD token, so we have
+                 * to send it one indicating size 0 so we don't cause a "wire"
+                 * change which would make some client/server mixes fail.
+                 */
+                ret = dcc_x_token_int(out_fd, "DOTD", 0);
+            }
+        }
+
+        job_result = STATS_COMPILE_OK;
+    }
+
+    if (compile_ret == EXIT_IO_ERROR) {
+        job_result = STATS_CLI_DISCONN;
+    } else if (compile_ret == EXIT_TIMEOUT) {
+        job_result = STATS_COMPILE_TIMEOUT;
+    }
+
+    dcc_critique_status(status, argv[0], orig_input, dcc_hostdef_local,
+                        0);
     tcp_cork_sock(out_fd, 0);
 
     rs_log(RS_LOG_INFO|RS_LOG_NONAME, "job complete");
 
-    out_cleanup:
+out_cleanup:
+
+    switch (ret) {
+    case EXIT_BUSY: /* overloaded */
+        job_result = STATS_REJ_OVERLOAD;
+        break;
+    case EXIT_IO_ERROR: /* probably client disconnected */
+        job_result = STATS_CLI_DISCONN;
+        break;
+    case EXIT_PROTOCOL_ERROR:
+        job_result = STATS_REJ_BAD_REQ;
+        break;
+    default:
+        if (job_result != STATS_COMPILE_ERROR
+            && job_result != STATS_COMPILE_OK
+        && job_result != STATS_CLI_DISCONN
+        && job_result != STATS_COMPILE_TIMEOUT) {
+            job_result = STATS_OTHER;
+        }
+    }
+
+    gettimeofday(&end, NULL);
+    time_ms = (end.tv_sec - start.tv_sec) * 1000 + (end.tv_usec - start.tv_usec) / 1000;
+
+    dcc_job_summary_append(" ");
+    dcc_job_summary_append(stats_text[job_result]);
+
+    if (job_result == STATS_COMPILE_OK) {
+        /* special case, also log compiler, file and time */
+        dcc_stats_compile_ok(argv[0], orig_input, time_ms);
+    } else {
+        dcc_stats_event(job_result);
+    }
+
+    asprintf(&time_str, " exit:%d sig:%d core:%d ret:%d time:%dms ", WEXITSTATUS(status), WTERMSIG(status), WCOREDUMP(status), ret, time_ms);
+    dcc_job_summary_append(time_str);
+    free(time_str);
+
+    /* append compiler and input file info */
+    if (job_result == STATS_COMPILE_ERROR
+        || job_result == STATS_COMPILE_OK) {
+        dcc_job_summary_append(argv[0]);
+        dcc_job_summary_append(" ");
+        dcc_job_summary_append(orig_input);
+    }
+
     dcc_remove_log_to_file();
     dcc_cleanup_tempfiles();
+
+    free(orig_input);
+    free(orig_output);
+
+    if (argv)
+        dcc_free_argv(argv);
+    if (tweaked_argv)
+        dcc_free_argv(tweaked_argv);
+
+    dcc_optx_ext = NULL;
+
+    free(temp_dir);
+    free(temp_i);
+    free(temp_o);
+
+    free(deps_fname);
+    free(err_fname);
+    free(out_fname);
+
+    free(client_cwd);
+    free(server_cwd);
 
     return ret;
 }

@@ -49,12 +49,12 @@ extract_unsigned_integer (const void *addr, int len)
 /* This is roughly cribbed from ppc-maocsx-regs.c.  We don't have the
    gdbarch stuff going in gdbserver, however.  So we can't just use it
    exactly...  */
-static inline void
-collect_unsigned_int (int regnum, unsigned int *addr)
+static inline uint32_t
+collect_uint32 (int regnum)
 {
   char buf[4];
   collect_register (regnum, buf);
-  *addr = extract_unsigned_integer (buf, 4);
+  return extract_unsigned_integer (buf, 4);
 }
 
 void
@@ -74,31 +74,29 @@ store_unsigned_integer (void *addr, int len, unsigned long long val)
 }
 
 static inline void
-supply_unsigned_int (int regnum, unsigned long long val)
+supply_uint32 (int regnum, uint32_t val)
 {
-  char buf[4] = { 0 };
-  store_unsigned_integer (buf, 4, val);
+  char buf[sizeof(val)] = { 0 };
+  store_unsigned_integer (buf, sizeof(val), val);
   supply_register (regnum, buf);
 }
 
 void
-arm_macosx_store_vfp_registers (struct gdb_arm_thread_fpstate *fp_regs)
+arm_macosx_store_vfpv1_registers (gdb_arm_thread_vfpv1_state_t *fp_regs)
 {
   int i;
-  uint32_t *r = fp_regs->r;
   for (i = 0; i < ARM_MACOSX_NUM_VFP_REGS; i++)
-    collect_unsigned_int (ARM_FIRST_VFP_REGNUM + i, &r[i]);
-  collect_unsigned_int (ARM_FPSCR_REGNUM, &fp_regs->fpscr);
+    fp_regs->r[i] = collect_uint32 (ARM_VFP_REGNUM_S0 + i);
+  fp_regs->fpscr = collect_uint32 (ARM_VFP_REGNUM_S0);
 }
 
 void
-arm_macosx_fetch_vfp_registers (struct gdb_arm_thread_fpstate *fp_regs)
+arm_macosx_fetch_vfpv1_registers (gdb_arm_thread_vfpv1_state_t *fp_regs)
 {
   int i;
-  uint32_t *r = fp_regs->r;
   for (i = 0; i < ARM_MACOSX_NUM_VFP_REGS; i++)
-    supply_unsigned_int (ARM_FIRST_VFP_REGNUM + i, r[i]);
-  supply_unsigned_int (ARM_FPSCR_REGNUM, fp_regs->fpscr);
+    supply_uint32 (ARM_VFP_REGNUM_S0 + i, fp_regs->r[i]);
+  supply_uint32 (ARM_FPSCR_REGNUM, fp_regs->fpscr);
 }
 
 void
@@ -106,8 +104,8 @@ arm_macosx_store_gp_registers (struct gdb_arm_thread_state *gp_regs)
 {
   int i;
   for (i = 0; i < ARM_MACOSX_NUM_GP_REGS; i++)
-    collect_unsigned_int (ARM_R0_REGNUM + i, &gp_regs->r[i]);
-  collect_unsigned_int (ARM_PS_REGNUM, &gp_regs->cpsr);
+    gp_regs->r[i] = collect_uint32 (ARM_R0_REGNUM + i);
+  gp_regs->cpsr = collect_uint32 (ARM_PS_REGNUM);
 }
 
 void
@@ -115,8 +113,8 @@ arm_macosx_fetch_gp_registers (struct gdb_arm_thread_state *gp_regs)
 {
   int i;
   for (i = 0; i < ARM_MACOSX_NUM_GP_REGS; i++)
-    supply_unsigned_int (ARM_R0_REGNUM + i, gp_regs->r[i]);
-  supply_unsigned_int (ARM_PS_REGNUM, gp_regs->cpsr);
+    supply_uint32 (ARM_R0_REGNUM + i, gp_regs->r[i]);
+  supply_uint32 (ARM_PS_REGNUM, gp_regs->cpsr);
 }
 
 /* Read register values from the inferior process.
@@ -162,8 +160,8 @@ arm_fetch_inferior_registers (int regno)
   if ((get_all || ARM_MACOSX_IS_VFP_RELATED_REGNUM (regno))
        && arm_mach_o_query_v6 ())
     {
-      struct gdb_arm_thread_fpstate fp_regs;
-      unsigned int fp_count = GDB_ARM_THREAD_FPSTATE_COUNT;
+      gdb_arm_thread_vfpv1_state_t fp_regs;
+      unsigned int fp_count = GDB_ARM_THREAD_FPSTATE_VFPV1_COUNT;
       kern_return_t ret;
       ret = thread_get_state (current_thread, GDB_ARM_THREAD_FPSTATE,
                               (thread_state_t) & fp_regs,
@@ -174,7 +172,7 @@ arm_fetch_inferior_registers (int regno)
 		  current_thread);
          MACH_CHECK_ERROR (ret);
        }
-      arm_macosx_fetch_vfp_registers (&fp_regs);
+      arm_macosx_fetch_vfpv1_registers (&fp_regs);
     }
 }
 
@@ -201,12 +199,12 @@ arm_store_inferior_registers (int regno)
   if (((regno == -1) || ARM_MACOSX_IS_VFP_RELATED_REGNUM (regno))
        && arm_mach_o_query_v6 ())
     {
-      struct gdb_arm_thread_fpstate fp_regs;
+      gdb_arm_thread_vfpv1_state_t fp_regs;
       kern_return_t ret;
-      arm_macosx_store_vfp_registers (&fp_regs);
+      arm_macosx_store_vfpv1_registers (&fp_regs);
       ret = thread_set_state (current_thread, GDB_ARM_THREAD_FPSTATE,
                               (thread_state_t) & fp_regs,
-                              GDB_ARM_THREAD_FPSTATE_COUNT);
+                              GDB_ARM_THREAD_FPSTATE_VFPV1_COUNT);
       MACH_CHECK_ERROR (ret);
     }
 }
@@ -227,12 +225,10 @@ read_memory_integer (unsigned long addr, int size)
   return extract_unsigned_integer (buf, size); 
 }
 
-static unsigned long
+static uint32_t
 read_register (int regno)
 {
-  unsigned int retval;
-  collect_unsigned_int (regno, &retval);
-  return retval;
+  return collect_uint32 (regno);
 }
 
 /* FIXME: This is wrong for now.  */

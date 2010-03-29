@@ -1,9 +1,9 @@
-2009-06-16  Caroline Tice  <ctice@apple.com>
+2009-06-05  Caroline Tice  <ctice@apple.com>
 
-        * configure.ac:  Added apple-darwin case to host case statement,
-        assigning mh-macosx to frag.
-        * configure:  Re-built using autoconf, to use new configure.ac.
-        * config/mh-macosx:  New file.
+	* configure.ac:  Added apple-darwin case to host case statement,
+	assigning mh-macosx to frag.
+	* configure:  Re-built using autoconf, to use new configure.ac.
+	* config/mh-macosx:  New file.
 
 2009-01-13  Jason Molenda  (jmolenda@apple.com)
 

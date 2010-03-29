@@ -279,7 +279,7 @@ extern void discard_psymtab (struct partial_symtab *);
 extern void find_lowest_section (bfd *, asection *, void *);
 
 /* APPLE LOCAL begin symfile bfd open */
-extern bfd *symfile_bfd_open (const char *, int mainline);
+extern bfd *symfile_bfd_open (const char *, int mainline, enum gdb_osabi osabi);
 
 extern int get_section_index (struct objfile *, char *);
 
@@ -385,7 +385,13 @@ extern void elfmdebug_build_psymtabs (struct objfile *,
 				      const struct ecoff_debug_swap *,
 				      asection *);
 
-extern bfd *symfile_bfd_open_safe (const char *filename, int mainline);
+extern bfd *symfile_bfd_open_safe (const char *filename, int mainline, 
+				   enum gdb_osabi osabi);
+
+int reread_symbols_for_objfile (struct objfile *objfile, 
+				long new_modtime, 
+				enum gdb_osabi osabi,
+                                struct objfile **next);
 
 extern struct objfile *symbol_file_add_bfd_safe
 (bfd *abfd, int from_tty, struct section_addr_info *addrs, struct section_offsets *offsets,
@@ -398,7 +404,8 @@ extern struct objfile *symbol_file_add_bfd_using_objfile
  int mainline, int flags, int symflags, CORE_ADDR mapaddr, const char *prefix);
 
 /* APPLE LOCAL: pick the slice of a fat file matching the current arch.  */
-bfd *open_bfd_matching_arch (bfd *archive_bfd, bfd_format expected_format);
+bfd *open_bfd_matching_arch (bfd *archive_bfd, bfd_format expected_format,
+			     enum gdb_osabi osabi);
 
 struct objfile *symbol_file_add_with_addrs_or_offsets_using_objfile (struct objfile *, bfd *, int, struct section_addr_info *, struct section_offsets *, int, int, int, int, CORE_ADDR, const char *, char *);
 

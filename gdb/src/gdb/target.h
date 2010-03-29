@@ -481,6 +481,19 @@ struct target_ops
        loader function.  */
     struct value *(*to_load_solib) (char *path, char *flags);
 
+    /* APPLE LOCAL: Check if a step is not completed due to target specific
+       circumstances. This was added for ARM (Thumb actually) seeing as a
+       32 bit thumb instruction can stop half way through itself when using
+       IMVA mismatch stepping.  */
+    int (*to_keep_going) (CORE_ADDR stop_pc);
+
+    /* APPLE LOCAL: Added support for target specific information to be
+       stored in the thread specific inferior_status to allow targets to
+       save/restore thread specific data between context switches.  */
+    void * (*to_save_thread_inferior_status) ();
+    void (*to_restore_thread_inferior_status) (void *);
+    void (*to_free_thread_inferior_status) (void *);
+
     int to_magic;
     /* Need sub-structure for target machine related rather than comm related?
      */
@@ -1109,6 +1122,26 @@ extern void (*deprecated_target_new_objfile_hook) (struct objfile *);
 #define target_load_solib(PATH,MODE)		\
   (current_target.to_load_solib) (PATH,MODE)
 
+/*
+ * APPLE LOCAL: complex step support.
+ */
+
+#define target_keep_going(PC) \
+    (current_target.to_keep_going) (PC)
+
+/*
+ * APPLE LOCAL target specific inferior_status support.
+ */
+
+#define target_save_thread_inferior_status() \
+    (current_target.to_save_thread_inferior_status) ()
+
+#define target_restore_thread_inferior_status(VOID_PTR) \
+    (current_target.to_restore_thread_inferior_status) (VOID_PTR)
+
+#define target_free_thread_inferior_status(VOID_PTR) \
+    (current_target.to_free_thread_inferior_status) (VOID_PTR)
+
 /* Thread-local values.  */
 #define target_get_thread_local_address \
     (current_target.to_get_thread_local_address)
@@ -1333,6 +1366,8 @@ extern enum target_signal target_signal_from_command (int);
 
 /* Any target can call this to switch to remote protocol (in remote.c). */
 extern void push_remote_target (char *name, int from_tty);
+/* APPLE LOCAL: target remote-macosx equivalent of push_remote_target().  */
+extern void push_remote_macosx_target (char *name, int from_tty);
 
 /* Imported from machine dependent code */
 

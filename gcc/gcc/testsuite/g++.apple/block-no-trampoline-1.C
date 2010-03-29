@@ -14,6 +14,9 @@ extern "C" void __enable_execute_stack ()
         abort();
 }
 
+extern "C" uint64_t
+dispatch_benchmark(size_t count, void (^block)(void));
+
 class A {
 public:
     void foo();

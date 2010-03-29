@@ -1,8 +1,9 @@
-/*= -*- c-basic-offset: 4; indent-tabs-mode: nil; -*-
+/* -*- c-file-style: "java"; indent-tabs-mode: nil; tab-width: 4; fill-column: 78 -*-
  *
  * ecolog - Reusable application logging library.
  *
  * Copyright (C) 2000 - 2003 by Martin Pool <mbp@samba.org>
+ * Copyright 2007 Google Inc.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU Lesser General Public License as published by
@@ -27,7 +28,7 @@
                                       */
 
 
-#include "config.h"
+#include <config.h>
 
 #include <unistd.h>
 #include <stdio.h>
@@ -40,6 +41,7 @@
 
 #include "trace.h"
 #include "snprintf.h"
+#include "va_copy.h"
 
 struct rs_logger_list {
     rs_logger_fn               *fn;
@@ -52,7 +54,7 @@ struct rs_logger_list {
 static struct rs_logger_list *logger_list = NULL;
 
 
-int rs_trace_level = RS_LOG_INFO;
+int rs_trace_level = RS_LOG_NOTICE;
 
 #ifdef UNUSED
 /* nothing */
@@ -60,9 +62,9 @@ int rs_trace_level = RS_LOG_INFO;
 #  define UNUSED(x) x __attribute__((unused))
 #elif defined(__LCLINT__)
 #  define UNUSED(x) /*@unused@*/ x
-#else				/* !__GNUC__ && !__LCLINT__ */
+#else                /* !__GNUC__ && !__LCLINT__ */
 #  define UNUSED(x) x
-#endif				/* !__GNUC__ && !__LCLINT__ */
+#endif                /* !__GNUC__ && !__LCLINT__ */
 
 
 static void rs_log_va(int level, char const *fn, char const *fmt, va_list va);
@@ -78,7 +80,7 @@ static void rs_log_va(int level, char const *fn, char const *fmt, va_list va);
  */
 static const char *rs_severities[] = {
     "EMERGENCY! ", "ALERT! ", "CRITICAL! ", "ERROR: ", "Warning: ",
-    "Notice: ", "", ""
+    "", "", ""
 };
 
 
@@ -89,7 +91,7 @@ static const char *rs_severities[] = {
 void rs_remove_all_loggers(void)
 {
     struct rs_logger_list *l, *next;
-    
+
     for (l = logger_list; l; l = next) {
         next = l -> next;       /* save before destruction */
         free(l);
@@ -143,8 +145,9 @@ void rs_remove_logger(rs_logger_fn fn,
 }
 
 
-/** 
- * Set the least important message severity that will be output.
+/**
+ * Set the least important (i.e. largest) message severity that
+ * will be output.
  */
 void
 rs_trace_set_level(rs_loglevel level)
@@ -155,7 +158,7 @@ rs_trace_set_level(rs_loglevel level)
 
 
 /**
- * Work out a log level from a string name. 
+ * Work out a log level from a string name.
  *
  * Returns -1 for invalid names.
  */
@@ -178,7 +181,7 @@ rs_loglevel_from_name(const char *name)
         return RS_LOG_INFO;
     else if (!strcmp(name, "debug"))
         return RS_LOG_DEBUG;
-    
+
     return -1;
 }
 
@@ -196,9 +199,8 @@ static void rs_lazy_default(void)
 
     called = 1;
     if (logger_list == NULL)
-        rs_add_logger(rs_logger_file, RS_LOG_DEBUG, NULL, STDERR_FILENO);
+        rs_add_logger(rs_logger_file, RS_LOG_WARNING, NULL, STDERR_FILENO);
 }
-
 
 /* Heart of the matter */
 static void
@@ -211,12 +213,18 @@ rs_log_va(int flags, char const *caller_fn_name, char const *fmt, va_list va)
 
     rs_lazy_default();
 
-    if (level > rs_trace_level)
-        return;
-
-    for (l = logger_list; l; l = l->next)
-        if (level <= l->max_level)
-            l->fn(flags, caller_fn_name, fmt, va, l->private_ptr, l->private_int);
+    if (level <= rs_trace_level)
+      for (l = logger_list; l; l = l->next)
+          if (level <= l->max_level) {
+              /* We need to use va_copy() here, because functions like vsprintf
+               * may destructively modify their va_list argument, but we need
+               * to ensure that it's still valid next time around the loop. */
+              va_list copied_va;
+              VA_COPY(copied_va, va);
+              l->fn(flags, caller_fn_name,
+                    fmt, copied_va, l->private_ptr, l->private_int);
+              VA_COPY_END(copied_va);
+          }
 }
 
 
@@ -281,7 +289,7 @@ rs_log0_nofn(int level, char const *fmt, ...)
 void rs_log0(int level, char const *fn, char const *fmt, ...)
 {
     va_list         va;
-    
+
     va_start(va, fmt);
     rs_log_va(level, fn, fmt, va);
     va_end(va);
@@ -318,7 +326,7 @@ rs_logger_file(int flags, const char *fn, char const *fmt, va_list va,
     if (len > (int) sizeof buf - 2)
         len = (int) sizeof buf - 2;
     strcpy(&buf[len], "\n");
-        
+
     (void) write(log_fd, buf, len+1);
 }
 
@@ -330,22 +338,9 @@ rs_logger_file(int flags, const char *fn, char const *fmt, va_list va,
 /* This is called directly if the machine doesn't allow varargs
  * macros. */
 void
-rs_log_fatal_nofn(char const *s, ...) 
+rs_log_error_nofn(char const *s, ...)
 {
-    va_list	va;
-
-    va_start(va, s);
-    rs_log_va(RS_LOG_CRIT, NULL, s, va);
-    va_end(va);
-}
-
-
-/* This is called directly if the machine doesn't allow varargs
- * macros. */
-void
-rs_log_error_nofn(char const *s, ...) 
-{
-    va_list	va;
+    va_list    va;
 
     va_start(va, s);
     rs_log_va(RS_LOG_ERR, NULL, s, va);
@@ -355,9 +350,9 @@ rs_log_error_nofn(char const *s, ...)
 /* This is called directly if the machine doesn't allow varargs
  * macros. */
 void
-rs_log_warning_nofn(char const *s, ...) 
+rs_log_warning_nofn(char const *s, ...)
 {
-    va_list	va;
+    va_list    va;
 
     va_start(va, s);
     rs_log_va(RS_LOG_WARNING, NULL, s, va);
@@ -368,9 +363,9 @@ rs_log_warning_nofn(char const *s, ...)
 /* This is called directly if the machine doesn't allow varargs
  * macros. */
 void
-rs_log_critical_nofn(char const *s, ...) 
+rs_log_critical_nofn(char const *s, ...)
 {
-    va_list	va;
+    va_list    va;
 
     va_start(va, s);
     rs_log_va(RS_LOG_CRIT, NULL, s, va);
@@ -380,9 +375,9 @@ rs_log_critical_nofn(char const *s, ...)
 /* This is called directly if the machine doesn't allow varargs
  * macros. */
 void
-rs_log_info_nofn(char const *s, ...) 
+rs_log_info_nofn(char const *s, ...)
 {
-    va_list	va;
+    va_list    va;
 
     va_start(va, s);
     rs_log_va(RS_LOG_INFO, NULL, s, va);
@@ -393,9 +388,9 @@ rs_log_info_nofn(char const *s, ...)
 /* This is called directly if the machine doesn't allow varargs
  * macros. */
 void
-rs_log_notice_nofn(char const *s, ...) 
+rs_log_notice_nofn(char const *s, ...)
 {
-    va_list	va;
+    va_list    va;
 
     va_start(va, s);
     rs_log_va(RS_LOG_NOTICE, NULL, s, va);
@@ -406,9 +401,9 @@ rs_log_notice_nofn(char const *s, ...)
 /* This is called directly if the machine doesn't allow varargs
  * macros. */
 void
-rs_log_trace_nofn(char const *s, ...) 
+rs_log_trace_nofn(char const *s, ...)
 {
-    va_list	va;
+    va_list    va;
 
     va_start(va, s);
     rs_log_va(RS_LOG_DEBUG, NULL, s, va);
@@ -428,7 +423,19 @@ rs_supports_trace(void)
     return 1;
 #else
     return 0;
-#endif				/* !DO_RS_TRACE */
+#endif                /* !DO_RS_TRACE */
 }
 
 
+static char job_summary[4096];
+void dcc_job_summary_clear(void) {
+    job_summary[0] = 0;
+}
+
+void dcc_job_summary(void) {
+    rs_log_notice("%s", job_summary);
+}
+
+void dcc_job_summary_append(const char *s) {
+    strncat(job_summary, s, 4096-strlen(job_summary));
+}

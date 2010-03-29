@@ -1,3 +1,12 @@
+2009-11-09  Jason Molenda  (jmolenda@apple.com)
+
+	* i386-dis.c (dis386): Allow lahf and sahf in x86_64 executables.
+
+2008-11-21  Greg Clayton  <gclayton@apple.com>
+
+	* arm-dis.c: Updated thumb ldmia instruction to handle the case
+	where Rn is in the register list and thus shouldn't be updated.
+
 2008-09-10  Jason Molenda  (jmolenda@apple.com)
 
 	* i386-dis.c (prefix_user_table): Print "movq" instead of "movd" if

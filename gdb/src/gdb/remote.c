@@ -60,6 +60,7 @@
 
 #ifdef MACOSX_DYLD
 #include "macosx-nat-dyld.h"
+#include "macosx-nat-dyld-process.h"
 #endif
 #include <execinfo.h>
 
@@ -192,16 +193,6 @@ static void show_packet_config_cmd (struct packet_config *config);
 static void update_packet_config (struct packet_config *config);
 
 void _initialize_remote (void);
-
-/* APPLE LOCAL: Remote Nub might not have started the target, and we
-   want to either run or attach.  These functions do that job.  */
-static void remote_create_inferior (char *, char*, char **, int);
-static void remote_attach (char *, int);
-
-/* The executable might not have the same location on the remote
-   system as it does here, provide the correct path here.  */
-char *remote_exec_dir;
-/* END APPLE LOCAL */
 
 /* APPLE LOCAL */
 static void start_remote_timer (void);
@@ -481,11 +472,12 @@ struct memory_packet_config
    it in the future if that seems appropriate.  */
 
 static void
-remote_backtrace_self ()
+remote_backtrace_self (const char *message)
 {
-  void *bt_buffer[10];
-  int count = backtrace (bt_buffer, 10);
-  fprintf_filtered (gdb_stderr, "gdb stack crawl at point of invalid hex digit:\n");
+  void *bt_buffer[100];
+  int count = backtrace (bt_buffer, 100);
+  if (message && message[0])
+    fprintf_filtered (gdb_stderr, "%s", message);
   backtrace_symbols_fd (bt_buffer, count, STDERR_FILENO);
 }
 
@@ -539,8 +531,10 @@ add_incoming_pkt_to_protocol_log (const char *p)
 }
 
 static void
-dump_protocol_log ()
+dump_protocol_log (const char *message)
 {
+  if (message && message[0])
+    fprintf_filtered (gdb_stderr, "%s", message);
   /* protocol_log.head is actually the oldest entry in the ring buffer but 
      I skip over it to simplify the loop conditional expression below.  */
   int i = protocol_log.head + 1;
@@ -581,7 +575,7 @@ dump_packets_command (char *unused, int fromtty)
 {
   if (!remote_desc)
     error (_("command can only be used with remote target"));
-  dump_protocol_log ();
+  dump_protocol_log (NULL);
 }
 
 /* Compute the current size of a read/write packet.  Since this makes
@@ -1639,7 +1633,7 @@ unpack_varlen_hex (char *buff,	/* packet to parse */
 		   ULONGEST *result)
 {
   int nibble;
-  int retval = 0;
+  ULONGEST retval = 0;
 
   while (ishex (*buff, &nibble))
     {
@@ -1670,6 +1664,26 @@ pack_hex_byte (char *pkt, int byte)
 {
   *pkt++ = hexchars[(byte >> 4) & 0xf];
   *pkt++ = hexchars[(byte & 0xf)];
+  return pkt;
+}
+
+/* APPLE LOCAL: Pack a C string as ASCII hex bytes. A string of "123" gets
+   encoded as "313233" (each character is encoded as two hex characters that
+   repesent the hex encoding of the character itself).  If END is NULL, then
+   STR is assumed to be a NULL terminated C string. If END is not NULL it
+   specifies where in STR to stop appending characters. This allows substrings 
+   of a string to be output without having to NULL terminate the substrings 
+   within a larger C string, or it can allow a NULL character to be encoded
+   into PKT.  */
+static char *
+pack_string_as_ascii_hex (char *pkt, const char *str, const char *end)
+{
+  const char *s;
+  if (end == NULL)
+    end = str + strlen (str);
+
+  for (s = str; s < end; s++)
+    pkt = pack_hex_byte (pkt, *s);
   return pkt;
 }
 
@@ -2723,13 +2737,6 @@ remote_open_1 (char *name, int from_tty, struct target_ops *target,
      case.  */
   if (exec_bfd && !ptid_equal (inferior_ptid, null_ptid)) 	/* No use without an exec file.  */
     {
-#ifdef MACOSX_DYLD
-      /* APPLE LOCAL: for Mac OS X remote targets, init our
-         dyld information instead of currently using the solib
-	 interface that parallels our dyld implementation.  */
-      macosx_dyld_create_inferior_hook ();
-
-#else /* MACOSX_DYLD */
 
 #ifdef SOLIB_CREATE_INFERIOR_HOOK
       SOLIB_CREATE_INFERIOR_HOOK (PIDGET (inferior_ptid));
@@ -2737,230 +2744,18 @@ remote_open_1 (char *name, int from_tty, struct target_ops *target,
       solib_create_inferior_hook ();
 #endif
 
-#endif /* MACOSX_DYLD */
       remote_check_symbols (symfile_objfile);
+      
+      /* APPLE LOCAL: make sure any breakpoints that had their ENABLE_STATE set
+         to BP_SHLIB_DISABLED in disable_breakpoints_in_shlibs from our 
+         call to no_shared_libraries() above, get re-enabled.  */
+      re_enable_breakpoints_in_shlibs (1);
     }
   
   if (!ptid_equal (inferior_ptid, null_ptid))
       observer_notify_inferior_created (&current_target, from_tty);
 }
   
-/* APPLE LOCAL Implementation of remote_create_inferior and remote_attach.  */
-static void
-complete_create_or_attach (int from_tty)
-{
-  struct remote_state *rs = get_remote_state ();
-
-  /* Now send the restart packet.  Then we will wait for the remote to
-     start up.  */
-  struct gdb_exception ex;
-  ex = catch_exception (uiout, remote_start_remote, NULL, RETURN_MASK_ALL);
-  if (ex.reason < 0)
-    {
-      pop_target ();
-      throw_exception (ex);
-    }
-  
-  /* Now indicate we have a remote target:  */
-  rs->has_target = 1;
-  
-  /* And not that we have a target, redo the dyld information.  */
-  macosx_dyld_create_inferior_hook ();
-  if (exec_bfd)
-    remote_check_symbols (symfile_objfile);
-  
-  observer_notify_inferior_created (&current_target, from_tty);
-}
-
-/* We printf lengths & index's.  We need to know what size to allocate for them.
-   20 is the length of 0xffffffffffffffff as an int.  Probably big enough.  */
-#define INT_PRINT_MAX 20
-void
-remote_create_inferior (char *exec_file, char *allargs, char **env, int from_tty)
-{
-  struct remote_state *rs = get_remote_state ();
-  char *buf = alloca (rs->remote_packet_size);
-  char *pkt_buffer = NULL;
-  int exec_len;
-  int args_len;
-  int argnum;
-  int print_len;
-  int i;
-  char *ptr;
-  char hexval[3];
-  char **argv;
-  int argc;
-  struct cleanup *pkt_cleanup;
-  char *remote_exec_file;
-  static const char *env_pkt_hdr = "QEnvironment:";
-  int envnum;
-  int packet_len;
-  int max_size;
-  int timed_out;
-
-  
-  /* First send down the environment array. 
-     We are using a packet of the form:
-         QEnvironment[,<LEN>,<ENV_ELEM>]...
-     where the ENV_ELEM is a hex-encoded form of the FOO=BAR entry that gdb passes in, and
-     LEN is the length of the hex-encoded form.  */
-  
-  envnum = 0;
-  max_size = 0;
-  pkt_cleanup = NULL;
-
-  while (env[envnum] != NULL)
-    {
-        packet_len = strlen (env_pkt_hdr) +  strlen(env[envnum]) + 1;
-
-	if (packet_len > rs->remote_packet_size)
-	  {
-	    warning ("Environment variable too long, skipping: %s", env[envnum]);
-	    continue;
-	  }
-
-	if (packet_len > max_size)
-	  {
-	    if (pkt_cleanup != NULL)
-	      do_cleanups (pkt_cleanup);
-	    pkt_buffer = (char *) xmalloc (packet_len);
-	    max_size = packet_len;
-	    pkt_cleanup = make_cleanup (xfree, pkt_buffer);
-	  }
-
-	snprintf (pkt_buffer, packet_len, "%s%s", env_pkt_hdr, env[envnum]);
-	putpkt (pkt_buffer);
-
-	getpkt (buf, rs->remote_packet_size, 0);
-	if (buf[0] == 'E')
-	  error ("Got an error \"%s\" sending environment to remote.", buf);
-	else if (buf[0] != '\0' && (buf[0] != 'O' && buf[1] != 'K'))
-	  error ("Unknown packet reply: \"%s\" to environment packet.", buf);
-	
-	envnum++;
-    }
-
-  if (pkt_cleanup != NULL)
-    do_cleanups (pkt_cleanup);
-
-  /* Next send down the arguments.  */
-
-  /* The largest possible array - every character is a separate argument.  */
-  argv = (char **) xmalloc (((strlen (allargs) + 1) / (unsigned) 2 + 2) * sizeof (*argv));
-  pkt_cleanup = make_cleanup (xfree, argv);
-  breakup_args (allargs, &argc, argv);
-
-  if (remote_exec_dir == NULL || remote_exec_dir[0] == '\0')
-    {
-      remote_exec_file = exec_file;
-    }
-  else
-    {
-      char *file_name = basename (exec_file);
-      remote_exec_file = (char *) xmalloc (strlen (remote_exec_dir) 
-					   + strlen (file_name) + 1);
-      sprintf (remote_exec_file, "%s/%s", remote_exec_dir, file_name);
-      make_cleanup (xfree, remote_exec_file);
-    }
-
-  exec_len = strlen (remote_exec_file);
-  /* This is likely an overestimate, since if there's more than one
-     argument we won't include the spaces...  */
-  args_len = strlen (allargs);
-  
-  pkt_buffer = xmalloc (1 + INT_PRINT_MAX + 1 + INT_PRINT_MAX + 1 + 2 * exec_len 
-		      + argc * (1 + INT_PRINT_MAX + 1 + INT_PRINT_MAX + 1) + 2 * args_len + 1);
-  make_cleanup (xfree, pkt_buffer);
-  print_len = snprintf (pkt_buffer, INT_PRINT_MAX + 5, "A%d,0,", 2 * exec_len);
-  ptr = pkt_buffer + print_len;
-
-  for (i = 0; i < exec_len; i++)
-    {
-      snprintf (hexval, sizeof (hexval), "%02hhx", remote_exec_file[i]);
-      *ptr++ = hexval[0];
-      *ptr++ = hexval[1];
-    }
-  for (argnum = 0; argnum < argc; argnum++)
-    {
-      char *arg = argv[argnum];
-      int arglen = strlen (arg);
-      *ptr++ = ',';
-      *ptr = '\0';
-      print_len = snprintf (ptr, 2 * INT_PRINT_MAX + 3, "%d,%d,", 2 * arglen, argnum + 1);
-      ptr += print_len;
-      for (i = 0; i < arglen; i++)
-	{
-	  snprintf (hexval, sizeof (hexval), "%02hhx", arg[i]);
-	  *ptr++ = hexval[0];
-	  *ptr++ = hexval[1];
-	}
-    }
-  *ptr = '\0';
-  putpkt (pkt_buffer);
-  do_cleanups (pkt_cleanup);
-
-  getpkt (buf, rs->remote_packet_size, 0);
-  if (buf[0] == 'E')
-    error ("Got an error \"%s\" sending arguments to remote.", buf);
-  else if (buf[0] != 'O' && buf[1] != 'K')
-    error ("Unknown packet reply: \"%s\" to remote arguments packet.", buf);
-
-  /* debugserver actually replies to the A packet before starting up the app,
-     so then if it fails to start up, we don't get a useful error code.  
-     So I'm sending a "how about that startup" packet to retrieve that if 
-     there is an error code.  */
-
-  putpkt ("qLaunchSuccess");
-  /* Increase the timeout for qLaunchSuccess to 30 seconds to match how long
-     the debugserver will wait for the inferior to give us its process ID.  */
-  int old_remote_timeout = remote_timeout;
-  remote_timeout = 30;	
-  timed_out = getpkt_sane(buf, rs->remote_packet_size, 0);
-  remote_timeout = old_remote_timeout;
-  
-  if (timed_out)
-    {
-      pop_target ();
-      error ("Error launching timed out.");
-    }
-  else if (buf[0] == 'E')
-    {
-      pop_target ();
-      error ("Error launching remote program: %s.", buf+1);
-    }
-
-  complete_create_or_attach (from_tty);
-}
-
-void
-remote_attach (char *args, int from_tty)
-{
-  struct remote_state *rs = get_remote_state ();
-  char *buf = alloca (rs->remote_packet_size);
-  char *endptr;
-  pid_t remote_pid;
-  int timed_out;
-
-  if (args == NULL || *args == '\0')
-    error ("No pid supplied to attach.");
-
-  remote_pid = strtol (args, &endptr, 0);
-  if (*endptr != '\0')
-    error ("Junk at the end of pid string: \"%s\".", endptr);
-
-  sprintf (buf, "vAttach;%x", remote_pid);
-  putpkt (buf);
-  timed_out = getpkt_sane (buf, rs->remote_packet_size, 0);
-  
-  if (timed_out)
-    error ("Attach attempt timed out.");
-  else if (*buf == '\0' || *buf == 'E')
-    error ("Attach failed: '%s'", buf);
-
-  complete_create_or_attach (from_tty);
-}
-
-/* END APPLE LOCAL */
 
 /* This takes a program previously attached to and detaches it.  After
    this is done, GDB can be used to debug some other program.  We
@@ -3019,10 +2814,8 @@ fromhex (int a)
     return a - 'A' + 10;
   else
     {
-      fputs_filtered ("gdb stack trace at point of error:", gdb_stderr);
-      remote_backtrace_self ();
-      fputs_filtered ("recent remote packet log at point of error:", gdb_stderr);
-      dump_protocol_log ();
+      remote_backtrace_self ("gdb stack trace around reply contains invalid hex digit:\n");
+      dump_protocol_log ("recent remote packet log at point of error:\n");
       error (_("Reply contains invalid hex digit %d"), a);
     }
 }
@@ -3526,6 +3319,9 @@ remote_wait (ptid_t ptid, struct target_waitstatus *status,
 	case 'T':		/* Status with PC, SP, FP, ...  */
 	  {
 	    char regs[MAX_REGISTER_SIZE];
+        ULONGEST mach_exc_type = 0;
+        ULONGEST mach_exc_data_count = 0;
+        ULONGEST mach_exc_data_index = 0;
 
 	    /* Expedited reply, containing Signal, {regno, reg} repeat.  */
 	    /*  format is:  'Tssn...:r...;n...:r...;n...:r...;#cc', where
@@ -3579,6 +3375,29 @@ Packet: '%s'\n"),
 			p = unpack_varlen_hex (++p1, &addr);
 			remote_watch_data_address = (CORE_ADDR)addr;
 		      }
+            /* APPLE LOCAL START: mach exception info.  */
+            else if (strncmp (p, "metype", p1 - p) == 0)
+              {
+                p = unpack_varlen_hex (++p1, &mach_exc_type);
+              }
+            else if (strncmp (p, "mecount", p1 - p) == 0)
+              {
+                p = unpack_varlen_hex (++p1, &mach_exc_data_count);
+              }
+            else if (strncmp (p, "medata", p1 - p) == 0)
+              {
+                ULONGEST mach_exc_data = 0;
+                p = unpack_varlen_hex (++p1, &mach_exc_data);
+                if (mach_exc_type == EXC_BAD_ACCESS)
+                  {
+                    if (mach_exc_data_index == 0)
+                      status->code = mach_exc_data;
+                    else if (mach_exc_data_index == 1)
+                      status->address = mach_exc_data;
+                  }
+                mach_exc_data_index++;
+              }
+            /* APPLE LOCAL END: mach exception info.  */
 		    else
  		      {
  			/* Silently skip unknown optional info.  */
@@ -4667,7 +4486,13 @@ putpkt_binary (char *buf, int cnt)
       /* APPLE LOCAL */
       start_remote_timer ();
       if (serial_write (remote_desc, buf2, p - buf2))
+	{
+	  /* APPLE LOCAL: dump the stack trace and packet log in case this sheds
+	     some light on what caused us to fail. */
+	  remote_backtrace_self ("gdb stack trace at 'putpkt: write failed':\n");
+	  dump_protocol_log ("recent remote packets prior to 'putpkt: write failed':\n");
 	perror_with_name (_("putpkt: write failed"));
+	}
       end_remote_timer ();
 
       /* APPLE LOCAL */
@@ -5117,10 +4942,6 @@ remote_mourn_1 (struct target_ops *target)
 {
   unpush_target (target);
   generic_mourn_inferior ();
-#ifdef MACOSX_DYLD
-  extern void macosx_dyld_mourn_inferior (void);
-  macosx_dyld_mourn_inferior();
-#endif
 }
 
 /* In the extended protocol we want to be able to do things like
@@ -5812,7 +5633,7 @@ remote_rcmd (char *command,
 {
   struct remote_state *rs = get_remote_state ();
   char *buf = alloca (rs->remote_packet_size);
-  char *p = buf;
+  char *p;
 
   if (!remote_desc)
     error (_("remote rcmd is only available after target open"));
@@ -6100,8 +5921,6 @@ Specify the serial device it is connected to\n\
 (e.g. /dev/ttyS0, /dev/ttya, COM1, etc.).";
   remote_ops.to_open = remote_open;
   remote_ops.to_close = remote_close;
-  remote_ops.to_create_inferior = remote_create_inferior;
-  remote_ops.to_attach = remote_attach;
   remote_ops.to_detach = remote_detach;
   remote_ops.to_disconnect = remote_disconnect;
   remote_ops.to_resume = remote_resume;
@@ -6141,17 +5960,6 @@ Specify the serial device it is connected to\n\
   /* APPLE LOCAL classic-inferior-support */
   remote_ops.to_async_mask_value = 0;
   remote_ops.to_magic = OPS_MAGIC;
-#ifdef MACOSX_DYLD
-  extern int dyld_lookup_and_bind_function (char *name);
-  extern int dyld_is_objfile_loaded (struct objfile *obj);
-
-  remote_ops.to_enable_exception_callback = macosx_enable_exception_callback;
-  remote_ops.to_find_exception_catchpoints = macosx_find_exception_catchpoints;
-  remote_ops.to_get_current_exception_event = macosx_get_current_exception_event;
-
-  remote_ops.to_bind_function = dyld_lookup_and_bind_function;
-  remote_ops.to_check_is_objfile_loaded = dyld_is_objfile_loaded;
-#endif
 }
 
 /* Set up the extended remote vector by making a copy of the standard
@@ -6371,6 +6179,454 @@ end_remote_timer ()
   timerclear (&current_remote_stats->pktstart);
 }
 
+
+
+/* APPLE LOCAL BEGIN: target remote-macosx.  */
+#ifdef MACOSX_DYLD
+
+#if defined (TARGET_ARM)
+#include "arm-macosx-tdep.h"
+#include "arm-tdep.h"
+#endif
+
+static struct target_ops remote_macosx_ops;
+static char *remote_macosx_shortname = "remote-macosx";
+static char *remote_macosx_longname = "Remote connection to a macosx device "
+				      "with shared library support.";
+static char *remote_macosx_doc = "Connect to a remote macosx device with "
+				 "shared library support using remote target.";
+/* The executable might not have the same location on the remote system as it
+   does here, provide the correct path here.  */
+static char *remote_macosx_exec_dir;
+
+
+static CORE_ADDR
+remote_macosx_get_all_image_infos_addr ()
+{
+  char buf[256];
+  putpkt ("qShlibInfoAddr");
+  getpkt (buf, sizeof (buf) - 1, 0);
+  ULONGEST addr = (ULONGEST)-1;
+  if (buf[0] == 'E' && isxdigit(buf[1]) && isxdigit(buf[2]) && buf[3] == '\0')
+    {
+      /* Error.  */
+    }
+  else if (isxdigit(buf[0]))
+    {
+      unpack_varlen_hex(buf, &addr);
+    }
+  return addr;
+}
+
+/* APPLE LOCAL Implementation of remote_create_inferior and remote_attach.  */
+static void
+remote_macosx_complete_create_or_attach (int from_tty)
+{
+  struct remote_state *rs = get_remote_state ();
+
+  /* Now send the restart packet.  Then we will wait for the remote to
+     start up.  */
+  struct gdb_exception ex;
+  ex = catch_exception (uiout, remote_start_remote, NULL, RETURN_MASK_ALL);
+  if (ex.reason < 0)
+    {
+      pop_target ();
+      throw_exception (ex);
+    }
+  
+  /* Now indicate we have a remote target:  */
+  rs->has_target = 1;
+
+  /* And not that we have a target, redo the dyld information.  */
+  macosx_dyld_create_inferior_hook (remote_macosx_get_all_image_infos_addr());
+  if (exec_bfd)
+    {
+      remote_check_symbols (symfile_objfile);
+      
+#ifdef SOLIB_ADD
+      SOLIB_ADD (NULL, 0, &current_target, auto_solib_add);
+#else
+      solib_add (NULL, 0, &current_target, auto_solib_add);
+#endif
+    }
+
+  observer_notify_inferior_created (&current_target, from_tty);
+}
+
+/* We printf lengths & index's.  We need to know what size to allocate for them.
+   20 is the length of 0xffffffffffffffff as an int.  Probably big enough.  */
+#define INT_PRINT_MAX 20
+void
+remote_macosx_create_inferior (char *exec_file, char *allargs, char **env, int from_tty)
+{
+  struct remote_state *rs = get_remote_state ();
+  char *buf = alloca (rs->remote_packet_size);
+  char *pkt_buffer = NULL;
+  char *pkt_buffer_end = NULL;
+  int exec_len;
+  int args_len;
+  int argnum;
+  int print_len;
+  char *ptr;
+  char **argv;
+  int argc;
+  struct cleanup *pkt_cleanup;
+  char *remote_exec_file;
+  static const char *env_pkt_hdr = "QEnvironment:";
+  int envnum;
+  int packet_len;
+  int max_size;
+  int timed_out;
+
+  
+  /* First send down the environment array. 
+     We are using a packet of the form:
+         QEnvironment[,<LEN>,<ENV_ELEM>]...
+     where the ENV_ELEM is a hex-encoded form of the FOO=BAR entry that gdb passes in, and
+     LEN is the length of the hex-encoded form.  */
+  
+  envnum = 0;
+  max_size = 0;
+  pkt_cleanup = NULL;
+
+  while (env[envnum] != NULL)
+    {
+        packet_len = strlen (env_pkt_hdr) +  strlen(env[envnum]) + 1;
+
+	if (packet_len > rs->remote_packet_size)
+	  {
+	    warning ("Environment variable too long, skipping: %s", env[envnum]);
+	    continue;
+	  }
+
+	if (packet_len > max_size)
+	  {
+	    if (pkt_cleanup != NULL)
+	      do_cleanups (pkt_cleanup);
+	    pkt_buffer = (char *) xmalloc (packet_len);
+	    max_size = packet_len;
+	    pkt_cleanup = make_cleanup (xfree, pkt_buffer);
+	  }
+
+	snprintf (pkt_buffer, packet_len, "%s%s", env_pkt_hdr, env[envnum]);
+	putpkt (pkt_buffer);
+
+	getpkt (buf, rs->remote_packet_size, 0);
+	if (buf[0] == 'E')
+	  error ("Got an error \"%s\" sending environment to remote.", buf);
+	else if (buf[0] != '\0' && (buf[0] != 'O' && buf[1] != 'K'))
+	  error ("Unknown packet reply: \"%s\" to environment packet.", buf);
+	
+	envnum++;
+    }
+
+  if (pkt_cleanup != NULL)
+    do_cleanups (pkt_cleanup);
+
+  /* Next send down the arguments.  */
+
+  /* The largest possible array - every character is a separate argument.  */
+  argv = (char **) xmalloc (((strlen (allargs) + 1) / (unsigned) 2 + 2) * sizeof (*argv));
+  pkt_cleanup = make_cleanup (xfree, argv);
+  breakup_args (allargs, &argc, argv);
+
+  if (remote_macosx_exec_dir == NULL || remote_macosx_exec_dir[0] == '\0')
+    {
+      remote_exec_file = exec_file;
+    }
+  else
+    {
+      char *file_name = basename (exec_file);
+      remote_exec_file = (char *) xmalloc (strlen (remote_macosx_exec_dir) 
+					   + strlen (file_name) + 1);
+      sprintf (remote_exec_file, "%s/%s", remote_macosx_exec_dir, file_name);
+      make_cleanup (xfree, remote_exec_file);
+    }
+
+  exec_len = strlen (remote_exec_file);
+  /* This is likely an overestimate, since if there's more than one
+     argument we won't include the spaces...  */
+  args_len = strlen (allargs);
+  const size_t pkt_buffer_length = 1 + INT_PRINT_MAX + 1 + INT_PRINT_MAX + 1 +
+				   2 * exec_len + argc * (1 + INT_PRINT_MAX + 
+				   1 + INT_PRINT_MAX + 1) + 2 * args_len + 1;
+
+  pkt_buffer = xmalloc (pkt_buffer_length);
+  pkt_buffer_end = pkt_buffer + pkt_buffer_length;
+  make_cleanup (xfree, pkt_buffer);
+  print_len = snprintf (pkt_buffer, pkt_buffer_length, "A%d,0,", 2 * exec_len);
+  ptr = pkt_buffer + print_len;
+
+  ptr = pack_string_as_ascii_hex (ptr, remote_exec_file, 
+				  remote_exec_file + exec_len);
+
+  for (argnum = 0; argnum < argc; argnum++)
+    {
+      char *arg = argv[argnum];
+      int arglen = strlen (arg);
+      *ptr++ = ',';
+      print_len = snprintf (ptr, pkt_buffer_end - ptr, "%d,%d,", 2 * arglen, 
+			    argnum + 1);
+      ptr += print_len;
+      ptr = pack_string_as_ascii_hex (ptr, arg, arg + arglen);
+    }
+  *ptr = '\0';
+  putpkt (pkt_buffer);
+  do_cleanups (pkt_cleanup);
+
+  getpkt (buf, rs->remote_packet_size, 0);
+  if (buf[0] == 'E')
+    error ("Got an error \"%s\" sending arguments to remote.", buf);
+  else if (buf[0] != 'O' && buf[1] != 'K')
+    error ("Unknown packet reply: \"%s\" to remote arguments packet.", buf);
+
+  /* debugserver actually replies to the A packet before starting up the app,
+     so then if it fails to start up, we don't get a useful error code.  
+     So I'm sending a "how about that startup" packet to retrieve that if 
+     there is an error code.  */
+
+  /* Increase the timeout for qLaunchSuccess to 30 seconds to match how long
+     the debugserver will wait for the inferior to give us its process ID.  */
+  int old_remote_timeout = remote_timeout;
+  remote_timeout = 30;	
+  putpkt ("qLaunchSuccess");
+  timed_out = getpkt_sane(buf, rs->remote_packet_size, 0);
+  remote_timeout = old_remote_timeout;
+  
+  if (timed_out)
+    {
+      pop_target ();
+      error ("Error launching timed out.");
+    }
+  else if (buf[0] == 'E')
+    {
+      pop_target ();
+      error ("Error launching remote program: %s.", buf+1);
+    }
+
+  remote_macosx_complete_create_or_attach (from_tty);
+}
+
+void
+remote_macosx_attach (char *args, int from_tty)
+{
+#if 0
+  if (exec_bfd == NULL)
+    error (_("an executable must be specified before attaching to a remote-macosx target"));
+#endif
+  struct remote_state *rs = get_remote_state ();
+  char *buf = alloca (rs->remote_packet_size);
+  char *endptr;
+  pid_t remote_pid;
+  int timed_out;
+  int forever;
+  int quote_found = 0;
+
+  if (args == NULL || *args == '\0')
+    error ("No pid supplied to attach.");
+
+  if (strstr (args, "-waitfor") == args)
+    {
+      char *process = args + strlen ("-waitfor");
+      int name_len;
+      int prepend_path = 0;
+      char *out_ptr;
+
+      if (*process == '\0')
+	error ("No process name supplied for \"-waitfor\"");
+
+	while (*process == ' ')
+	  process++;
+	if (*process == '"')
+	  {
+	    process++;
+	    quote_found = 1;
+	  }
+
+      name_len = strlen (process);
+
+      /* Prepend the remote executable directory if PROCESS doesn't contain
+         any path information and if REMOTE_MACOSX_EXEC_DIR is valid.  */ 
+      if (strchr(process, '/') == NULL && remote_macosx_exec_dir != NULL)
+	{
+	  prepend_path = 1;
+	  /* Allow room for the path and an extra directory delimiter.  */
+	  name_len += strlen (remote_macosx_exec_dir) + 1;
+	}
+
+      if (2 * name_len + strlen ("vAttachWait;") > rs->remote_packet_size)
+	error ("Process name too long.");
+
+      strncpy (buf, "vAttachWait;", strlen ("vAttachWait;"));
+      out_ptr = buf + strlen ("vAttachWait;");
+
+      if (prepend_path)
+	{
+	  out_ptr = pack_string_as_ascii_hex (out_ptr, remote_macosx_exec_dir, 
+					      NULL);
+	  out_ptr = pack_hex_byte (out_ptr, '/');
+	}
+
+      out_ptr = pack_string_as_ascii_hex (out_ptr, process, quote_found ? 
+					  strchr (process, '"') : NULL);
+      *out_ptr = '\0';
+      forever = 1;
+    }
+  else
+    {
+      remote_pid = strtol (args, &endptr, 0);
+      if (*endptr != '\0')
+	error ("Junk at the end of pid string: \"%s\".", endptr);
+      
+      sprintf (buf, "vAttach;%x", remote_pid);
+
+      forever = 0;
+    }
+
+  putpkt (buf);
+  
+  timed_out = getpkt_sane (buf, rs->remote_packet_size, forever);
+  
+  if (timed_out)
+    error ("Attach attempt timed out.");
+  else if (*buf == '\0' || *buf == 'E')
+    error ("Attach failed: '%s'", buf);
+
+  remote_macosx_complete_create_or_attach (from_tty);
+}
+
+static void
+remote_macosx_mourn (void)
+{
+  remote_mourn_1 (&remote_macosx_ops);
+  macosx_dyld_mourn_inferior();
+}
+
+
+#if defined (TARGET_ARM)
+
+static int
+remote_macosx_query_step_packet_supported ()
+{
+  int result = 0;
+  struct remote_state *rs = get_remote_state ();
+  char *buf = alloca (rs->remote_packet_size);
+  putpkt ("qStepPacketSupported");
+  /* Reply "OK" Stepping packet is supported.  */
+  
+  int old_remote_timeout = remote_timeout;
+  remote_timeout = 1;	
+  int timed_out = getpkt_sane(buf, rs->remote_packet_size, 0);
+  if (!timed_out)
+    {
+      if (buf[0] == 'O' && buf[1] == 'K')
+	result = 1;
+      else
+	{
+	  /* Hack for older versions of debugserver where two "$#00" packets
+	     will get returned when a packet is not recognized. Here we
+	     attempt to grab an extra empty packet reply in case we have
+	     such a target.  */
+	  timed_out = getpkt_sane(buf, rs->remote_packet_size, 0);
+	}
+    }
+  remote_timeout = old_remote_timeout;
+  return result;
+}
+
+#endif
+
+/* Open a connection to a remote debugger.
+   NAME is the filename used for communication.  */
+
+static void
+remote_macosx_open (char *name, int from_tty)
+{
+
+  remote_open_1 (name, from_tty, &remote_macosx_ops, 0, 0);
+  
+  /* Tell the remote that we are using the extended protocol.  */
+#if defined (TARGET_ARM)
+  /* ARM remote nubs typically do not support single stepping, but recent
+     debugserver binaries do and know how to respond to a query packet
+     that indicates if it does or not.  */
+  if (remote_macosx_query_step_packet_supported ())
+    set_arm_single_step_mode (current_gdbarch, arm_single_step_mode_hardware);
+  else
+    set_arm_single_step_mode (current_gdbarch, arm_single_step_mode_software);
+#endif
+
+  /* No use without an exec file.  */
+  if (exec_bfd && !ptid_equal (inferior_ptid, null_ptid))
+    {
+      macosx_dyld_create_inferior_hook (remote_macosx_get_all_image_infos_addr());
+      remote_check_symbols (symfile_objfile);
+      
+#ifdef SOLIB_ADD
+      SOLIB_ADD (NULL, 0, &current_target, auto_solib_add);
+#else
+      solib_add (NULL, 0, &current_target, auto_solib_add);
+#endif
+    }
+}
+
+static void
+init_remote_macosx_ops (void)
+{
+  remote_macosx_ops = remote_ops;
+
+  remote_macosx_ops.to_shortname = remote_macosx_shortname;
+  remote_macosx_ops.to_longname = remote_macosx_longname;
+  remote_macosx_ops.to_doc = remote_macosx_doc;
+  remote_macosx_ops.to_enable_exception_callback = macosx_enable_exception_callback;
+  remote_macosx_ops.to_find_exception_catchpoints = macosx_find_exception_catchpoints;
+  remote_macosx_ops.to_get_current_exception_event = macosx_get_current_exception_event;
+  remote_macosx_ops.to_bind_function = dyld_lookup_and_bind_function;
+  remote_macosx_ops.to_check_is_objfile_loaded = dyld_is_objfile_loaded;
+  remote_macosx_ops.to_open = remote_macosx_open;
+  remote_macosx_ops.to_create_inferior = remote_macosx_create_inferior;
+  remote_macosx_ops.to_attach = remote_macosx_attach;
+  remote_macosx_ops.to_detach = remote_detach;
+  remote_macosx_ops.to_mourn_inferior = remote_macosx_mourn;
+  /* APPLE LOCAL classic-inferior-support */
+  remote_macosx_ops.to_async_mask_value = 0;
+  remote_macosx_ops.to_magic = OPS_MAGIC;
+  remote_macosx_ops.to_load_solib = macosx_load_dylib;
+  remote_macosx_ops.to_check_safe_call = macosx_check_safe_call;
+
+#if defined (TARGET_ARM)
+  remote_macosx_ops.to_keep_going = arm_macosx_keep_going;
+  remote_macosx_ops.to_save_thread_inferior_status = arm_macosx_save_thread_inferior_status;
+  remote_macosx_ops.to_restore_thread_inferior_status = arm_macosx_restore_thread_inferior_status;
+  remote_macosx_ops.to_free_thread_inferior_status = arm_macosx_free_thread_inferior_status;
+#endif
+
+}
+
+
+
+/* Some targets are only capable of doing downloads, and afterwards
+   they switch to the remote serial protocol.  This function provides
+   a clean way to get from the download target to the remote target.
+   It's basically just a wrapper so that we don't have to expose any
+   of the internal workings of remote.c.
+
+   Prior to calling this routine, you should shutdown the current
+   target code, else you will get the "A program is being debugged
+   already..." message.  Usually a call to pop_target() suffices.  */
+
+void
+push_remote_macosx_target (char *name, int from_tty)
+{
+  printf_filtered (_("Switching to remote-macosx protocol\n"));
+  remote_macosx_open (name, from_tty);
+}
+
+
+#endif /* #ifdef MACOSX_DYLD  */
+
+/* APPLE LOCAL END: target remote-macosx.  */
+
 void
 _initialize_remote (void)
 {
@@ -6397,6 +6653,9 @@ _initialize_remote (void)
 
   init_extended_async_remote_ops ();
   add_target (&extended_async_remote_ops);
+
+  init_remote_macosx_ops ();
+  add_target (&remote_macosx_ops);
 
   /* Hook into new objfile notification.  */
   remote_new_objfile_chain = deprecated_target_new_objfile_hook;
@@ -6631,7 +6890,7 @@ without any possibility of corruption."),
 
   /* APPLE LOCAL: Location of executable on remote system.  */
   add_setshow_string_noescape_cmd ("executable-directory", class_obscure, 
-				   &remote_exec_dir,
+				   &remote_macosx_exec_dir,
 				   "Set location of executable file on remote system.",
 				   "Show location of executable file on remote system.",
 				   "When set, gdb will tell the remote stub to run the program\n\

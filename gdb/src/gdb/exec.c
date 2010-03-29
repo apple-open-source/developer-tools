@@ -180,7 +180,6 @@ exec_close (int quitting)
       if (!bfd_close (exec_bfd))
 	warning (_("cannot close \"%s\": %s"),
 		 name, bfd_errmsg (bfd_get_error ()));
-      xfree (name);
       exec_bfd = NULL;
     }
 
@@ -311,7 +310,8 @@ exec_file_attach (char *filename, int from_tty)
       if (bfd_check_format (exec_bfd, bfd_archive))
 	{
 	  bfd *tmp_bfd;
-	  tmp_bfd = open_bfd_matching_arch (exec_bfd, bfd_object);
+	  tmp_bfd = open_bfd_matching_arch (exec_bfd, bfd_object, 
+					    GDB_OSABI_UNKNOWN);
 	  if (tmp_bfd != NULL)
 	    exec_bfd = tmp_bfd;
 	}

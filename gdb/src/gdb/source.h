@@ -71,4 +71,6 @@ extern void clear_current_source_symtab_and_line (void);
 
 /* APPLE LOCAL huh? */
 void convert_sal (struct symtab_and_line *sal);
+
+void add_one_pathname_substitution (const char *old, const char *new);
 #endif

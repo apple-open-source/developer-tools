@@ -2035,7 +2035,7 @@ psym_name_match (const char *alternate_name, const char *name)
     return 0;
 
   /* Equivalence symbols start with *_ */
-  if (alternate_name[0] !='*' || alternate_name[1] != '_')
+  if (alternate_name[0] != '*' || alternate_name[1] != '_')
     return 0;
   alternate_name += 2;
 
@@ -2065,7 +2065,7 @@ psym_name_match (const char *alternate_name, const char *name)
    otherwise.  */
 
 static int
-lookup_equiv_partial_symbol (struct partial_symtab *pst, char *name)
+lookup_equiv_partial_symbol (struct partial_symtab *pst, const char *name)
 {
   int has_equivalent_symbol = 0;
   int i;
@@ -4878,10 +4878,12 @@ symtab_symbol_info (char *regexp, domain_enum kind, int from_tty)
   search_symbols (regexp, kind, 0, (char **) NULL, &symbols);
   old_chain = make_cleanup_free_search_symbols (symbols);
 
-  printf_filtered (regexp
-		   ? "All %ss matching regular expression \"%s\":\n"
-		   : "All defined %ss:\n",
-		   classnames[(int) (kind - VARIABLES_DOMAIN)], regexp);
+  if (regexp)
+    printf_filtered ("All %ss matching regular expression \"%s\":\n",
+		     classnames[(int) (kind - VARIABLES_DOMAIN)], regexp);
+  else
+    printf_filtered ("All defined %ss:\n",
+		     classnames[(int) (kind - VARIABLES_DOMAIN)]);
 
   for (p = symbols; p != NULL; p = p->next)
     {

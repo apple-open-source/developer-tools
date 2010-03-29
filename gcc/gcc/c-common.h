@@ -1132,7 +1132,8 @@ enum {
     BLOCK_FIELD_IS_BLOCK    =  7,  /* a block variable */
     BLOCK_FIELD_IS_BYREF    =  8,  /* the on stack structure holding the __block variable */
     BLOCK_FIELD_IS_WEAK     = 16,  /* declared __weak, only used in byref copy helpers */
-    BLOCK_BYREF_CALLER      = 128  /* called from __block (byref) copy/dispose support routines */
+    BLOCK_BYREF_CALLER      = 128, /* called from __block (byref) copy/dispose support routines */
+    BLOCK_BYREF_CURRENT_MAX = 256
 };
 /* APPLE LOCAL end radar 5847976 */
 /* APPLE LOCAL begin radar 5732232 - blocks */

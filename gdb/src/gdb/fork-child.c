@@ -200,6 +200,8 @@ fork_inferior (char *exec_file_arg, char *allargs, char **env,
 	  arch_string = "arm";
 	else if (strcmp (osabi_name, "DarwinV6") == 0)
 	  arch_string = "armv6";
+	else if (strcmp (osabi_name, "DarwinV7") == 0)
+	  arch_string = "armv7";
 #endif
 	if (arch_string != NULL)
 	  sprintf (shell_command, "%s exec /usr/bin/arch -arch %s ", shell_command, arch_string);
@@ -432,13 +434,18 @@ fork_inferior (char *exec_file_arg, char *allargs, char **env,
 		cpu = CPU_TYPE_X86_64;
 		count = 1;
 	      }
-#elif define (TARGET_ARM)
+#elif defined (TARGET_ARM)
 	    if (strcmp (osabi_name, "Darwin") == 0)
 	      {
 		cpu = CPU_TYPE_ARM;
 		count = 1;
 	      }
 	    else if (strcmp (osabi_name, "DarwinV6") == 0)
+	      {
+		cpu = CPU_TYPE_ARM;
+		count = 1;
+	      }
+	    else if (strcmp (osabi_name, "DarwinV7") == 0)
 	      {
 		cpu = CPU_TYPE_ARM;
 		count = 1;
@@ -462,14 +469,12 @@ fork_inferior (char *exec_file_arg, char *allargs, char **env,
 		if (retval != 0 || copied != 1)
 		  {
 		    warning ("Couldn't set the binary preferences, error: %d", retval);
-		    goto try_execvp;
 		  }
 	      }
 	    retval = posix_spawnattr_setpgroup (&attr, debug_setpgrp);
-	    if (retval != 0 || copied != 1)
+	    if (retval != 0)
 	      {
 		warning ("Couldn't set the process group, error: %d", retval);
-		goto try_execvp;
 	      }
 	    retval = posix_spawnp (&pid, fileptr, NULL,  &attr, argv, env);
 	    warning ("posix_spawn failed, trying execvp, error: %d", retval);

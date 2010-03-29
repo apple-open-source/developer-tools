@@ -3,7 +3,7 @@
    redundant move instruction.  */
 
 /* { dg-do compile { target arm*-*-darwin* } } */
-/* { dg-options "-Os" } */
+/* { dg-options "-Os -marm" } */
 /* { dg-skip-if "Not valid with -mthumb" { *-*-* } { "-mthumb" } { "" } } */
 
 int test_plus     (int a, int b) { return (a + b) != 0; }

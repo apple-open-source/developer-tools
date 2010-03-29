@@ -65,16 +65,9 @@ extern int standard_can_async_p (void);
 
 static unsigned int darwin_kernel_debug_level = 1;
 
-static char *darwin_kernel_default_host_type_str = "powerpc";
-static int darwin_kernel_default_host_type = CPU_TYPE_POWERPC;
-
-static int darwin_kernel_host_type = -1;
-
 static int darwin_kernel_stopped = 0;
-static int darwin_kernel_timeout = 5000;
 
 static int darwin_kernel_fd = -1;
-static unsigned long darwin_kernel_mapaddr = -1;
 
 struct target_ops darwin_kernel_ops;
 
@@ -87,41 +80,6 @@ typedef enum
 	DARWIN_KERNEL_LOG_INFO = 3,
 	DARWIN_KERNEL_LOG_DEBUG = 4
 } darwin_kernel_log_level;
-
-static void
-set_timeouts (char *args, int from_tty, struct cmd_list_element *cmd)
-{
-
-}
-
-static int
-parse_host_type (const char *host)
-{
-	if ((strcasecmp (host, "powerpc") == 0) || (strcasecmp (host, "ppc") == 0))
-	{
-#if TARGET_POWERPC
-		return CPU_TYPE_POWERPC;
-#else
-		return -2;
-#endif
-	}
-	else if ((strcasecmp (host, "ia32") == 0)
-	    || (strcasecmp (host, "i386") == 0)
-	    || (strcasecmp (host, "i486") == 0)
-	    || (strcasecmp (host, "i586") == 0)
-	    || (strcasecmp (host, "pentium") == 0))
-	{
-#if TARGET_I386
-		return CPU_TYPE_I386;
-#else
-		return -2;
-#endif
-	}
-	else
-	{
-		return -1;
-	}
-}
 
 static void
 darwin_kernel_logger (darwin_kernel_log_level l, char * call, const char *format, ...)
@@ -270,7 +228,6 @@ darwin_kernel_mourn_inferior ()
 }
 
 static int remote_async_terminal_ours_p = 1;
-static void (*ofunc) (int);
 
 static void
 darwin_kernel_terminal_inferior (void)
@@ -308,18 +265,6 @@ darwin_kernel_terminal_ours (void)
 static void (*async_client_callback) (enum inferior_event_type event_type,
     void *context);
 static void *async_client_context;
-
-static void
-darwin_kernel_file_handler (int error, gdb_client_data client_data)
-{
-	async_client_callback (INF_REG_EVENT, async_client_context);
-}
-
-static void
-darwin_kernel_file_handler_callback (void *arg)
-{
-	async_client_callback (INF_REG_EVENT, async_client_context);
-}
 
 static void
 darwin_kernel_async (void (*callback) (enum inferior_event_type event_type,

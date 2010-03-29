@@ -1,26 +1,26 @@
-/* -*- c-file-style: "java"; indent-tabs-mode: nil; -*-
- * 
+/* -*- c-file-style: "java"; indent-tabs-mode: nil; tab-width: 4; fill-column: 78 -*-
+ *
  * distcc -- A simple distributed compiler system
  *
  * Copyright (C) 2002, 2003 by Martin Pool <mbp@samba.org>
  *
  * This program is free software; you can redistribute it and/or
- * modify it under the terms of the GNU General Public License as
- * published by the Free Software Foundation; either version 2 of the
- * License, or (at your option) any later version.
+ * modify it under the terms of the GNU General Public License
+ * as published by the Free Software Foundation; either version 2
+ * of the License, or (at your option) any later version.
  *
- * This program is distributed in the hope that it will be useful, but
- * WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
- * General Public License for more details.
- * 
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ *
  * You should have received a copy of the GNU General Public License
  * along with this program; if not, write to the Free Software
- * Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA 02111-1307
- * USA
+ * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301,
+ * USA.
  */
 
-                /* 
+                /*
                  * A servant will not be corrected by words: for
                  * though he understand he will not answer.
                  *      -- Proverbs 29:19
@@ -38,7 +38,7 @@
  * For both cases any temporary files created by the process are removed.
  **/
 
-#include "config.h"
+#include <config.h>
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -76,7 +76,7 @@ void dcc_daemon_catch_signals(void)
 {
     /* SIGALRM is caught to allow for built-in timeouts when running test
      * cases. */
- 
+
     signal(SIGTERM, &dcc_daemon_terminate);
     signal(SIGINT, &dcc_daemon_terminate);
     signal(SIGHUP, &dcc_daemon_terminate);
@@ -125,25 +125,13 @@ static RETSIGTYPE dcc_daemon_terminate(int whichsig)
 #endif
     }
 
-    dcc_cleanup_tempfiles();
+    dcc_cleanup_tempfiles_from_signal_handler();
 
     if (am_parent) {
-        int status;
-        pid_t child;
-        
         dcc_remove_pid();
-        
-        do {
-            /* kill whole group */
-            kill(0, whichsig);
-            
-            /* reap all children */
-            child = waitpid(WAIT_ANY, &status, WNOHANG);
-            if (child == 0) {
-                rs_log_info("waiting for child exit");
-                sleep(1);
-            }
-        } while (!(child == -1 && errno == ECHILD));
+
+        /* kill whole group */
+        kill(0, whichsig);
     }
 
     raise(whichsig);

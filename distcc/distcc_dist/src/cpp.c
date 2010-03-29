@@ -1,23 +1,23 @@
-/* -*- c-file-style: "java"; indent-tabs-mode: nil; fill-column: 78 -*-
- * 
+/* -*- c-file-style: "java"; indent-tabs-mode: nil; tab-width: 4; fill-column: 78 -*-
+ *
  * distcc -- A simple distributed compiler system
  *
  * Copyright (C) 2002, 2003 by Martin Pool <mbp@samba.org>
  *
  * This program is free software; you can redistribute it and/or
- * modify it under the terms of the GNU General Public License as
- * published by the Free Software Foundation; either version 2 of the
- * License, or (at your option) any later version.
+ * modify it under the terms of the GNU General Public License
+ * as published by the Free Software Foundation; either version 2
+ * of the License, or (at your option) any later version.
  *
- * This program is distributed in the hope that it will be useful, but
- * WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
- * General Public License for more details.
- * 
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ *
  * You should have received a copy of the GNU General Public License
  * along with this program; if not, write to the Free Software
- * Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA 02111-1307
- * USA
+ * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301,
+ * USA.
  */
 
 /**
@@ -26,7 +26,7 @@
  * Run the preprocessor.  Client-side only.
  **/
 
-#include "config.h"
+#include <config.h>
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -52,7 +52,7 @@
  * use many cycles, with running the preprocessor.
  **/
 int dcc_cpp_maybe(char **argv, char *input_fname, char **cpp_fname,
-		  pid_t *cpp_pid)
+          pid_t *cpp_pid)
 {
     char **cpp_argv;
     int ret;
@@ -60,12 +60,12 @@ int dcc_cpp_maybe(char **argv, char *input_fname, char **cpp_fname,
     const char *output_exten;
 
     *cpp_pid = 0;
-    
+
     if (dcc_is_preprocessed(input_fname)) {
         /* TODO: Perhaps also consider the option that says not to use cpp.
          * Would anyone do that? */
         rs_trace("input is already preprocessed");
-        
+
         /* already preprocessed, great. */
         if (!(*cpp_fname = strdup(input_fname))) {
             rs_log_error("couldn't duplicate string");
@@ -89,7 +89,7 @@ int dcc_cpp_maybe(char **argv, char *input_fname, char **cpp_fname,
      * versions of gcc.  This is only a problem for people who have the source
      * and objects in different directories, and who don't specify -MF.  They
      * can fix it by specifying -MF.  */
-    
+
     if ((ret = dcc_strip_dasho(argv, &cpp_argv))
         || (ret = dcc_set_action_opt(cpp_argv, "-E")))
         return ret;
@@ -97,7 +97,5 @@ int dcc_cpp_maybe(char **argv, char *input_fname, char **cpp_fname,
     /* FIXME: cpp_argv is leaked */
 
     return dcc_spawn_child(cpp_argv, cpp_pid,
-                           "/dev/null", *cpp_fname, NULL, NULL);
+                           "/dev/null", *cpp_fname, NULL);
 }
-
-

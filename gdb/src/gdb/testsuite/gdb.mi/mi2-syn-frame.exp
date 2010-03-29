@@ -57,9 +57,10 @@ mi_gdb_test \
 # command.  Our version gets this right, but we have to adjust the test to account for this.
 
 # APPLE LOCAL [breakpoint-hit]: We emit a TIMES field. 
-mi_gdb_test "401-data-evaluate-expression foo()" "401\\^error,msg=\"The program being debugged stopped while in a function called from GDB.\\\\nWhen the function .foo. is done executing, GDB will silently\\\\nstop .instead of continuing to evaluate the expression containing\\\\nthe function call.\\.\",reason=\"breakpoint-hit\",commands=\"no\",times=\"1\",bkptno=\"2\",thread-id=\"1\"" "call inferior's function with a breakpoint set in it"
+# mi_gdb_test "401-data-evaluate-expression foo()" "401\\^error,msg=\"The program being debugged stopped while in a function called from GDB.\\\\nWhen the function .foo. is done executing, GDB will silently\\\\nstop .instead of continuing to evaluate the expression containing\\\\nthe function call.\\.\",reason=\"breakpoint-hit\",commands=\"no\",times=\"1\",bkptno=\"2\",thread-id=\"1\"" "call inferior's function with a breakpoint set in it"
+mi_gdb_test "401-interpreter-exec console-quoted \"p foo()\"" ".*Breakpoint .*2.*401\\^error,msg=\"The program being debugged stopped while in a function called from GDB.\\\\nWhen the function .foo. is done executing, GDB will silently\\\\nstop .instead of continuing to evaluate the expression containing\\\\nthe function call.\\.\""
 
-mi_gdb_test "402-stack-list-frames" "402\\^done,stack=\\\[frame=\{level=\"0\",addr=\"$hex\",fp=\"$hex\",func=\"foo\",file=\".*mi-syn-frame.c\",line=\"$decimal\".*\},frame=\{level=\"1\",addr=\"$hex\",fp=\"$hex\",func=\"<function called from gdb>\".*\},frame=\{level=\"2\",addr=\"$hex\",fp=\"$hex\",func=\"main\",file=\".*mi-syn-frame.c\",line=\"$decimal\".*\}.*\\\]" "backtrace from inferior function stopped at bp, showing gdb dummy frame"
+mi_gdb_test "402-stack-list-frames" "402\\^done,stack=\\\[frame=\{level=\"0\",addr=\"$hex\",fp=\"$hex\",func=\"foo\",optimized=\"0\",file=\".*mi-syn-frame.c\",line=\"$decimal\".*\},frame=\{level=\"1\",addr=\"$hex\",fp=\"$hex\",func=\"<function called from gdb>\".*\},frame=\{level=\"2\",addr=\"$hex\",fp=\"$hex\",func=\"main\",optimized=\"0\",file=\".*mi-syn-frame.c\",line=\"$decimal\".*\}.*\\\]" "backtrace from inferior function stopped at bp, showing gdb dummy frame"
 
 #
 # Continue back to main()
@@ -76,7 +77,7 @@ gdb_expect {
 }
 
 mi_gdb_test "404-stack-list-frames 0 0" \
-  "404\\^done,stack=\\\[frame=\{level=\"0\",addr=\"$hex\",fp=\"$hex\",func=\"main\",file=\".*mi-syn-frame.c\",fullname=\"${fullname_syntax}${srcfile}\",line=\"$decimal\"\}.*\\\]" \
+  "404\\^done,stack=\\\[frame=\{level=\"0\",addr=\"$hex\",fp=\"$hex\",func=\"main\",optimized=\"0\",file=\".*mi-syn-frame.c\",fullname=\"${fullname_syntax}${srcfile}\",line=\"$decimal\"\}.*\\\]" \
   "list stack frames"
 
 #
@@ -90,15 +91,15 @@ mi_gdb_test "405-break-insert subroutine" \
 # APPLE LOCAL: Again we have to adjust the test to get the stopped reason in the right place.
 
 # APPLE LOCAL [breakpoint-hit]: We emit a TIMES field. 
-mi_gdb_test "406-data-evaluate-expression have_a_very_merry_interrupt()" \
-  "Waiting to get a signal\[\r\n\]+406\\^error,msg=\"The program being debugged stopped while in a function called from GDB.\\\\nWhen the function \\(have_a_very_merry_interrupt\\) is done executing, GDB will silently\\\\nstop \\(instead of continuing to evaluate the expression containing\\\\nthe function call\\).\",reason=\"breakpoint-hit\",commands=\"no\",times=\"1\",bkptno=\"3\",thread-id=\"$decimal\"" \
-  "evaluate expression have_a_very_merry_interrupt"
+# mi_gdb_test "406-data-evaluate-expression have_a_very_merry_interrupt()"
+mi_gdb_test "406-interpreter-exec console-quoted \"p have_a_very_merry_interrupt()\"" \
+  "Waiting to get a signal.*406\\^error,msg=\"The program being debugged stopped while in a function called from GDB.\\\\nWhen the function \\(have_a_very_merry_interrupt\\) is done executing, GDB will silently\\\\nstop \\(instead of continuing to evaluate the expression containing\\\\nthe function call\\).\""
 
 # We should have both a signal handler and a call dummy frame
 # in this next output.
 
 mi_gdb_test "407-stack-list-frames" \
-  "407\\^done,stack=\\\[frame=\{level=\"0\",addr=\"$hex\",fp=\"$hex\",func=\"subroutine\",file=\".*mi-syn-frame.c\",line=\"$decimal\".*\},frame=\{level=\"1\",addr=\"$hex\",fp=\"$hex\",func=\"handler\",file=\".*mi-syn-frame.c\",line=\"$decimal\".*\},frame=\{level=\"2\",addr=\"$hex\",fp=\"$hex\",func=\"<signal handler called>\".*\},.*frame=\{level=\"$decimal\",addr=\"$hex\",fp=\"$hex\",func=\"have_a_very_merry_interrupt\",file=\".*mi-syn-frame.c\",line=\"$decimal\".*\},frame=\{level=\"$decimal\",addr=\"$hex\",fp=\"$hex\",func=\"<function called from gdb>\".*\},frame=\{level=\"$decimal\",addr=\"$hex\",fp=\"$hex\",func=\"main\",file=\".*mi-syn-frame.c\",line=\"$decimal\".*\}.*\\\]" \
+  "407\\^done,stack=\\\[frame=\{level=\"0\",addr=\"$hex\",fp=\"$hex\",func=\"subroutine\",optimized=\"0\",file=\".*mi-syn-frame.c\",line=\"$decimal\".*\},frame=\{level=\"1\",addr=\"$hex\",fp=\"$hex\",func=\"handler\",optimized=\"0\",file=\".*mi-syn-frame.c\",line=\"$decimal\".*\},frame=\{level=\"2\",addr=\"$hex\",fp=\"$hex\",func=\"<signal handler called>\".*\},.*frame=\{level=\"$decimal\",addr=\"$hex\",fp=\"$hex\",func=\"have_a_very_merry_interrupt\",optimized=\"0\",file=\".*mi-syn-frame.c\",line=\"$decimal\".*\},frame=\{level=\"$decimal\",addr=\"$hex\",fp=\"$hex\",func=\"<function called from gdb>\".*\},frame=\{level=\"$decimal\",addr=\"$hex\",fp=\"$hex\",func=\"main\",optimized=\"0\",file=\".*mi-syn-frame.c\",line=\"$decimal\".*\}.*\\\]" \
   "list stack frames"
 
 send_gdb "408-exec-continue\n"
@@ -112,7 +113,7 @@ gdb_expect {
 }
 
 mi_gdb_test "409-stack-list-frames 0 0" \
-  "409\\^done,stack=\\\[frame=\{level=\"0\",addr=\"$hex\",fp=\"$hex\",func=\"main\",file=\".*mi-syn-frame.c\",line=\"$decimal\".*\}.*\\\]" \
+  "409\\^done,stack=\\\[frame=\{level=\"0\",addr=\"$hex\",fp=\"$hex\",func=\"main\",optimized=\"0\",file=\".*mi-syn-frame.c\",line=\"$decimal\".*\}.*\\\]" \
   "list stack frames"
 
 #
@@ -123,7 +124,7 @@ mi_gdb_test "410-data-evaluate-expression bar()" "hi in bar\[\r\n\]+410\\^error,
 
 #
 
-mi_gdb_test "411-stack-list-frames" "411\\^done,stack=\\\[frame=\{level=\"0\",addr=\"$hex\",fp=\"$hex\",func=\"bar\",file=\".*mi-syn-frame.c\",fullname=\"${fullname_syntax}${srcfile}\",line=\"$decimal\"},frame=\{level=\"1\",addr=\"$hex\",fp=\"$hex\",func=\"<function called from gdb>\"\},frame=\{level=\"2\",addr=\"$hex\",func=\"main\",file=\".*mi-syn-frame.c\",fullname=\"${fullname_syntax}${srcfile}\",line=\"$decimal\"}.*\\\]" "backtrace from inferior function at exception"
+mi_gdb_test "411-stack-list-frames" "411\\^done,stack=\\\[frame=\{level=\"0\",addr=\"$hex\",fp=\"$hex\",func=\"bar\",optimized=\"0\",file=\".*mi-syn-frame.c\",fullname=\"${fullname_syntax}${srcfile}\",line=\"$decimal\"},frame=\{level=\"1\",addr=\"$hex\",fp=\"$hex\",func=\"<function called from gdb>\"\},frame=\{level=\"2\",addr=\"$hex\",func=\"main\",optimized=\"0\",file=\".*mi-syn-frame.c\",fullname=\"${fullname_syntax}${srcfile}\",line=\"$decimal\"}.*\\\]" "backtrace from inferior function at exception"
 
 mi_gdb_exit
 

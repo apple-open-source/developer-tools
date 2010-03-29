@@ -771,8 +771,8 @@ static const struct dis386 dis386[] = {
   { "(bad)",		{ XX } },	/* fwait */
   { "pushfT",		{ XX } },
   { "popfT",		{ XX } },
-  { "sahf{|}",		{ XX } },
-  { "lahf{|}",		{ XX } },
+  { "sahf",		{ XX } },  /* APPLE LOCAL: allow this insn on x86_64 */
+  { "lahf",		{ XX } },  /* APPLE LOCAL: allow this insn on x86_64 */
   /* a0 */
   { "movB",		{ AL, Ob } },
   { "movS",		{ eAX, Ov } },

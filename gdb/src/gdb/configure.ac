@@ -84,10 +84,6 @@ dnl APPLE LOCAL check for posix_spawn and the "arch" program.  Note we don't
 dnl trust the "arch" program if the posix_spawn headers aren't present, since
 dnl Tiger has an "arch" but it only echos the current system architecture.
 case "$host" in
-  arm-apple-*)
-    # We need to turn off arch for exec for now as it doesn't support launching
-    # a specified architecture in a universal mach file.
-    ;;
   *-apple-darwin* | *-apple-macosx*)
     AC_MSG_CHECKING([whether posix_spawn supports SETEXEC])
     AC_COMPILE_IFELSE([AC_LANG_PROGRAM(

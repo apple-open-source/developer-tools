@@ -1,23 +1,24 @@
-/* -*- c-file-style: "java"; indent-tabs-mode: nil; fill-column: 78; -*-
- * 
+/* -*- c-file-style: "java"; indent-tabs-mode: nil; tab-width: 4; fill-column: 78 -*-
+ *
  * distcc -- A simple distributed compiler system
  *
  * Copyright (C) 2002, 2003 by Martin Pool <mbp@samba.org>
+ * Copyright 2007 Google Inc.
  *
  * This program is free software; you can redistribute it and/or
- * modify it under the terms of the GNU General Public License as
- * published by the Free Software Foundation; either version 2 of the
- * License, or (at your option) any later version.
+ * modify it under the terms of the GNU General Public License
+ * as published by the Free Software Foundation; either version 2
+ * of the License, or (at your option) any later version.
  *
- * This program is distributed in the hope that it will be useful, but
- * WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
- * General Public License for more details.
- * 
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ *
  * You should have received a copy of the GNU General Public License
  * along with this program; if not, write to the Free Software
- * Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA 02111-1307
- * USA
+ * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301,
+ * USA.
  */
 
 
@@ -36,7 +37,7 @@
  *
  * We use locks rather than e.g. a database or a central daemon because we
  * want to make sure that the lock will be removed if the client terminates
- * unexpectedly.  
+ * unexpectedly.
  *
  * The files themselves (as opposed to the lock on them) are never cleaned up;
  * since locking & creation is nonatomic I can't think of a clean way to do
@@ -49,7 +50,7 @@
  */
 
 
-#include "config.h"
+#include <config.h>
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -70,6 +71,23 @@
 #include "exitcode.h"
 #include "snprintf.h"
 
+/* Note that we use the _same_ lock file for
+ * dcc_hostdef_local and dcc_hostdef_local_cpp,
+ * so that they both use the same underlying lock.
+ * This ensures that we respect the limits for
+ * both "localslots" and "localslots_cpp".
+ *
+ * Extreme care with lock ordering is required in order to avoid
+ * deadlocks.  In particular, the following invariants apply:
+ *
+ *  - Each distcc process should hold no more than two locks at a time;
+ *    one local lock, and one remote lock.
+ *
+ *  - When acquring more than one lock, a strict lock ordering discipline
+ *    must be observed: the remote lock must be acquired first, before the
+ *    local lock; and conversely the local lock must be released first,
+ *    before the remote lock.
+ */
 
 struct dcc_hostdef _dcc_local = {
     DCC_MODE_LOCAL,
@@ -77,19 +95,35 @@ struct dcc_hostdef _dcc_local = {
     (char *) "localhost",
     0,
     NULL,
+    1,                          /* host is_up */
     4,                          /* number of tasks */
     (char *)"localhost",        /* verbatim string */
-    NULL,
-    NULL,
     DCC_VER_1,                  /* protocol (ignored) */
     DCC_COMPRESS_NONE,          /* compression (ignored) */
-    NULL    
+    DCC_CPP_ON_CLIENT,          /* where to cpp (ignored) */
+    NULL
 };
 
 struct dcc_hostdef *dcc_hostdef_local = &_dcc_local;
 
-static int cpp_lock;
-static char cpp_lock_filename[MAXPATHLEN];
+struct dcc_hostdef _dcc_local_cpp = {
+    DCC_MODE_LOCAL,
+    NULL,
+    (char *) "localhost",
+    0,
+    NULL,
+    1,                          /* host is_up */
+    8,                          /* number of tasks */
+    (char *)"localhost",        /* verbatim string */
+    DCC_VER_1,                  /* protocol (ignored) */
+    DCC_COMPRESS_NONE,          /* compression (ignored) */
+    DCC_CPP_ON_CLIENT,          /* where to cpp (ignored) */
+    NULL
+};
+
+struct dcc_hostdef *dcc_hostdef_local_cpp = &_dcc_local_cpp;
+
+
 
 /**
  * Returns a newly allocated buffer.
@@ -107,7 +141,7 @@ int dcc_make_lock_filename(const char *lockname,
         return ret;
 
     if (host->mode == DCC_MODE_LOCAL) {
-        if (asprintf(&buf, "%s/%s_localhost_%d", lockdir, lockname, 
+        if (asprintf(&buf, "%s/%s_localhost_%d", lockdir, lockname,
                      iter) == -1)
             return EXIT_OUT_OF_MEMORY;
     } else if (host->mode == DCC_MODE_TCP) {
@@ -136,19 +170,19 @@ int dcc_make_lock_filename(const char *lockname,
  * @retval 0 if we got the lock
  * @retval -1 with errno set if the file is already locked.
  **/
-int sys_lock(int fd, int block)
+static int sys_lock(int fd, int block)
 {
-#if defined(HAVE_FLOCK)
-    return flock(fd, LOCK_EX | (block ? 0 : LOCK_NB));
-#elif defined(F_SETLK)
+#if defined(F_SETLK)
     struct flock lockparam;
 
     lockparam.l_type = F_WRLCK;
     lockparam.l_whence = SEEK_SET;
     lockparam.l_start = 0;
     lockparam.l_len = 0;        /* whole file */
-    
+
     return fcntl(fd, block ? F_SETLKW : F_SETLK, &lockparam);
+#elif defined(HAVE_FLOCK)
+    return flock(fd, LOCK_EX | (block ? 0 : LOCK_NB));
 #elif defined(HAVE_LOCKF)
     return lockf(fd, block ? F_LOCK : F_TLOCK, 0);
 #else
@@ -160,6 +194,30 @@ int sys_lock(int fd, int block)
 
 int dcc_unlock(int lock_fd)
 {
+#if defined(F_SETLK)
+    struct flock lockparam;
+
+    lockparam.l_type = F_UNLCK;
+    lockparam.l_whence = SEEK_SET;
+    lockparam.l_start = 0;
+    lockparam.l_len = 0;
+
+    if (fcntl(lock_fd, F_SETLK, &lockparam) == -1) {
+        rs_log_error("fcntl(fd%d, F_SETLK, F_UNLCK) failed: %s",
+                     lock_fd, strerror(errno));
+        close(lock_fd);
+        return EXIT_IO_ERROR;
+    }
+#elif defined (HAVE_FLOCK)
+    /* flock() style locks are released when the fd is closed */
+#elif defined (HAVE_LOCKF)
+    if (lockf(lock_fd, F_ULOCK, 0) == -1) {
+        rs_log_error("lockf(fd%d, F_ULOCK, 0) failed: %s",
+                     lock_fd, strerror(errno));
+        close(lock_fd);
+        return EXIT_IO_ERROR;
+    }
+#endif
     rs_trace("release lock fd%d", lock_fd);
     /* All our current locks can just be closed */
     if (close(lock_fd)) {
@@ -189,8 +247,7 @@ int dcc_open_lockfile(const char *fname, int *plockfd)
         rs_log_error("failed to creat %s: %s", fname, strerror(errno));
         return EXIT_IO_ERROR;
     }
-    dcc_set_owner(fname);
-    
+
     return 0;
 }
 
@@ -216,13 +273,17 @@ int dcc_lock_host(const char *lockname,
     char *fname;
     int ret;
 
+    /* if host is down, return EXIT_BUSY */
+    if (!host->is_up)
+    return EXIT_BUSY;
+
     if ((ret = dcc_make_lock_filename(lockname, host, slot, &fname)))
         return ret;
 
     if ((ret = dcc_open_lockfile(fname, lock_fd)) != 0) {
         free(fname);
         return ret;
-    }        
+    }
 
     if (sys_lock(*lock_fd, block) == 0) {
         rs_trace("got %s lock on %s slot %d as fd%d", lockname,
@@ -248,57 +309,5 @@ int dcc_lock_host(const char *lockname,
         dcc_close(*lock_fd);
         free(fname);
         return ret;
-    }
-}
-
-int dcc_get_cpp_lock()
-{
-    int lock_fd;
-    char *lockdir;
-    int i, ncpus, sleepTime = 10000;
-    if (dcc_get_lock_dir(&lockdir))
-        return -1;
-    if (dcc_ncpus(&ncpus))
-        ncpus = 1;
-    ncpus++;
-    for (i=0; i<ncpus; i++) {
-        sprintf(cpp_lock_filename, "%s/%s_%d", lockdir, "cpp_lock", i);
-        if (dcc_open_lockfile(cpp_lock_filename, &lock_fd))
-            lock_fd = -1;
-        else {
-            if (sys_lock(lock_fd, 0) != 0) {
-                rs_trace("someone already has cpp lock: %s (%s)", cpp_lock_filename, strerror(errno));
-                close(lock_fd);
-                lock_fd = -1;
-            } else {
-                break;
-            }
-        }
-    }
-    if (lock_fd == -1) {
-        srandom(getpid());
-        sprintf(cpp_lock_filename, "%s/%s_%d", lockdir, "cpp_lock", random()%(ncpus));
-        rs_trace("blocking for cpp lock: %s (%s)", cpp_lock_filename, strerror(errno));
-        if (dcc_open_lockfile(cpp_lock_filename, &lock_fd))
-            lock_fd = -1;
-        else {
-            if (sys_lock(lock_fd, 1) != 0) {
-                rs_log_warning("failed to get cpp lock: %s (%s)", cpp_lock_filename, strerror(errno));
-                close(lock_fd);
-                lock_fd = -1;
-            }
-        }
-    }
-    if (lock_fd != -1)
-        rs_trace("got cpp lock: %s", cpp_lock_filename);
-    cpp_lock = lock_fd;
-    return lock_fd;
-}
-
-void dcc_unlock_cpp_lock()
-{
-    if (cpp_lock != -1) {
-        close(cpp_lock);
-        rs_trace("gave up cpp lock: %s", cpp_lock_filename);
     }
 }

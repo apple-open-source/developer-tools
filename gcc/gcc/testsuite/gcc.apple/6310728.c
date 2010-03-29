@@ -1,5 +1,5 @@
 /* APPLE LOCAL file 6310728 */
-/* { dg-do compile } */
+/* { dg-do compile { target "i?86-*-*" } } */
 /* { dg-options { -mfix-and-continue -m64 } } */
 typedef int int32_t;
 typedef int32_t SINT32 ;

@@ -1319,7 +1319,7 @@ do_over_unique_frames (stack_logging_record_t record, void *data)
       struct cleanup *frame_cleanup
 	= make_cleanup_ui_out_tuple_begin_end (uiout, "frame");
       char *name;
-      int err;
+      int err = 0;
       struct gdb_exception e;
       /* This is cheesy spacing, but we really won't get
 	 more than 1000 frames, so more work would be overkill.  */
@@ -1393,7 +1393,7 @@ malloc_history_info_command (char *arg, int from_tty)
 #elif HAVE_32_BIT_STACK_LOGGING
   vm_address_t addr;
 #endif
-  kern_return_t kret;
+  kern_return_t kret = KERN_FAILURE;
   volatile struct gdb_exception except;
   struct cleanup *cleanup;
   /* APPLE LOCAL - Make "-exact" the default, since there's no way to

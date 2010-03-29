@@ -128,8 +128,11 @@ default_memory_remove_breakpoint (CORE_ADDR addr, bfd_byte *contents_cache)
        circular array of recent breakpoint locations.  */
     {
       val = target_write_memory (addr, contents_cache, bplen);
-      last_bkpt_index = (last_bkpt_index + 1) % BKPT_ARRAY_SIZE;
-      recent_breakpoints[last_bkpt_index] = addr;
+      if (breakpoint_here_p (addr))
+	{
+	  last_bkpt_index = (last_bkpt_index + 1) % BKPT_ARRAY_SIZE;
+	  recent_breakpoints[last_bkpt_index] = addr;
+	}
     }
   
  cleanup:

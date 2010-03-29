@@ -1,4 +1,99 @@
-2009-06-16  Caroline Tice <ctice@apple.com>
+2009-11-18  Jason Molenda  (jmolenda@apple.com)
+
+	* Makefile:  Don't un-set MACOSX_DEPLOYMENT_TARGET.
+
+2009-07-29  Jason Molenda  (jmolenda@apple.com)
+
+	* gdb.sh: Hoist the code that inspects the core/executable file
+	to get its architectures out so it is run unconditionally.
+	Use lipo -info to get the list of architectures for an executable -
+	this will give us more specific file architectures than just "arm",
+	for instance, and we need that specificity.
+	In the case of someone doing 'gdb -arch arm' on a file with only one
+	arm slice, pick up the specific arm type (e.g. armv6) from the file
+	and override the user's specification.
+
+2009-07-28  Jason Molenda  (jmolenda@apple.com)
+
+	* Makefile (TARGET_ONLY_EXTRA_ARCHS): New variable that can be
+	passed in -- a list of architectures that we only build cross-debuggers
+	for.  Currently arm is the only supported configuration.
+	(CROSS_TARGETS): Prune out all ppc-cross-* debuggers.  Only native
+	ppc will be built from now on.  Folks won't be cross debugging from a 
+	ppc system any more. 
+	(CROSS_TARGETS): Prune out all arm-cross-* debuggers.  Same reason;
+	only arm native and *-cross-arm debuggers are useful.
+	(install-macosx): Handle the case where we are building arm cross
+	debuggers but no native arm debugger.
+	(dsym-and-strip-fat-gdbs): Use ARCHS_TO_INSTALL instead of 
+	CANONICAL_ARCHS so we can override it up in install-macosx.
+	(install-macosx): Don't install macsbug any more.
+
+2009-07-24  Jason Molenda  (jmolenda@apple.com)
+
+	* Makefile: Remove bits that try to build gdbserver.
+	(install-macosx, install): Remove conditional around calling
+	install-chmod-macosx-noprocmod.
+
+2009-07-24  Greg Clayton  <gclayton@apple.com>
+
+	* Makefile: Fixed the standard B&I buildit build.
+
+2009-07-17  Greg Clayton  <gclayton@apple.com>
+
+	* Makefile: Find gcc using xcrun for cross builds and use -isysroot.
+
+2009-02-03  Greg Clayton  <gclayton@apple.com>
+
+	* Makefile: Modified installhdrs to work for cross builds and also
+	fixed an issue where /private/etc/gdb.conf wasn't being generated.
+
+2009-02-02  Greg Clayton  <gclayton@apple.com>
+
+	* gdb.sh: Only use lipo if we have an executable and redirect stdout
+	and stderr to /dev/null to omit any shell spew.
+
+2009-01-06  Greg Clayton  <gclayton@apple.com>
+
+	* gdb.sh: If the host arch is "arm", we check the cpusubtype so we can
+	get a more descriptive arch name for HOST_ARCHITECTURE. Use 'lipo -info'
+	instead of the 'file' command as it returns more descriptive 
+	architectures.
+
+2008-12-04  Greg Clayton  <gclayton@apple.com>
+
+	* Makefile (cross): Modified the cross build to handle all ARM variants.
+
+2008-07-02  Greg Clayton  <gclayton@apple.com>
+
+	* Makefile: Modified the "cross" target to support building multiple
+	variants into the same file.
+
+2008-07-01  Greg Clayton  <gclayton@apple.com>
+
+	* gdb.sh: Added armv7 as an arch that calls the correct gdb with
+	the correct osabi options.
+	* Makefile: Added armv7 as a potential arch.
+
+2008-08-07  Greg Clayton  <gclayton@apple.com>
+
+	* gdb.sh: Added armv4 and armv4t support, and let gdb auto detect
+	the arm version when the arch is specified as anything that starts
+	with "arm" that isn't one of "armv4", "armv4t", "armv6", or "armv7".
+
+2008-07-31  Greg Clayton  <gclayton@apple.com>
+
+	* Makefile (CANONICAL_ARCHS): Sort the items in this variable
+	so check-args can have fewer permutations.
+	(check-args): Recognize arm, i386 and ppc as a plausible variant and
+	rely on sorted CANONICAL_ARCHS.
+	(CONFIGURE_OPTIONS): Added a "filter-out" make command to remove
+	extra whitespace when some settings don't have any value.
+	(EFLAGS): Ditto.
+	(cross): Cleaned up redundant defintions for cross_arch_full shell
+	variable.
+
+2009-06-05  Caroline Tice  <ctice@apple.com>
 
 	* Makefile:  Add -D_DARWIN_UNLIMITED_STREAMS to CDEBUGFLAGS, to
 	allow more than 256 streams to be open at a time.

@@ -1046,6 +1046,9 @@ static const struct opcode32 arm_opcodes[] =
    %X			print "\t; unpredictable <IT:code>" if conditional
    %I			print IT instruction suffix and operands
    %<bitfield>r		print bitfield as an ARM register
+   %<bitfield>Rc	print bitfield as an ARM register and follow it with
+			  char c if the register mentioned in the bitfield is 
+			  NOT in the register list in bits 0..7
    %<bitfield>d		print bitfield as a decimal
    %<bitfield>H         print (bitfield * 2) as a decimal
    %<bitfield>W         print (bitfield * 4) as a decimal
@@ -1158,7 +1161,7 @@ static const struct opcode16 thumb_opcodes[] =
   {ARM_EXT_V4T, 0xA800, 0xF800, "add%c\t%8-10r, sp, #%0-7W"},
   /* format 15 */
   {ARM_EXT_V4T, 0xC000, 0xF800, "stmia%c\t%8-10r!, %M"},
-  {ARM_EXT_V4T, 0xC800, 0xF800, "ldmia%c\t%8-10r!, %M"},
+  {ARM_EXT_V4T, 0xC800, 0xF800, "ldmia%c\t%8-10R!, %M"},
   /* format 17 */
   {ARM_EXT_V4T, 0xDF00, 0xFF00, "svc%c\t%0-7d"},
   /* format 16 */
@@ -3218,6 +3221,13 @@ print_insn_thumb16 (bfd_vma pc, struct disassemble_info *info, long given)
 			  {
 			  case 'r':
 			    func (stream, "%s", arm_regnames[reg]);
+			    break;
+
+			  case 'R':
+			    func (stream, "%s", arm_regnames[reg]);
+			    c++;
+			    if ((given & (1 << reg)) == 0)
+			      func (stream, "%c", *c);
 			    break;
 
 			  case 'd':

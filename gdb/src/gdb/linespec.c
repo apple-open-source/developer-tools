@@ -3021,7 +3021,6 @@ decode_all_variables (char *copy, int funfirstline, int equivalencies,
   char **sym_canonical = NULL;
   char **minsym_canonical = NULL;
   char **canonical_arr;
-  char *canonical_name;
   /* APPLE LOCAL end radar 6366048 search both minsyms & syms for bps.  */
 
   syms_found = lookup_symbol_all  
@@ -3085,6 +3084,26 @@ decode_all_variables (char *copy, int funfirstline, int equivalencies,
 	}
     }
 
+  /* Eliminate all symbols that are not function symbols. */
+  prev = NULL;
+  cur = sym_list;
+  while (cur)
+    {
+      if ((!cur->symbol)
+	  || !(SYMBOL_TYPE (cur->symbol))
+	  || (TYPE_CODE (SYMBOL_TYPE (cur->symbol)) != TYPE_CODE_FUNC))
+	{
+	  /* delete 'cur' from sym_list  */
+	  if (prev != NULL)
+	    prev->next = cur->next;
+	  else
+	    sym_list = cur->next;
+	}
+      else
+	prev = cur;
+      cur = cur->next;
+    }
+    
   /* Eliminate duplicate entries from sym_list.  Two entries are
      "duplicate" if they point to the same symbol.  */
 
@@ -3259,7 +3278,7 @@ symbols_found (int funfirstline, char ***canonical, char *copy,
 {
   struct symbol_search *current;
   struct symtabs_and_lines values;
-  char **canonical_arr;
+  char **canonical_arr = NULL;
   int num_syms = 0;
   int i;
 
@@ -3317,7 +3336,8 @@ symbols_found (int funfirstline, char ***canonical, char *copy,
 			  sprintf (canonical_name, "%s:%d", s->filename,
 				   values.sals[i].line);
 			}
-		      canonical_arr[i] = canonical_name;
+                      if (canonical_arr)
+		        canonical_arr[i] = canonical_name;
 		    }
 		}
 	    }

@@ -192,7 +192,6 @@ allocate_space_in_inferior_malloc (int len)
   struct value *val;
   static struct cached_value *fval = NULL;
   struct cleanup *cleanup_chain;
-  int unwind;
 
   if (target_check_safe_call (MALLOC_SUBSYSTEM, CHECK_SCHEDULER_VALUE) != 1)
     error ("No memory available to program now: unsafe to call malloc");

@@ -555,7 +555,8 @@ java_link_class_type (struct type *type, struct value *clas)
 	}
       fn_fields[k].physname = "";
       fn_fields[k].is_stub = 1;
-      fn_fields[k].type = make_function_type (java_void_type, NULL);	/* FIXME */
+      /* APPLE LOCAL - Inform users about debugging optimized code  */
+      fn_fields[k].type = make_function_type (java_void_type, NULL, 0);	/* FIXME */
       TYPE_CODE (fn_fields[k].type) = TYPE_CODE_METHOD;
     }
 

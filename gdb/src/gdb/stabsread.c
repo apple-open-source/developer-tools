@@ -1883,8 +1883,8 @@ again:
 
     case 'f':			/* Function returning another type */
       type1 = read_type (pp, objfile);
-      /* APPLE LOCAL objfile for types */
-      type = make_function_type (type1, dbx_lookup_type (typenums, objfile));
+      /* APPLE LOCAL objfile for types; Inform users about debugging optimized code */
+      type = make_function_type (type1, dbx_lookup_type (typenums, objfile), 0);
       break;
 
     case 'g':                   /* Prototyped function.  (Sun)  */
@@ -1907,8 +1907,9 @@ again:
         const char *type_start = (*pp) - 1;
         struct type *return_type = read_type (pp, objfile);
         struct type *func_type
-	  /* APPLE LOCAL objfile for types */
-          = make_function_type (return_type, dbx_lookup_type (typenums, objfile));
+	  /* APPLE LOCAL objfile for types; Inform users about debugging optimzied code */
+          = make_function_type (return_type, dbx_lookup_type (typenums, objfile),
+				0);
         struct type_list {
           struct type *type;
           struct type_list *next;
@@ -4913,7 +4914,7 @@ finish_global_stabs (struct objfile *objfile)
 char *
 find_name_end (char *name)
 {
-  char *s = name;
+  char *s;
   char *first_colon, *first_lbrac, *first_rbrac;
 
   /* APPLE LOCAL FIXME: The way we do it here, we won't correctly

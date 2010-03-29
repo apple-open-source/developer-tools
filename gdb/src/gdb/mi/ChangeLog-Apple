@@ -1,3 +1,13 @@
+2009-08-06  Jason Molenda  (jmolenda@apple.com)
+
+	* mi-main.c (mi_cmd_target_load_solib): Initialize ret_val so
+	we don't branch based on an uninitialized value.
+
+2009-04-10  Jim Ingham  <jingham@apple.com>
+
+        * mi-main.c (mi_cmd_target_attach): Pass -waitfor down to the
+	lower level attach.
+
 2009-03-23  Jim Ingham  <jingham@apple.com>
 
 	* mi-main.c (mi_cmd_target_attach): Add -waitfor.

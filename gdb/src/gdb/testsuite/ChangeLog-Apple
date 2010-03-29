@@ -1,3 +1,39 @@
+2010-03-02  Jason Molenda  (jmolenda@apple.com)
+
+	* gdb.apple/function-statics.{c,exp}: Check that we can locate
+	function static variables in the data and bss sections.
+
+2009-12-07  Jason Molenda  (jmolenda@apple.com)
+
+        * gdb.base/help.exp: Update expected 'help breakpoints' message text.
+
+2009-08-14  Caroline Tice  <ctice@apple.com>
+
+	* gdb.apple/inf-call-interrupt.exp: Added 'optimized' field to
+	frame stack checks.
+	* gdb.mi/mi-syn-frame.exp:  Ditto.
+	* gdb.mi/mi2-return.exp:  Ditto.
+	* gdb.mi/mi2-stack.exp:  Ditto.
+	* gdb.mi/mi2-syn-frame.exp: Ditto.
+	* lib/gdb.exp (default_gdb_start) Added "set inform-optimized 0".
+	* lib/mi-support.exp (mi_check_current_frame): Added 'optimized' 
+	field to frame stack check.
+
+2009-07-29  Jason Molenda  (jmolenda@apple.com)
+
+	* gdb.base/display.exp: "print/i" emits a different error now because
+	of the G_EXAMINE_I_SIZE /i changes made for arm.
+
+2009-06-29  Caroline Tice  <ctice@apple.com>
+
+	* gdb.apple/inf-call-interrupt.exp:  Modify test to use
+	'-interpreter-exec console-quoted' rather then 
+	-data-evaluate-expression to call functions in which there are
+	breakpoints set (to work with new patch that disables breakpoints
+	while updating varobj info).
+	* gdb.mi/mi-syn-frame.exp: Ditto.
+	* gdb.mi/mi2-syn-frame.exp: Ditto.
+
 2009-04-14  Jim Ingham  <jingham@apple.com>
 
 	* gdb.apple/objc-throw-in-inf-fn.{exp,m}: New test cases.

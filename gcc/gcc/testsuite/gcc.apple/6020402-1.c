@@ -1,3 +1,4 @@
+/* { dg-do compile { target "i?86-*-*" } } */
 /* { dg-options "-m64 -Os" } */
 /* { dg-final { scan-assembler-not " orq\t" } } */
 

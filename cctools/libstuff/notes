@@ -5,6 +5,49 @@
 TODO:
 - Deal with LC_PREPAGE and unknown load commands that don't need to be swapped.
 
+Changes for the 5.27 release (the cctools-769 release):
+- Changed round() in round.c to take and return uint64_t types.  Radar bug
+  #7245879.
+
+Changes for the 5.27 release (the cctools-767 release):
+- Updated get_byte_sex_from_flag() in arch.c to include CPU_TYPE_X86_64.  Radar
+  bug #7222145.
+
+Changes for the 5.27 release (the cctools-762 release):
+- Changed the Makefile to set CC when when SDKROOT is set.  Radar bug #7078805.
+
+Changes for the 5.27 release (the cctools-760 release):
+- Changed the sources so the armv7 stuff is a no longer #ifndef __OPEN_SOURCE__
+  Radar bug #7016121.
+  - Changed the Makefile and removed the OPEN macro which was -D__OPEN_SOURCE__
+    and removed it from CFLAGS.
+  - Removed #ifndef __OPEN_SOURCE__ from arch.c, best_arch.c and lto.c which
+    bracketed armv7 references.
+
+Changes for the 5.27 release (the cctools-759 release):
+- Changed the Makefile to add -isysroot $(SDKROOT) to compile and link lines
+  when SDKROOT is set.  Radar bug #6965029.
+
+Changes for the 5.26 release (the cctools-758 release):
+- Changed ofile_process() in ofile.c to default to 64-bit intel if the program
+  is being run as a 64-bit binary on an intel machine.  Radar bug #6942056.
+
+Changes for the 5.26 release (the cctools-756 release):
+- Added add_execute_list_with_prefix() to execute() to add a string prefixed
+  with the executable's path.  Radar bug #6821441.
+
+Changes for the 5.26 release (the cctools-753 release):
+- Changed the Makefile to not use -iwithsysroot when RC_MAJOR_RELEASE_TRAIN is
+  Tiger.  Radar bug #6796174.
+
+Changes for the 5.26 release (the cctools-752 release):
+- Ported to build with clang.
+  - Changed Makefile to work around bugs 6756912 and 6757212.
+  - Added cast to int in swap_headers.c (two places) and ofile.c in switch
+    statements (one place).
+  - Fixed warnings about extra tokens at end of #endif directive in ofile.c
+    by putting them in a comment.
+
 Changes for the 5.26 release (the cctools-750 release):
 - Added lto_get_nlist_64() to lto.c for use by nm(1) print information from
   llvm bit code files.  Radar bug #6067110.

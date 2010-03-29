@@ -90,6 +90,8 @@ extensions, accepted by GCC in C89 mode and in C++.
 * Pragmas::             Pragmas accepted by GCC.
 * Unnamed Fields::      Unnamed struct/union fields within structs/unions.
 * Thread-Local::        Per-thread variables.
+@c APPLE LOCAL blocks 7205047 5811887
+* Blocks::              Anonymous functions (closures).
 @end menu
 
 @node Statement Exprs
@@ -6532,9 +6534,11 @@ On some target machines, GCC supports many built-in functions specific
 to those machines.  Generally these generate calls to specific machine
 instructions, but allow the compiler to schedule those calls.
 
+@c APPLE LOCAL begin ARM NEON support. Merge from Codesourcery
 @menu
 * Alpha Built-in Functions::
 * ARM Built-in Functions::
+* ARM NEON Intrinsics::
 * Blackfin Built-in Functions::
 * FR-V Built-in Functions::
 * X86 Built-in Functions::
@@ -6543,6 +6547,7 @@ instructions, but allow the compiler to schedule those calls.
 * PowerPC AltiVec Built-in Functions::
 * SPARC VIS Built-in Functions::
 @end menu
+@c APPLE LOCAL end ARM NEON support. Merge from Codesourcery
 
 @node Alpha Built-in Functions
 @subsection Alpha Built-in Functions
@@ -6772,6 +6777,16 @@ v2si __builtin_arm_wunpckilw (v2si, v2si)
 long long __builtin_arm_wxor (long long, long long)
 long long __builtin_arm_wzero ()
 @end smallexample
+
+@c APPLE LOCAL begin ARM NEON support
+@node ARM NEON Intrinsics
+@subsection ARM NEON Intrinsics
+
+These built-in intrinsics for the ARM Advanced SIMD extension are available
+when the @option{-mfpu=neon} switch is used:
+
+@include arm-neon-intrinsics.texi
+@c APPLE LOCAL end ARM NEON support. Merge from Codesourcery.
 
 @node Blackfin Built-in Functions
 @subsection Blackfin Built-in Functions
@@ -10893,6 +10908,18 @@ Add after paragraph 6
 Non-@code{static} members shall not be @code{__thread}.
 @end quotation
 @end itemize
+
+@c APPLE LOCAL begin blocks 7205047 5811887
+@node Blocks
+@section Blocks
+@cindex Blocks
+@cindex __block
+
+Blocks is a language feature that allows one to create anonymous
+functions.  The feature is also known as lambdas or closures in other
+languages.  The feature is controlled by @option{-fblocks}.
+See @uref{http://developer.apple.com/mac/library/documentation/Cocoa/Conceptual/Blocks/Articles/00_Introduction.html} for additional details.
+@c APPLE LOCAL end blocks 7205047 5811887
 
 @node C++ Extensions
 @chapter Extensions to the C++ Language

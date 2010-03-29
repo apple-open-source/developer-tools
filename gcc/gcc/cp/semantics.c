@@ -2993,6 +2993,11 @@ finish_id_expression (tree id_expression,
 	}
     }
 
+  /* APPLE LOCAL begin 7465602 "unavailable" attribute */
+  if (TREE_UNAVAILABLE (decl))
+    error_unavailable_use (decl);
+  /* APPLE LOCAL end 7465602 "unavailable" attribute */
+
   if (TREE_DEPRECATED (decl))
     warn_deprecated_use (decl);
 

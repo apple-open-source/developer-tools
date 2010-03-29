@@ -9,6 +9,8 @@
 /* { dg-options "-O2 -foptimize-sibling-calls" } */
 /* APPLE LOCAL ARM 5798689 sibcalls not implemented for Thumb mode */
 /* { dg-skip-if "" { arm-*-darwin* } { "-mthumb" } { "" } } */
+/* APPLE LOCAL v7 merge. thumb mode is default for Darwin v7a */
+/* { dg-skip-if "" { arm-*-darwin* } { "-march=armv7a" } { "" } } */
 
 /* The option -foptimize-sibling-calls is the default, but serves as
    marker.  This test is xfailed on targets without sibcall patterns

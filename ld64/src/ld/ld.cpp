@@ -86,11 +86,11 @@ public:
 class Section : public ObjectFile::Section
 {
 public:
-	static Section*	find(const char* sectionName, const char* segmentName, bool zeroFill, bool createIfNeeded=true);
+	static Section*	find(const char* sectionName, const char* segmentName, bool zeroFill, bool untrustedZeroFill, bool createIfNeeded=true);
 	static void		assignIndexes();
 	const char*		getName() { return fSectionName; }
 private:
-					Section(const char* sectionName, const char* segmentName, bool zeroFill);
+					Section(const char* sectionName, const char* segmentName, bool zeroFill, bool untrustedZeroFill);
 
 	struct Sorter {
 		static int	segmentOrdinal(const char* segName);
@@ -104,6 +104,7 @@ private:
 	char			fSectionName[18];
 	char			fSegmentName[18];
 	bool			fZeroFill;
+	bool			fUntrustedZeroFill;
 
 	static NameToSection			fgMapping;
 	static std::vector<Section*>	fgSections;
@@ -114,26 +115,51 @@ Section::NameToSection	Section::fgMapping;
 std::vector<Section*>	Section::fgSections;
 Section::NameToOrdinal	Section::fgSegmentDiscoverOrder;
 
-Section::Section(const char* sectionName, const char* segmentName, bool zeroFill)
- : fZeroFill(zeroFill)
+Section::Section(const char* sectionName, const char* segmentName, bool zeroFill, bool untrustedZeroFill)
+ : fZeroFill(zeroFill), fUntrustedZeroFill(untrustedZeroFill)
 {
 	strlcpy(fSectionName, sectionName, sizeof(fSectionName));
 	strlcpy(fSegmentName, segmentName, sizeof(fSegmentName));
-	
+
 	this->fIndex = fgSections.size() + 20;  // room for 20 standard sections
 	// special placement of some sections
 	if ( strcmp(segmentName, "__TEXT") == 0 ) {
+		// sort mach header and load commands to start of TEXT
+		if ( strcmp(sectionName, "._mach_header") == 0 )
+			this->fIndex = 1;
+		else if ( strcmp(sectionName, "._load_commands") == 0 ) 
+			this->fIndex = 2;
+		else if ( strcmp(sectionName, "._load_cmds_pad") == 0 ) 
+			this->fIndex = 3;
+		// sort __text after load commands
+		else if ( strcmp(sectionName, "__text") == 0 ) 
+			this->fIndex = 10;
+		// sort arm/ppc stubs after text to make branch islands feasible
+		else if ( strcmp(sectionName, "__picsymbolstub4") == 0 ) 
+			this->fIndex = 11;
+		else if ( strcmp(sectionName, "__symbol_stub4") == 0 ) 
+			this->fIndex = 11;
+		else if ( strcmp(sectionName, "__picsymbolstub1") == 0 ) 
+			this->fIndex = 11;
+		else if ( strcmp(sectionName, "__symbol_stub1") == 0 ) 
+			this->fIndex = 11;
+		// sort fast arm stubs to end of __TEXT to be close to lazy pointers
+		else if ( strcmp(sectionName, "__symbolstub1") == 0 ) 
+			this->fIndex = INT_MAX;  
 		// sort unwind info to end of segment
-		if ( strcmp(sectionName, "__eh_frame") == 0 )
-			this->fIndex = INT_MAX;
-		else if ( strcmp(sectionName, "__unwind_info") == 0 ) 
+		else if ( strcmp(sectionName, "__eh_frame") == 0 )
 			this->fIndex = INT_MAX-1;
+		else if ( strcmp(sectionName, "__unwind_info") == 0 ) 
+			this->fIndex = INT_MAX-2;
 		else if ( strcmp(sectionName, "__gcc_except_tab") == 0 ) 
-			this->fIndex = INT_MAX-2;			
+			this->fIndex = INT_MAX-3;
 	}
 	else if ( strcmp(segmentName, "__DATA") == 0 ) {
+		// sort arm lazy symbol pointers that must be at start of __DATA
+		if ( strcmp(sectionName, "__lazy_symbol") == 0 ) 
+			this->fIndex = 0;
 		// sort sections dyld will touch to start of segment
-		if ( strcmp(sectionName, "__dyld") == 0 )
+		else if ( strcmp(sectionName, "__dyld") == 0 )
 			this->fIndex = 1;
 		else if ( strcmp(sectionName, "__program_vars") == 0 ) 
 			this->fIndex = 1;
@@ -173,18 +199,25 @@ Section::Section(const char* sectionName, const char* segmentName, bool zeroFill
 			this->fIndex = 18;
 		else if ( strcmp(sectionName, "__objc_imageinfo") == 0 ) 
 			this->fIndex = 19;
+		else if ( strcmp(sectionName, "__huge") == 0 ) 
+			this->fIndex = INT_MAX;
 	
 	}
 	
 	//fprintf(stderr, "new Section(%s, %s) => %p, %u\n", sectionName, segmentName, this, this->getIndex());
 }
 
-Section* Section::find(const char* sectionName, const char* segmentName, bool zeroFill, bool createIfNeeded)
+Section* Section::find(const char* sectionName, const char* segmentName, bool zeroFill, bool untrustedZeroFill, bool createIfNeeded)
 {
 	NameToSection::iterator pos = fgMapping.find(sectionName);
 	if ( pos != fgMapping.end() ) {
-		if ( strcmp(pos->second->fSegmentName, segmentName) == 0 )
+		if ( strcmp(pos->second->fSegmentName, segmentName) == 0 ) {
+			if ( !untrustedZeroFill && pos->second->fUntrustedZeroFill ) {
+				pos->second->fZeroFill = zeroFill;
+				pos->second->fUntrustedZeroFill = false;
+			}
 			return pos->second;
+		}
 		// otherwise same section name is used in different segments, look slow way
 		for (std::vector<Section*>::iterator it=fgSections.begin(); it != fgSections.end(); it++) {
 			if ( (strcmp((*it)->fSectionName, sectionName) == 0) && (strcmp((*it)->fSegmentName, segmentName) == 0) )
@@ -196,13 +229,13 @@ Section* Section::find(const char* sectionName, const char* segmentName, bool ze
 		return NULL;
 	
 	// does not exist, so make a new one
-	Section* sect = new Section(sectionName, segmentName, zeroFill);
+	Section* sect = new Section(sectionName, segmentName, zeroFill, untrustedZeroFill);
 	fgMapping[sectionName] = sect;
 	fgSections.push_back(sect);
 
 	if ( (strcmp(sectionName, "__text") == 0) && (strcmp(segmentName, "__TEXT") == 0) ) {
 		// special case __StaticInit to be right after __text
-		find("__StaticInit", "__TEXT", false);
+		find("__StaticInit", "__TEXT", false, true);
 	}
 
 	// remember segment discovery order
@@ -300,6 +333,7 @@ private:
 	};
 
 	ObjectFile::Reader*	createReader(const Options::FileInfo&);
+	const char*			fileArch(const void* p);
 	void				addAtom(ObjectFile::Atom& atom);
 	void				addAtoms(std::vector<class ObjectFile::Atom*>& atoms);
 	void				buildAtomList();
@@ -310,6 +344,7 @@ private:
 	void				loadAndResolve();
 	void				processDTrace();
 	void				checkObjC();
+	void				addSynthesizedAtoms();
 	void				loadUndefines();
 	void				checkUndefines();
 	void				resolveReferences();
@@ -326,7 +361,7 @@ private:
 	static const char*	truncateStabString(const char* str);
 	void				collectDebugInfo();
 	void				writeOutput();
-	ObjectFile::Atom*	entryPoint(bool orInit);
+	ObjectFile::Atom*	entryPoint(bool orInit, bool searchArchives=false);
 	ObjectFile::Atom*	dyldClassicHelper();
 	ObjectFile::Atom*	dyldCompressedHelper();
 	ObjectFile::Atom*	dyldLazyLibraryHelper();
@@ -363,12 +398,14 @@ private:
 		void				require(const char* name);
 		bool				add(ObjectFile::Atom& atom);
 		ObjectFile::Atom*	find(const char* name);
+		void				erase(const char* name);
 		unsigned int		getRequireCount() { return fRequireCount; }
 		void				getUndefinesNames(std::vector<const char*>& undefines);
 		void				getTentativesNames(std::vector<const char*>& tents);
 		bool				hasExternalTentativeDefinitions() { return fHasExternalTentativeDefinitions; }
 		bool				hasExternalWeakDefinitions() { return fHasExternalWeakDefinitions; }
 		void				setHasExternalWeakDefinitions(bool value) { fHasExternalWeakDefinitions = value; }
+		uint32_t			dylibSymbolCount() { return fDylibSymbolCount; }
 		Mapper::iterator	begin()	{ return fTable.begin(); }
 		Mapper::iterator	end()	{ return fTable.end(); }
 
@@ -378,6 +415,7 @@ private:
 		unsigned int		fRequireCount;
 		bool				fHasExternalTentativeDefinitions;
 		bool				fHasExternalWeakDefinitions;
+		uint32_t			fDylibSymbolCount;
 	};
 
 	class AtomSorter
@@ -505,6 +543,22 @@ Linker::Linker(int argc, const char* argv[])
 			break;
 		case CPU_TYPE_ARM:
 			fArchitectureName = "arm";
+			if ( fOptions.preferSubArchitecture() ) {
+				switch ( fOptions.subArchitecture() ) {
+					case CPU_SUBTYPE_ARM_V4T:
+						fArchitectureName = "armv4t";
+						break;
+					case CPU_SUBTYPE_ARM_V5TEJ:
+						fArchitectureName = "armv5";
+						break;
+					case CPU_SUBTYPE_ARM_V6:
+						fArchitectureName = "armv6";
+						break;
+					case CPU_SUBTYPE_ARM_V7:
+						fArchitectureName = "armv7";
+						break;
+				}
+			}
 			break;
 		default:
 			fArchitectureName = "unknown architecture";
@@ -628,6 +682,20 @@ void Linker::loadAndResolve()
 	}
 }
 
+void Linker::addSynthesizedAtoms()
+{
+	// give write a chance to synthesize stub, GOT, and lazy pointer atoms
+	std::vector<class ObjectFile::Atom*> newAtoms;
+	fOutputFile->addSynthesizedAtoms(fAllAtoms, this->dyldClassicHelper(), 
+									this->dyldCompressedHelper(), this->dyldLazyLibraryHelper(),
+									fBiggerThanTwoGigOutput,
+									fGlobalSymbolTable.dylibSymbolCount(),
+									newAtoms);
+
+	// add all newly created atoms to fAllAtoms and update symbol table
+	this->addAtoms(newAtoms);
+}
+
 void Linker::optimize()
 {
 	// give each reader a chance to do any optimizations
@@ -645,6 +713,24 @@ void Linker::optimize()
 	
 	// only do next steps if some optimization was actually done
 	if  ( didSomething ) {
+	
+		if ( fOptions.deadStrip() != Options::kDeadStripOff ) {
+			for(std::vector<class ObjectFile::Atom*>::iterator itr = newAtoms.begin(); itr != newAtoms.end(); ++itr) {
+				ObjectFile::Atom* atom = *itr;
+				const char* name = atom->getName();
+				if ( name != NULL ) {
+					ObjectFile::Atom* existingAtom = fGlobalSymbolTable.find(name);
+					if ( (existingAtom != NULL) && fLiveAtoms.count(existingAtom) == 0 ) {
+						// While dead code stripping, the atoms were not removed from fGlobalSymbolTable
+						// for performance reasons. Normally, libLTO will never recreate an atom
+						// that was previously dead stripped away, but if it does remove
+						// the remnents of the previous so the new one can be added
+						fGlobalSymbolTable.erase(name);
+					}
+				}
+			}
+		}
+
 		// add all newly created atoms to fAllAtoms and update symbol table
 		this->addAtoms(newAtoms);
 
@@ -658,7 +744,7 @@ void Linker::optimize()
 		for(std::vector<class ObjectFile::Atom*>::iterator itr = fAllAtoms.begin(); itr != fAllAtoms.end(); ++itr) {
 			ObjectFile::Atom *atom = *itr;
 			if ( atom->getSection() == NULL )
-				atom->setSection(Section::find(atom->getSectionName(), atom->getSegment().getName(), atom->isZeroFill()));
+				atom->setSection(Section::find(atom->getSectionName(), atom->getSegment().getName(), atom->isZeroFill(), true));
 		}
 
 		// resolve new undefines
@@ -678,6 +764,7 @@ void Linker::optimize()
 			// LTO may optimize away some atoms, so dead stripping must be redone
 			fLiveAtoms.clear();
 			this->deadStripResolve();
+			this->checkUndefines();
 		}
 		else {
 			// LTO may require new library symbols to be loaded, so redo
@@ -745,6 +832,7 @@ void Linker::link()
 	this->checkObjC();
 	this->processDTrace();
 	this->tweakLayout();
+	this->addSynthesizedAtoms();
 	this->sortSections();
 	this->sortAtoms();
 	this->writeDotOutput();
@@ -871,8 +959,17 @@ inline void Linker::addAtom(ObjectFile::Atom& atom)
 	}
 
 	// record section orders so output file can have same order
-	if (atom.getSectionName())
-		atom.setSection(Section::find(atom.getSectionName(), atom.getSegment().getName(), atom.isZeroFill()));
+	if (atom.getSectionName()) {
+		bool untrusted = false;
+		switch ( atom.getContentType() ) {
+			case ObjectFile::Atom::kSectionStart:
+			case ObjectFile::Atom::kSectionEnd:
+				untrusted = true;
+			default:
+				break;
+		}
+		atom.setSection(Section::find(atom.getSectionName(), atom.getSegment().getName(), atom.isZeroFill(), untrusted));
+	}
 }
 
 
@@ -1140,10 +1237,44 @@ void Linker::checkUndefines()
 					}
 				}
 				// scan command line options
-				if  ( !foundAtomReference && fOptions.hasExportRestrictList() && fOptions.shouldExport(name) ) {
-					fprintf(stderr, "     -exported_symbols_list command line option\n");
+				if  ( !foundAtomReference ) {
+					// might be from -init command line option
+					if ( (fOptions.initFunctionName() != NULL) && (strcmp(name, fOptions.initFunctionName()) == 0) ) {
+						fprintf(stderr, "     -init command line option\n");
+					}
+					// or might be from exported symbol option
+					else if ( fOptions.hasExportMaskList() && fOptions.shouldExport(name) ) {
+						fprintf(stderr, "     -exported_symbol[s_list] command line option\n");
+					}
+					else {
+						bool isInitialUndefine = false;
+						std::vector<const char*>& clundefs = fOptions.initialUndefines();
+						for (std::vector<const char*>::iterator uit = clundefs.begin(); uit != clundefs.end(); ++uit) {
+							if ( strcmp(*uit, name) == 0 ) {
+								isInitialUndefine = true;
+								break;
+							}
+						}
+						if ( isInitialUndefine )
+							fprintf(stderr, "     -u command line option\n");
+					}
 					++unresolvableExportsCount;
 				}
+				// be helpful and check for typos
+				bool printedStart = false;
+				for (SymbolTable::Mapper::iterator sit=fGlobalSymbolTable.begin(); sit != fGlobalSymbolTable.end(); ++sit) {
+					if ( (sit->second != NULL) && (strstr(sit->first, name) != NULL) ) {
+						if ( ! printedStart ) {
+							fprintf(stderr, "     (maybe you meant: %s", sit->first);
+							printedStart = true;
+						}
+						else {
+							fprintf(stderr, ", %s ", sit->first);
+						}
+					}
+				}
+				if ( printedStart )
+					fprintf(stderr, ")\n");
 			}
 		}
 		if ( doError ) 
@@ -1515,7 +1646,7 @@ void Linker::moveToFrontOfSection(ObjectFile::Atom* atom)
 void Linker::deadStripResolve()
 {
 	// add main() to live roots
-	ObjectFile::Atom* entryPoint = this->entryPoint(false);
+	ObjectFile::Atom* entryPoint = this->entryPoint(false, true);
 	if ( entryPoint != NULL )
 		fLiveRootAtoms.insert(entryPoint);
 
@@ -1859,7 +1990,7 @@ void Linker::processDTrace()
 				uint64_t offset = offsetsInDOF[i];
 				//fprintf(stderr, "%s offset[%d]=0x%08llX\n", providerName, i, offset);
 				if ( offset > dofSectionSize )
-					throwf("offsetsInDOF[i]=%0llX > dofSectionSize=%0lX\n", i, offset, dofSectionSize);
+					throwf("offsetsInDOF[%d]=%0llX > dofSectionSize=%0lX\n", i, offset, dofSectionSize);
 				reader->addSectionReference(pcRelKind(fArchitecture), offset, probes[i].atom, probes[i].offset, reader->getAtoms()[0], 0);
 			}
 			this->addAtoms(reader->getAtoms());
@@ -2180,10 +2311,15 @@ void Linker::sortAtoms()
 					theOrdinalOverrideMap[atom] = index;
 					if (log ) fprintf(stderr, "override ordinal %u assigned to %s from %s\n", index, atom->getDisplayName(), atom->getFile()->getPath());
 				}
+				++matchCount;
 			}
 			else {
-				++matchCount;
-				//fprintf(stderr, "can't find match for order_file entry %s/%s\n", it->objectFileName, it->symbolName);
+				if ( fOptions.printOrderFileStatistics() ) {
+					if ( it->objectFileName == NULL )
+						warning("can't find match for order_file entry: %s", it->symbolName);
+					else
+						warning("can't find match for order_file entry: %s/%s", it->objectFileName, it->symbolName);
+				}
 			}
 			 ++index;
 		}
@@ -2197,7 +2333,7 @@ void Linker::sortAtoms()
 
 	//fprintf(stderr, "Sorted atoms:\n");
 	//for (std::vector<ObjectFile::Atom*>::iterator it=fAllAtoms.begin(); it != fAllAtoms.end(); it++) {
-	//	fprintf(stderr, "\t%p, %u  %s\t%s\n", (*it)->getSection(), (*it)->getSection()->getIndex(), (*it)->getDisplayName(), (*it)->getFile()->getPath());
+	//	fprintf(stderr, "\t%s, %u  %s\t%s\n", (*it)->getSectionName(), (*it)->getSection()->getIndex(), (*it)->getDisplayName(), (*it)->getFile()->getPath());
 	//}
 }
 
@@ -2213,7 +2349,7 @@ void Linker::tweakLayout()
 			throwf("total output size exceeds 2GB (%lldMB)", (fTotalSize-fTotalZeroFillSize)/(1024*1024));		
 
 		// move very large (>1MB) zero fill atoms to a new section at very end of __DATA segment
-		Section* hugeZeroFills = Section::find("__huge", "__DATA", true);
+		Section* hugeZeroFills = Section::find("__huge", "__DATA", true, true);
 		for (std::vector<ObjectFile::Atom*>::iterator it=fAllAtoms.begin(); it != fAllAtoms.end(); it++) {
 			ObjectFile::Atom* atom = *it;
 			if ( atom->isZeroFill() && (atom->getSize() > 1024*1024) && (strcmp(atom->getSegment().getName(), "__DATA") == 0) )
@@ -2232,7 +2368,7 @@ void Linker::tweakLayout()
 		}
 		
 		// move all functions pointed to by __mod_init_func section to front of __text
-		Section* initSection = Section::find("__mod_init_func", "__DATA", false, false);
+		Section* initSection = Section::find("__mod_init_func", "__DATA", false, true, false);
 		if ( initSection != NULL ) {
 			for (std::vector<ObjectFile::Atom*>::iterator it=fAllAtoms.begin(); it != fAllAtoms.end(); ++it) {
 				if ( (*it)->getSection() == initSection ) {
@@ -2263,7 +2399,7 @@ void Linker::tweakLayout()
 				break;
 		}
 		const bool hasPreferredLoadAddress = (fOptions.baseAddress() != 0);
-		Section* dataSection = Section::find("__data", "__DATA", false, false);
+		Section* dataSection = Section::find("__data", "__DATA", false, true, false);
 		if ( dataSection != NULL ) {
 			for (std::vector<ObjectFile::Atom*>::iterator it=fAllAtoms.begin(); it != fAllAtoms.end(); ++it) {
 				ObjectFile::Atom* dataAtom = *it;
@@ -2377,7 +2513,7 @@ void Linker::writeDotOutput()
 	}
 }
 
-ObjectFile::Atom* Linker::entryPoint(bool orInit)
+ObjectFile::Atom* Linker::entryPoint(bool orInit, bool searchArchives)
 {
 	// if main executable, find entry point atom
 	ObjectFile::Atom* entryPoint = NULL;
@@ -2387,6 +2523,11 @@ ObjectFile::Atom* Linker::entryPoint(bool orInit)
 		case Options::kDyld:
 		case Options::kPreload:
 			entryPoint = fGlobalSymbolTable.find(fOptions.entryName());
+			if ( (entryPoint == NULL) && searchArchives ) {
+				// <rdar://problem/7043256> ld64 can not find a -e entry point from an archive				
+				this->addJustInTimeAtoms(fOptions.entryName(), false, true, false);
+				entryPoint = fGlobalSymbolTable.find(fOptions.entryName());
+			}
 			if ( entryPoint == NULL ) {
 				throwf("could not find entry point \"%s\" (perhaps missing crt1.o)", fOptions.entryName());
 			}
@@ -3092,17 +3233,49 @@ void Linker::collectDebugInfo()
 
 void Linker::writeOutput()
 {
+	// <rdar://problem/6933931> ld -r of empty .o file should preserve sub-type
+	// <rdar://problem/7049478> empty dylib should have subtype from command line
+	if ( fOptions.preferSubArchitecture() && (fOptions.architecture() == CPU_TYPE_ARM) ) {
+		fCurrentCpuConstraint = (ObjectFile::Reader::CpuConstraint)fOptions.subArchitecture();
+	}
+
 	if ( fOptions.forceCpuSubtypeAll() )
 		fCurrentCpuConstraint = ObjectFile::Reader::kCpuAny;
 
 	fStartWriteTime = mach_absolute_time();
 	// tell writer about each segment's atoms
 	fOutputFileSize = fOutputFile->write(fAllAtoms, fStabs, this->entryPoint(true), 
-											this->dyldClassicHelper(),this->dyldCompressedHelper(), this->dyldLazyLibraryHelper(),
 											fCreateUUID, fCanScatter, 
-											fCurrentCpuConstraint, fBiggerThanTwoGigOutput,
+											fCurrentCpuConstraint,
 											fRegularDefAtomsThatOverrideADylibsWeakDef,  
 											fGlobalSymbolTable.hasExternalWeakDefinitions());
+}
+
+const char* Linker::fileArch(const void* p)
+{
+	const uint8_t* bytes = (uint8_t*)p;
+	const char* result;
+	result = mach_o::relocatable::Reader<ppc>::fileKind(bytes);
+	if ( result != NULL  )
+		 return result;
+	result = mach_o::relocatable::Reader<ppc64>::fileKind(bytes);
+	if ( result != NULL  )
+		 return result;
+	result = mach_o::relocatable::Reader<x86>::fileKind(bytes);
+	if ( result != NULL  )
+		 return result;
+	result = mach_o::relocatable::Reader<x86_64>::fileKind(bytes);
+	if ( result != NULL  )
+		 return result;
+	result = mach_o::relocatable::Reader<arm>::fileKind(bytes);
+	if ( result != NULL  )
+		 return result;
+		 
+	result = lto::Reader::fileKind(bytes);
+	if ( result != NULL  )
+		 return result;
+	
+	return "unsupported file format";	 
 }
 
 ObjectFile::Reader* Linker::createReader(const Options::FileInfo& info)
@@ -3121,8 +3294,10 @@ ObjectFile::Reader* Linker::createReader(const Options::FileInfo& info)
 
 	// if fat file, skip to architecture we want
 	// Note: fat header is always big-endian
+	bool isFatFile = false;
 	const fat_header* fh = (fat_header*)p;
 	if ( fh->magic == OSSwapBigToHostInt32(FAT_MAGIC) ) {
+		isFatFile = true;
 		const struct fat_arch* archs = (struct fat_arch*)(p + sizeof(struct fat_header));
 		uint32_t sliceToUse;
 		bool sliceFound = false;
@@ -3213,8 +3388,28 @@ ObjectFile::Reader* Linker::createReader(const Options::FileInfo& info)
 	if ( lto::Reader::validFile(p, len, fArchitecture) ) {
 		return this->addObject(new lto::Reader(p, len, info.path, info.modTime, fOptions.readerOptions(), fArchitecture), info, len);
 	}
-	else if ( !lto::Reader::loaded() && (p[0] == 'B') && (p[1] == 'C')  ) {
-		throw "could not process object file.  Looks like an llvm bitcode object file, but libLTO.dylib could not be loaded";
+	else if ( lto::Reader::fileKind((uint8_t*)p) != NULL ) {
+		if ( lto::Reader::loaded() ) {
+			throwf("file was built for %s which is not the architecture being linked (%s)", fileArch(p), fArchitectureName);
+		}
+		else {
+			const char* libLTO = "libLTO.dylib";
+			char ldPath[PATH_MAX];
+			char tmpPath[PATH_MAX];
+			char libLTOPath[PATH_MAX];
+			uint32_t bufSize = PATH_MAX;
+			if ( _NSGetExecutablePath(ldPath, &bufSize) != -1 ) {
+				if ( realpath(ldPath, tmpPath) != NULL ) {
+					char* lastSlash = strrchr(tmpPath, '/');
+					if ( lastSlash != NULL )
+						strcpy(lastSlash, "/../lib/libLTO.dylib");
+					libLTO = tmpPath;
+					if ( realpath(tmpPath, libLTOPath) != NULL ) 
+						libLTO = libLTOPath;
+				}
+			}
+			throwf("could not process llvm bitcode object file, because %s could not be loaded", libLTO);
+		}
 	}
 #endif
 	// error handling
@@ -3222,7 +3417,10 @@ ObjectFile::Reader* Linker::createReader(const Options::FileInfo& info)
 		throwf("missing required architecture %s in file", fArchitectureName);
 	}
 	else {
-		throw "file is not of required architecture";
+		if ( isFatFile )
+			throwf("file is universal but does not contain a(n) %s slice", fArchitectureName);
+		else
+			throwf("file was built for %s which is not the architecture being linked (%s)", fileArch(p), fArchitectureName);
 	}
 }
 
@@ -3928,6 +4126,10 @@ bool Linker::SymbolTable::add(ObjectFile::Atom& newAtom)
 				case ObjectFile::Atom::kWeakDefinition:
 					fHasExternalWeakDefinitions = true;
 					break;
+				case ObjectFile::Atom::kExternalDefinition:
+				case ObjectFile::Atom::kExternalWeakDefinition:
+					++fDylibSymbolCount;
+					break;
 				default:
 					break;
 			}
@@ -3950,6 +4152,9 @@ ObjectFile::Atom* Linker::SymbolTable::find(const char* name)
 	return NULL;
 }
 
+void	Linker::SymbolTable::erase(const char* name) {
+	fTable.erase(name);
+}
 
 void Linker::SymbolTable::getUndefinesNames(std::vector<const char*>& undefines)
 {
@@ -3984,6 +4189,12 @@ bool Linker::AtomSorter::operator()(const ObjectFile::Atom* left, const ObjectFi
 	unsigned int rightSectionIndex = right->getSection()->getIndex();
 	if ( leftSectionIndex != rightSectionIndex)
 		return (leftSectionIndex < rightSectionIndex);
+	
+	// magic section$start symbol always sorts to the start of its section
+	if ( left->getContentType() == ObjectFile::Atom::kSectionStart )
+		return true;
+	if ( right->getContentType() == ObjectFile::Atom::kSectionStart )
+		return false;
 
 	// if a -order_file is specified, then sorting is altered to sort those symbols first
 	if ( fOverriddenOrdinalMap != NULL ) {
@@ -4011,6 +4222,12 @@ bool Linker::AtomSorter::operator()(const ObjectFile::Atom* left, const ObjectFi
 			}
 		}
 	}
+
+	// magic section$end symbol always sorts to the end of its section
+	if ( left->getContentType() == ObjectFile::Atom::kSectionEnd )
+		return false;
+	if ( right->getContentType() == ObjectFile::Atom::kSectionEnd )
+		return true;
 
 	// the __common section can have real or tentative definitions
 	// we want the real ones to sort before tentative ones

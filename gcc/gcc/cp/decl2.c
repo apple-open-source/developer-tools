@@ -1749,7 +1749,10 @@ determine_visibility (tree decl)
 	  tree underlying_type = TREE_TYPE (DECL_NAME (decl));
 	  int underlying_vis = type_visibility (underlying_type);
 	  if (underlying_vis == VISIBILITY_ANON
-	      || CLASSTYPE_VISIBILITY_SPECIFIED (underlying_type))
+	      /* APPLE LOCAL begin 6983171 */
+	      || (TREE_CODE (underlying_type) == RECORD_TYPE
+		  && CLASSTYPE_VISIBILITY_SPECIFIED (underlying_type)))
+	      /* APPLE LOCAL end 6983171 */
 	    constrain_visibility (decl, underlying_vis);
 	  else
 	    DECL_VISIBILITY (decl) = VISIBILITY_DEFAULT;

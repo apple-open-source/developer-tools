@@ -1,10 +1,9 @@
 RC_OS = macos
 OFLAG = -O
-OPEN = -D__OPEN_SOURCE__
 LEGACY = -D_MACH_I386_THREAD_STATUS_FPSTATE_LEGACY_FIELD_NAMES_ \
 	 -D_ARCHITECTURE_I386_FPU_FPSTATE_LEGACY_FIELD_NAMES_
 
-ifeq "" "$(NEXT_ROOT)"
+ifneq "$(RC_MAJOR_RELEASE_TRAIN)" "Tiger"
 KERN = -fno-builtin -finline -fno-keep-inline-functions -fsigned-bitfields \
        -msoft-float -nostdinc \
        -iwithsysroot /System/Library/Frameworks/Kernel.framework/PrivateHeaders/libsa \
@@ -34,15 +33,21 @@ ifeq "macos" "$(RC_OS)"
 		     echo "$(CC)" ; \
 	     fi; )
 endif
-ifeq "mwccppc" "$(notdir $(CC))"
-  CFLAGS = $(OFLAG) $(OPEN) -g $(LEGACY) \
-     -I$(SRCROOT) -I$(SRCROOT)/../include -I$(OFILE_DIR)
+ifneq "" "$(SDKROOT)"
+  SDK = -isysroot $(SDKROOT)
+  CC = $(shell xcrun -find -sdk $(SDKROOT) cc)
+endif
+ifeq "clang" "$(notdir $(CC))"
+  CFLAGS = $(OFLAG) -g -Wall $(LEGACY) \
+     -I$(SRCROOT) -I$(SRCROOT)/../include -I$(OFILE_DIR) $(SDK)
+  PG =
 else
-  CFLAGS = $(OFLAG) $(OPEN) -g -Wall $(X_CFLAGS) $(LEGACY) \
-     -I$(SRCROOT) -I$(SRCROOT)/../include -I$(OFILE_DIR)
+  CFLAGS = $(OFLAG) -g -Wall $(X_CFLAGS) $(LEGACY) \
+     -I$(SRCROOT) -I$(SRCROOT)/../include -I$(OFILE_DIR) $(SDK)
+  PG = -pg
 endif
 
-USE_DEPENDENCY_FILE := $(shell if [ "$(notdir $(CC))" != "mwccppc" ] && \
+USE_DEPENDENCY_FILE := $(shell if [ "$(notdir $(CC))" != "clang" ] && \
 				  [ "$(RC_XBS)" != "YES" ]; then \
 	     echo YES ; else echo NO ; \
 	     fi; )
@@ -138,7 +143,7 @@ profile_ofiles:	$(OBJROOT)/profile_obj $(OBJROOT)/ptmp_obj
 		VPATH=.. 						\
 		OFILE_DIR=.						\
 		SRCROOT=..						\
-		COPTS="-dynamic -pg"					\
+		COPTS="-dynamic $(PG)"					\
 		LIBSTUFF="-L../../libstuff -lstuff_p"			\
 		OFLAG="$(OFLAG)"					\
 		RC_CFLAGS="$(RC_CFLAGS)"				\
@@ -157,7 +162,7 @@ profile_ofiles:	$(OBJROOT)/profile_obj $(OBJROOT)/ptmp_obj
 		SRCROOT=$(SRCROOT)					\
 		SYMROOT=$(SYMROOT)					\
 		LIBSTUFF="-L$(SYMROOT)/../libstuff -lstuff_p"		\
-		COPTS="-dynamic -pg"					\
+		COPTS="-dynamic $(PG)"					\
 		OFLAG="$(OFLAG)"					\
 		RC_CFLAGS="$(RC_CFLAGS)"				\
 		RC_ARCHS="$(RC_ARCHS)");				\

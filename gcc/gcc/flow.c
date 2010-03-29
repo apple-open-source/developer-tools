@@ -4599,6 +4599,11 @@ static unsigned int
 flow_lite (void)
 {
   extern sbitmap pic_rtx_inheritance;
+  /* APPLE LOCAL begin 7511696 pic register reuse */
+  if (!pic_rtx_inheritance)
+    return 0;
+  /* APPLE LOCAL end 7511696 pic register reuse */
+
   if (PIC_OFFSET_TABLE_REGNUM != INVALID_REGNUM)
     {
       fixed_regs[PIC_OFFSET_TABLE_REGNUM] = call_used_regs[PIC_OFFSET_TABLE_REGNUM] = 0;
@@ -4609,11 +4614,10 @@ flow_lite (void)
   normal_flow = 0;
   count_or_remove_death_notes ((sbitmap)0, 1);
   life_analysis (PROP_FINAL);
-  if (pic_rtx_inheritance)
-    {
-      sbitmap_free (pic_rtx_inheritance);
-      pic_rtx_inheritance = NULL;
-    }
+  /* APPLE LOCAL begin 7511696 pic register reuse */
+  sbitmap_free (pic_rtx_inheritance);
+  pic_rtx_inheritance = NULL;
+  /* APPLE LOCAL end 7511696 pic register reuse */
   normal_flow = 1;
   return 0;
 }

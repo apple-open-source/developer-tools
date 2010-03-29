@@ -57,6 +57,9 @@ const char *gdbarch_osabi_name (enum gdb_osabi);
    via bfd_map_over_sections.  */
 void generic_elf_osabi_sniff_abi_tag_sections (bfd *, asection *, void *);
 
+/* APPLE LOCAL: Set the osabi via option.  */
+void set_osabi_option (const char *osabi_str);
+
 /* APPLE LOCAL: I needed a way to programatically set the osabi.  */
 int set_osabi_from_string (char *in_osabi_string);
 #endif /* OSABI_H */

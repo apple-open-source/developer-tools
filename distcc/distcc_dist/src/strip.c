@@ -1,28 +1,29 @@
-/* -*- c-file-style: "java"; indent-tabs-mode: nil; fill-column: 78; -*-
- * 
+/* -*- c-file-style: "java"; indent-tabs-mode: nil; tab-width: 4; fill-column: 78 -*-
+ *
  * distcc -- A simple distributed compiler system
  *
  * Copyright (C) 2002, 2003 by Martin Pool <mbp@samba.org>
+ * Copyright 2008 Google Inc.
  *
  * This program is free software; you can redistribute it and/or
- * modify it under the terms of the GNU General Public License as
- * published by the Free Software Foundation; either version 2 of the
- * License, or (at your option) any later version.
+ * modify it under the terms of the GNU General Public License
+ * as published by the Free Software Foundation; either version 2
+ * of the License, or (at your option) any later version.
  *
- * This program is distributed in the hope that it will be useful, but
- * WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
- * General Public License for more details.
- * 
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ *
  * You should have received a copy of the GNU General Public License
  * along with this program; if not, write to the Free Software
- * Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA 02111-1307
- * USA
+ * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301,
+ * USA.
  */
 
 
 
-#include "config.h"
+#include <config.h>
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -55,6 +56,11 @@
  * describes some options, such as -d, that only take effect when
  * passed directly to cpp.  When given to gcc they have different
  * meanings.
+ *
+ * The value stored in '*out_argv' is malloc'd, but the arguments that
+ * are pointed to by that array are aliased with the values pointed
+ * to by 'from'.  The caller is responsible for calling free() on
+ * '*out_argv'.
  **/
 int dcc_strip_local_args(char **from, char ***out_argv)
 {
@@ -69,12 +75,13 @@ int dcc_strip_local_args(char **from, char ***out_argv)
         rs_log_error("failed to allocate space for arguments");
         return EXIT_OUT_OF_MEMORY;
     }
-    
+
     /* skip through argv, copying all arguments but skipping ones that
      * ought to be omitted */
     for (from_i = to_i = 0; from[from_i]; from_i++) {
         if (str_equal("-D", from[from_i])
             || str_equal("-I", from[from_i])
+            || str_equal("-F", from[from_i])
             || str_equal("-U", from[from_i])
             || str_equal("-L", from[from_i])
             || str_equal("-l", from[from_i])
@@ -86,8 +93,12 @@ int dcc_strip_local_args(char **from, char ***out_argv)
             || str_equal("-iprefix", from[from_i])
             || str_equal("-iwithprefix", from[from_i])
             || str_equal("-isystem", from[from_i])
+            || str_equal("-iquote", from[from_i])
+            || str_equal("-iframework", from[from_i])
             || str_equal("-iwithprefixbefore", from[from_i])
-            || str_equal("-idirafter", from[from_i])) {
+            || str_equal("-idirafter", from[from_i])
+            || str_equal("-isysroot", from[from_i])
+            || str_equal("--sysroot", from[from_i])) {
             /* skip next word, being option argument */
             if (from[from_i+1])
                 from_i++;
@@ -97,8 +108,15 @@ int dcc_strip_local_args(char **from, char ***out_argv)
                  || str_startswith("-D", from[from_i])
                  || str_startswith("-U", from[from_i])
                  || str_startswith("-I", from[from_i])
+                 || str_startswith("-F", from[from_i])
                  || str_startswith("-l", from[from_i])
-                 || str_startswith("-L", from[from_i])) {
+                 || str_startswith("-L", from[from_i])
+                 || str_startswith("-MF", from[from_i])
+                 || str_startswith("-MT", from[from_i])
+                 || str_startswith("-MQ", from[from_i])
+                 || str_startswith("-iframework", from[from_i])
+                 || str_startswith("-iquote", from[from_i])
+                 || str_startswith("--sysroot", from[from_i])) {
             /* Something like "-DNDEBUG" or
              * "-Wp,-MD,.deps/nsinstall.pp".  Just skip this word */
             ;
@@ -117,7 +135,7 @@ int dcc_strip_local_args(char **from, char ***out_argv)
             to[to_i++] = from[from_i];
         }
     }
-    
+
     /* NULL-terminate */
     to[to_i] = NULL;
 
@@ -149,7 +167,7 @@ int dcc_strip_dasho(char **from, char ***out_argv)
         rs_log_error("failed to allocate space for arguments");
         return EXIT_OUT_OF_MEMORY;
     }
-    
+
     /* skip through argv, copying all arguments but skipping ones that
      * ought to be omitted */
     for (from_i = to_i = 0; from[from_i]; ) {
@@ -173,6 +191,3 @@ int dcc_strip_dasho(char **from, char ***out_argv)
 
     return 0;
 }
-
-
-

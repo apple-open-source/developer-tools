@@ -1,7 +1,8 @@
 // APPLE LOCAL file 6755006
 //#include <cassert>
-// { dg-do run }
-// { dg-options { -m32 -Os } }
+/* { dg-do run } */
+/* { dg-options { -m32 -Os } { target powerpc*-*-darwin* i?86-*-darwin* } } */
+/* { dg-options { -Os } { target arm*-*-darwin* } } */
 #include <stdio.h>
 #include <stdlib.h>
 enum foo {

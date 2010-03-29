@@ -2113,9 +2113,7 @@ static const struct frame_unwind inlined_frame_unwinder =
 
 /* Necessary data structure for creating new frame type, INLINED_FRAME  */
 
-const struct frame_unwind *const inlined_frame_unwind = {
-  &inlined_frame_unwinder
-};
+const struct frame_unwind *const inlined_frame_unwind = &inlined_frame_unwinder;
 
 /* Detects inlined frames in the middle of the call stack.  */
 
@@ -2316,6 +2314,10 @@ print_inlined_frame (struct frame_info *fi, int print_level,
   int buffer_len;
   int line;
   struct inlined_function_data *stack_ptr;
+  /* APPLE LOCAL begin Inform users about debugging optimized code  */
+  struct symbol *func_sym;
+  int func_is_optimized = 0;
+  /* APPLE LOCAL end Inform users about debugging optimized code  */
 
   if (get_frame_pc (fi) != stop_pc)
     update_tmp_frame_stack (get_frame_pc (fi));
@@ -2345,7 +2347,7 @@ print_inlined_frame (struct frame_info *fi, int print_level,
       ui_out_field_fmt_int (uiout, 2, ui_left, "level",
 			    frame_relative_level (fi));
     }
-     
+
   if (addressprint)
     if (get_frame_pc (fi) != sal.pc
 	|| !sal.symtab
@@ -2360,6 +2362,12 @@ print_inlined_frame (struct frame_info *fi, int print_level,
 	    ui_out_field_core_addr (uiout, "fp", get_frame_base (fi));
 	  }
       }
+
+  /* APPLE LOCAL begin Inform user about debugging optimized code  */
+  func_sym = find_pc_function (get_frame_pc (fi));
+  if (func_sym && (TYPE_OPTIMIZED (SYMBOL_TYPE (func_sym))))
+    func_is_optimized = 1;
+  /* APPLE LOCAL end Inform user about debugging optimized code  */
 
   annotate_frame_function_name ();
 
@@ -2427,6 +2435,9 @@ print_inlined_frame (struct frame_info *fi, int print_level,
       
   ui_out_field_stream (uiout, "func", stb);
   ui_out_wrap_hint (uiout, "   ");
+  /* APPLE LOCAL - Inform user about debugging optimized code (mi).  */
+  if (ui_out_is_mi_like_p (uiout))
+    ui_out_field_int (uiout, "optimized", func_is_optimized);
   annotate_frame_args ();
   ui_out_text (uiout, " (");
 
@@ -3440,7 +3451,6 @@ last_inlined_call_site_filename (struct frame_info *fi)
 struct symbol *
 block_inlined_function (struct block *bl, struct bfd_section *section)
 {
-  int syms_found = 0;
   struct symtab_and_line sal;
   struct rb_tree_node_list *matches = NULL;
   struct rb_tree_node_list *current;

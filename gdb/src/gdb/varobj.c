@@ -663,7 +663,7 @@ safe_value_rtti_target_type (struct value *val, int *full, int *top, int *using_
   volatile struct gdb_exception except;
   struct ui_file *saved_gdb_stderr;
   static struct ui_file *null_stderr = NULL;
-  struct type *dynamic_type;
+  struct type *dynamic_type = NULL;
 
   /* suppress error messages */
   if (null_stderr == NULL)
@@ -3192,7 +3192,7 @@ c_make_name_of_child (struct varobj *parent, int index)
 static char *
 c_path_expr_of_child (struct varobj *parent, int index)
 {
-  char *path_expr;
+  char *path_expr = NULL;
   struct varobj *child = child_exists (parent, index);
   char *parent_expr;
   char *name;

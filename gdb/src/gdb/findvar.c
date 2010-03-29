@@ -721,7 +721,6 @@ value_from_register (struct type *type, int regnum, struct frame_info *frame)
       int mem_tracking = 1;
       CORE_ADDR last_addr = 0;
       CORE_ADDR first_addr = 0;
-      int first_realnum = regnum;
       int len = TYPE_LENGTH (type);
       int value_bytes_copied;
       int optimized = 0;
@@ -746,7 +745,6 @@ value_from_register (struct type *type, int regnum, struct frame_info *frame)
 	  if (regnum == local_regnum)
 	    {
 	      first_addr = addr;
-	      first_realnum = realnum;
 	    }
 	  if (lval == lval_register)
 	    reg_stor++;

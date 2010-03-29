@@ -85,10 +85,6 @@ extern void free ();
 
 void (*deprecated_error_begin_hook) (void);
 
-/* Holds the last error message issued by gdb */
-
-static struct ui_file *gdb_lasterr;
-
 /* Prototypes for local functions */
 
 static void vfprintf_maybe_filtered (struct ui_file *, const char *,
@@ -3645,6 +3641,16 @@ strrchr_bounded (const char *beg, const char *end, char c)
    /Library/Frameworks/HPDeviceModel.framework/Versions/2.0/Frameworks/Core.framework/Versions/2.0/Resources/DMF/7B5B9995E033B681A0797A33402E62C0/FFE335C58B478842
    /Library/Frameworks/HPDeviceModel.framework/Versions/2.0/Frameworks/Core.framework/Versions/2.0/Resources/PlugIns/CFXmlParser.plugin/Contents/_CodeSignature/CodeResources
    /Library/Frameworks/HPDeviceModel.framework/Versions/2.0/Frameworks/Status.framework/Versions/2.0/Resources/PlugIns/DeviceTrays.plugin/Contents/MacOS/DeviceTrays
+  /Volumes/Macintosh_HD/branch/build/Development/Versions.app/Contents/MacOS/Versions
+
+  An example path that this function does not handle correctly today:
+  /tmp/SampleApplication/BundleLoadTester/Debug/BundleLoadTester.app/Contents/Frameworks/Contents.bundle/Contents/MacOS/Contents
+
+  NB: One bug with this function as it is currently written is that we 
+  look for a string like "Contents" to indicate a typical app bundle,
+  "Versions" to indicate a framework bundle, etc.  This works fine until 
+  someone has Versions.app or Contents.framework with that name repeated
+  down lower in the bundle.
 
 */
 
@@ -3655,6 +3661,7 @@ bundle_basename (const char *filepath)
   const char *bundle_name_start = NULL;
   const char *bundle_name_end = NULL;  /* points to '/' after bundle name */
   int deep_bundle = 0;
+  int have_bundle = 0;
 
   /* A file in a bundle must have multiple file path parts.  */
   if (filepath == NULL || strchr (filepath, '/') == NULL)
@@ -3675,18 +3682,21 @@ bundle_basename (const char *filepath)
             bundle_name_start = filepath;
           bundle_name_end = i - 1;
           deep_bundle = 1;
+          have_bundle = 1;
         }
       else if (*j == '/')
         {
           bundle_name_start = j + 1;
           bundle_name_end = i - 1;
           deep_bundle = 1;
+          have_bundle = 1;
         }
     }
 
   /* Look for: foo.framework/Versions/Current/whatev */
 
-  if ((i = strrstr (filepath, "Versions")) != NULL
+  if (have_bundle == 0
+      && (i = strrstr (filepath, "Versions")) != NULL
       && i > filepath + 2)
     {
       j = strrchr_bounded (filepath, i - 2, '/');
@@ -3698,12 +3708,14 @@ bundle_basename (const char *filepath)
             bundle_name_start = filepath;
           bundle_name_end = i - 1;
           deep_bundle = 1;
+          have_bundle = 1;
         }
       else if (*j == '/' && j + 1 > bundle_name_start)
         {
           bundle_name_start = j + 1;
           bundle_name_end = i - 1;
           deep_bundle = 1;
+          have_bundle = 1;
         }
     }
 
@@ -3711,7 +3723,8 @@ bundle_basename (const char *filepath)
      Should return Dutch.lproj here, or a shallow bundle on the 
      iPhone platform  */
 
-  if ((i = strrchr (filepath, '/')) != NULL)
+  if (have_bundle == 0
+      && (i = strrchr (filepath, '/')) != NULL)
     {
       /* if there is no preceding pathname component before I */
       if (i < filepath + 2)
@@ -3724,6 +3737,7 @@ bundle_basename (const char *filepath)
             {
               bundle_name_start = filepath;
               bundle_name_end = i;
+              have_bundle = 1;
             }
         }
       else if (*j == '/' && j + 1 > bundle_name_start)
@@ -3732,11 +3746,16 @@ bundle_basename (const char *filepath)
             {
               bundle_name_start = j + 1;
               bundle_name_end = i;
+              have_bundle = 1;
             }
         }
     }
 
+  if (have_bundle == 0)
+    return NULL;
   if (bundle_name_start == NULL || bundle_name_end == NULL)
+    return NULL;
+  if (bundle_name_start < filepath || bundle_name_end < filepath)
     return NULL;
   if (bundle_name_start == bundle_name_end)
     return NULL;
@@ -3751,6 +3770,10 @@ bundle_basename (const char *filepath)
   if (dot == bundle_name_start)
     return NULL;
   if (dot + 1 == bundle_name_end)
+    return NULL;
+  /* this should not happen -- we did something wrong if we didn't find
+     a dot in the bundle name -- but guard against it so we don't crash.  */
+  if (dot == NULL)
     return NULL;
 
   for (i = dot + 1; i < bundle_name_end; i++)

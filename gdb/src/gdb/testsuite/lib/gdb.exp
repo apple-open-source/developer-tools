@@ -1181,6 +1181,16 @@ proc default_gdb_start {extra_flags} {
 	}
     }
 
+    send_gdb "set inform-optimized 0\n"
+    gdb_expect 10 {
+	-re "$gdb_prompt $" { 
+	    verbose "Setting inform-optimized to 0." 2
+	}
+	timeout {
+	    warning "Couldn't set the inform-optimized to 0"
+	}
+    }
+
     send_gdb "set height 0\n"
     gdb_expect 10 {
 	-re "$gdb_prompt $" { 

@@ -70,7 +70,11 @@ pop_output_files (void)
 {
   /* Only delete one of the files -- they are all set to the same
      value.  */
-  ui_file_delete (gdb_stdout);
+
+  /* APPLE LOCAL:  Don't delete (free) gdb_stdout if it's the same value
+     as saved_output.out.  */
+  if (gdb_stdout != saved_output.out)
+    ui_file_delete (gdb_stdout);
   gdb_stdout = saved_output.out;
   gdb_stderr = saved_output.err;
   gdb_stdlog = saved_output.log;

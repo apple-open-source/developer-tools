@@ -1420,7 +1420,7 @@ enum mi_cmd_result
 mi_cmd_target_load_solib (char *command, char **argv, int argc)
 {
   static int token_ctr = 0;
-  struct value *ret_val;
+  struct value *ret_val = NULL;
   struct gdb_exception e;
   struct solib_token_elem *new_token;
 

@@ -2045,12 +2045,14 @@
 		2609DFCB0E82C412008125DE /* vi_mode.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; path = vi_mode.c; sourceTree = "<group>"; };
 		2609DFCC0E82C412008125DE /* xmalloc.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; path = xmalloc.c; sourceTree = "<group>"; };
 		2609DFCD0E82C412008125DE /* xmalloc.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = xmalloc.h; sourceTree = "<group>"; };
+		2633ABCC101A22EC00337952 /* Makefile */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.make; name = Makefile; path = /Volumes/work/gclayton/Documents/src/gdb/tot/gdb/Makefile; sourceTree = "<absolute>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXGroup section */
 		08FB7794FE84155DC02AAC07 /* gdb */ = {
 			isa = PBXGroup;
 			children = (
+				2633ABCC101A22EC00337952 /* Makefile */,
 				2609CE510E82C407008125DE /* src */,
 				2609CE300E82C406008125DE /* gdb.sh */,
 			);

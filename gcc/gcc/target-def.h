@@ -449,7 +449,8 @@ Foundation, 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
 #define TARGET_ALIGN_ANON_BITFIELD hook_bool_void_false
 #define TARGET_NARROW_VOLATILE_BITFIELD hook_bool_void_false
 #define TARGET_RTX_COSTS hook_bool_rtx_int_int_intp_false
-#define TARGET_MANGLE_FUNDAMENTAL_TYPE hook_constcharptr_tree_null
+/* APPLE LOCAL mangle_type 7105099 */	\
+#define TARGET_MANGLE_TYPE hook_constcharptr_tree_null
 #define TARGET_ALLOCATE_INITIAL_VALUE NULL
 
 #ifndef TARGET_INIT_LIBFUNCS
@@ -684,7 +685,9 @@ Foundation, 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
   /* APPLE LOCAL end constant cfstrings */	\
   TARGET_RESOLVE_OVERLOADED_BUILTIN,		\
   TARGET_FOLD_BUILTIN,				\
-  TARGET_MANGLE_FUNDAMENTAL_TYPE,		\
+  /* APPLE LOCAL begin mangle_type 7105099 */	\
+  TARGET_MANGLE_TYPE,				\
+  /* APPLE LOCAL end mangle_type 7105099 */	\
   TARGET_INIT_LIBFUNCS,				\
   TARGET_SECTION_TYPE_FLAGS,			\
   TARGET_CANNOT_MODIFY_JUMPS_P,			\

@@ -967,6 +967,38 @@ set_pathname_substitution (char *args, int from_tty, struct cmd_list_element * c
     }
 }
 
+void
+add_one_pathname_substitution (const char *old, const char *new)
+{
+  int arrsize = 0;
+  
+ if (pathname_substitutions_argv == NULL)
+   {
+     pathname_substitutions_argv = (char **) xmalloc (sizeof (char *) * 3);
+     pathname_substitutions_argv[0] = xstrdup (old);
+     pathname_substitutions_argv[1] = xstrdup (new);
+     pathname_substitutions_argv[2] = NULL;
+     return;
+   }
+
+  while (pathname_substitutions_argv[arrsize] != NULL) 
+    {
+      if (arrsize % 2 == 0)
+        if (strcmp (pathname_substitutions_argv[arrsize], old) == 0)
+          return;
+      arrsize++;
+    }
+  arrsize++;
+
+  pathname_substitutions_argv = (char **) xrealloc 
+                                          (pathname_substitutions_argv, 
+                                          sizeof (char *) * (arrsize + 2));
+
+  pathname_substitutions_argv[arrsize - 1] = xstrdup (old);
+  pathname_substitutions_argv[arrsize] = xstrdup (new);
+  pathname_substitutions_argv[arrsize + 1] = NULL;
+}
+
 static void
 show_pathname_substitutions (struct ui_file *file, int from_tty,
 			     struct cmd_list_element *c, 

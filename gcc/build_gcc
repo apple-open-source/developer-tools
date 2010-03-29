@@ -33,7 +33,7 @@ fi
 # whether the C++ driver and driver-driver are installed
 LANGUAGES=${LANGUAGES-c,objc,c++,obj-c++}
 
-# The B&I build srcript (~rc/bin/buildit) accepts an '-othercflags'
+# The B&I build script (~rc/bin/buildit) accepts an '-othercflags'
 # command-line flag, and captures the argument to that flag in
 # $RC_NONARCH_CFLAGS (and mysteriously prepends '-pipe' thereto).
 # We will allow this to override the default $CFLAGS and $CXXFLAGS.
@@ -79,14 +79,6 @@ fi
 # to be built.  It's VERS but only up to the second '.' (if there is one).
 MAJ_VERS=`echo $VERS | sed 's/\([0-9]*\.[0-9]*\)[.-].*/\1/'`
 
-# APPLE LOCAL begin ARM ARM_CONFIGFLAGS
-# For ARM, grab all system files from an SDK.
-ARM_SYSROOT="/Developer/SDKs/Extra"
-ARM_LIBSTDCXX_VERSION=4.2.1
-ARM_CONFIGFLAGS="--with-build-sysroot=\"$ARM_SYSROOT\" \
-                 --with-gxx-include-dir=\${prefix}/include/c++/$ARM_LIBSTDCXX_VERSION"
-# APPLE LOCAL end ARM ARM_CONFIGFLAGS
-
 # This is the libstdc++ version to use.
 LIBSTDCXX_VERSION=4.2.1
 if [ ! -d "$DEST_ROOT/include/c++/$LIBSTDCXX_VERSION" ]; then
@@ -96,6 +88,66 @@ NON_ARM_CONFIGFLAGS="--with-gxx-include-dir=\${prefix}/include/c++/$LIBSTDCXX_VE
 
 DARWIN_VERS=`uname -r | sed 's/\..*//'`
 echo DARWIN_VERS = $DARWIN_VERS
+
+# APPLE LOCAL begin ARM
+ARM_LIBSTDCXX_VERSION=4.2.1
+ARM_CONFIGFLAGS="--with-gxx-include-dir=/usr/include/c++/$ARM_LIBSTDCXX_VERSION"
+
+if [ -n "$ARM_SDK" ]; then
+
+  ARM_PLATFORM=`xcodebuild -version -sdk $ARM_SDK PlatformPath`
+  ARM_SYSROOT=`xcodebuild -version -sdk $ARM_SDK Path`
+  ARM_TOOLROOT=$ARM_PLATFORM/Developer
+
+elif [ "x$RC_TARGET_CONFIG" = "xiPhone" ]; then
+
+  # If the build target is iPhone, use the iPhone SDK as the build sysroot
+  # and use the tools from the iPhone platform directory.  FIXME: This is a
+  # temporary fallback for builds where ARM_SDK is not set.  It can be removed,
+  # along with the following bootstrap SDK fallback, when ARM_SDK is set for
+  # all builds.
+  ARM_PLATFORM=/Developer/Platforms/iPhoneOS.platform
+  ARM_IPHONE_SDK=iPhoneOS${IPHONEOS_DEPLOYMENT_TARGET}.Internal.sdk
+
+  ARM_SYSROOT=$ARM_PLATFORM/Developer/SDKs/$ARM_IPHONE_SDK
+  ARM_TOOLROOT=$ARM_PLATFORM/Developer
+
+else
+
+  # Use bootstrap SDK if it is available.
+  if [ -d /Developer/SDKs/Extra ]; then
+    ARM_SYSROOT=/Developer/SDKs/Extra
+  else
+    ARM_SYSROOT=/
+  fi
+  ARM_TOOLROOT=/
+
+fi
+ARM_CONFIGFLAGS="$ARM_CONFIGFLAGS --with-build-sysroot=\"$ARM_SYSROOT\""
+
+# If building an ARM target, check that the required directories exist
+# and query the libSystem arm slices to determine which multilibs we should
+# build.
+if echo $TARGETS | grep arm; then
+  if [ ! -d $ARM_SYSROOT ]; then
+    echo "Error: cannot find ARM SDK to build ARM target"
+    exit 1
+  fi
+  if [ ! -d $ARM_TOOLROOT ]; then
+    echo "Error: $ARM_TOOLROOT directory is not installed"
+    exit 1
+  fi
+  if [ "x$ARM_MULTILIB_ARCHS" = "x" ] ; then
+    ARM_MULTILIB_ARCHS=`/usr/bin/lipo -info $ARM_SYSROOT/usr/lib/libSystem.dylib | cut -d':' -f 3 | sed -e 's/x86_64//' -e 's/i386//' -e 's/ppc7400//' -e 's/ppc64//' -e 's/^ *//' -e 's/ $//'`
+  fi;
+  if [ "x$ARM_MULTILIB_ARCHS" == "x" ] ; then
+    echo "Error: missing ARM slices in $ARM_SYSROOT"
+    exit 1
+  else
+    export ARM_MULTILIB_ARCHS
+  fi
+fi
+# APPLE LOCAL end ARM
 
 # If the user has CC set in their environment unset it now
 unset CC
@@ -159,9 +211,9 @@ unset LANGUAGES
 mkdir -p $DIR/obj-$BUILD-$BUILD $DIR/dst-$BUILD-$BUILD || exit 1
 cd $DIR/obj-$BUILD-$BUILD || exit 1
 if [ \! -f Makefile ]; then
- $SRC_DIR/configure $bootstrap $CONFIGFLAGS \
-   $NON_ARM_CONFIGFLAGS \
-   --host=$BUILD-apple-darwin$DARWIN_VERS --target=$BUILD-apple-darwin$DARWIN_VERS || exit 1
+ $SRC_DIR/configure $bootstrap $CONFIGFLAGS $NON_ARM_CONFIGFLAGS \
+   --host=$BUILD-apple-darwin$DARWIN_VERS \
+   --target=$BUILD-apple-darwin$DARWIN_VERS || exit 1
 fi
 # Unset RC_DEBUG_OPTIONS because it causes the bootstrap to fail.
 # Also keep unset for cross compilers so that the cross built libraries are
@@ -187,18 +239,34 @@ mkdir $DIR/bin || exit 1
 for prog in ar nm ranlib strip lipo ld ; do
   for t in `echo $TARGETS $HOSTS | sort -u`; do
     P=$DIR/bin/${t}-apple-darwin$DARWIN_VERS-${prog}
+    # APPLE LOCAL begin toolroot
+    if [ $t = "arm" ]; then
+      toolroot=$ARM_TOOLROOT
+    else
+      toolroot=
+    fi
+    # APPLE LOCAL end toolroot
     echo '#!/bin/sh' > $P || exit 1
-    echo 'exec /usr/bin/'${prog}' "$@"' >> $P || exit 1
+    # APPLE LOCAL insert toolroot below
+    echo 'exec '${toolroot}'/usr/bin/'${prog}' "$@"' >> $P || exit 1
     chmod a+x $P || exit 1
   done
 done
 for t in `echo $1 $2 | sort -u`; do
   gt=`echo $t | $TRANSLATE_ARCH`
   P=$DIR/bin/${gt}-apple-darwin$DARWIN_VERS-as
+  # APPLE LOCAL begin toolroot
+  if [ $gt = "arm" ]; then
+    toolroot=$ARM_TOOLROOT
+  else
+    toolroot=
+  fi
+  # APPLE LOCAL end toolroot
   echo '#!/bin/sh' > $P || exit 1
 
-  echo 'for a; do case $a in -arch) exec /usr/bin/as "$@";;  esac; done' >> $P || exit 1
-  echo 'exec /usr/bin/as -arch '${t}' "$@"' >> $P || exit 1
+  # APPLE LOCAL insert toolroot below
+  echo 'for a; do case $a in -arch) exec '${toolroot}'/usr/bin/as "$@";;  esac; done' >> $P || exit 1
+  echo 'exec '${toolroot}'/usr/bin/as -arch '${t}' "$@"' >> $P || exit 1
   chmod a+x $P || exit 1
 done
 PATH=$DIR/bin:$PATH
@@ -219,17 +287,26 @@ for t in $CROSS_TARGETS ; do
    cd $DIR/obj-$BUILD-$t || exit 1
    if [ \! -f Makefile ]; then
     # APPLE LOCAL begin ARM ARM_CONFIGFLAGS
-    $SRC_DIR/configure $CONFIGFLAGS --enable-werror-always \
-     `if [ $t = 'arm' ] ; then echo $ARM_CONFIGFLAGS ; else echo $NON_ARM_CONFIGFLAGS ; fi` \
+    T_CONFIGFLAGS="$CONFIGFLAGS --enable-werror-always \
       --program-prefix=$t-apple-darwin$DARWIN_VERS- \
-      --host=$BUILD-apple-darwin$DARWIN_VERS --target=$t-apple-darwin$DARWIN_VERS || exit 1
+      --host=$BUILD-apple-darwin$DARWIN_VERS \
+      --target=$t-apple-darwin$DARWIN_VERS"
+    if [ $t = 'arm' ] ; then
+      # Explicitly set AS_FOR_TARGET and LD_FOR_TARGET to avoid picking up
+      # older versions from the gcc installed in /usr.  Radar 7230843.
+      AS_FOR_TARGET=$DIR/bin/${t}-apple-darwin$DARWIN_VERS-as \
+      LD_FOR_TARGET=$DIR/bin/${t}-apple-darwin$DARWIN_VERS-ld \
+      $SRC_DIR/configure $T_CONFIGFLAGS $ARM_CONFIGFLAGS || exit 1
+    else
+      $SRC_DIR/configure $T_CONFIGFLAGS $NON_ARM_CONFIGFLAGS || exit 1
+    fi
     # APPLE LOCAL end ARM ARM_CONFIGFLAGS
    fi
    make $MAKEFLAGS all CFLAGS="$CFLAGS" CXXFLAGS="$CFLAGS" || exit 1
    make $MAKEFLAGS DESTDIR=$DIR/dst-$BUILD-$t install-gcc install-target \
      CFLAGS="$CFLAGS" CXXFLAGS="$CFLAGS" || exit 1
 
-    # Add the compiler we just built to the path.
+   # Add the compiler we just built to the path.
    PATH=$DIR/dst-$BUILD-$t/usr/bin:$PATH
  fi
 done
@@ -263,12 +340,25 @@ for h in $HOSTS ; do
 
       if [ \! -f Makefile ]; then
 	# APPLE LOCAL begin ARM ARM_CONFIGFLAGS
-        $SRC_DIR/configure $CONFIGFLAGS \
-	  `if [ $t = 'arm' ] && [ $h != 'arm' ] ; then echo $ARM_CONFIGFLAGS ; else echo $NON_ARM_CONFIGFLAGS ; fi` \
-          --program-prefix=$pp \
-          --host=$h-apple-darwin$DARWIN_VERS --target=$t-apple-darwin$DARWIN_VERS || exit 1
+        T_CONFIGFLAGS="$CONFIGFLAGS --program-prefix=$pp \
+          --host=$h-apple-darwin$DARWIN_VERS \
+          --target=$t-apple-darwin$DARWIN_VERS"
+	if [ $t = 'arm' ] && [ $h != 'arm' ] ; then
+          T_CONFIGFLAGS="$T_CONFIGFLAGS $ARM_CONFIGFLAGS"
+        else
+          T_CONFIGFLAGS="$T_CONFIGFLAGS $NON_ARM_CONFIGFLAGS"
+        fi
+        $SRC_DIR/configure $T_CONFIGFLAGS || exit 1
 	# APPLE LOCAL end ARM ARM_CONFIGFLAGS
       fi
+
+      # For ARM, we need to make sure it picks up the ARM_TOOLROOT versions
+      # of the linker and cctools.
+      if [ $t = 'arm' ] ; then
+        ORIG_COMPILER_PATH=$COMPILER_PATH
+        export COMPILER_PATH=$ARM_TOOLROOT/usr/bin:$COMPILER_PATH
+      fi
+
       if [ $h = $t ] ; then
 	  make $MAKEFLAGS all CFLAGS="$CFLAGS" CXXFLAGS="$CFLAGS" || exit 1
 	  make $MAKEFLAGS DESTDIR=$DIR/dst-$h-$t install-gcc install-target \
@@ -277,6 +367,11 @@ for h in $HOSTS ; do
 	  make $MAKEFLAGS all-gcc CFLAGS="$CFLAGS" CXXFLAGS="$CFLAGS" || exit 1
 	  make $MAKEFLAGS DESTDIR=$DIR/dst-$h-$t install-gcc \
 	      CFLAGS="$CFLAGS" CXXFLAGS="$CFLAGS" || exit 1
+      fi
+
+      if [ $t = 'arm' ] ; then
+        export COMPILER_PATH=$ORIG_COMPILER_PATH
+        unset ORIG_COMPILER_PATH
       fi
     done
   fi

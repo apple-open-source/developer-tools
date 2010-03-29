@@ -39,6 +39,7 @@
 #include "mach-o.h"
 #include "gdb_assert.h"
 #include "macosx-nat-dyld-io.h"
+#include "macosx-nat-inferior.h"
 
 #include <string.h>
 
@@ -372,6 +373,30 @@ macho_build_psymtabs (struct objfile *objfile, int mainline,
   else
     {
 #endif
+#if defined (TARGET_ARM) && defined (NM_NEXTSTEP)
+      /* Hack for ARM native MacOSX targets where we can rely on anything
+	 in the shared cache being mapped in our process at the same 
+	 address. This can save us 10MB - 11MB which is a about a tenth
+	 of our available memory.   */
+      if (bfd_mach_o_in_shared_cached_memory (sym_bfd))
+	{
+	  /* If the bfd is in the shared cache, all images will share the
+	     same string table, so we need to make one copy of the shared
+	     string table and keep it around.  */
+	  asection *linkedit_sect = NULL;
+	  CORE_ADDR strtab_addr = 0;
+	  linkedit_sect = bfd_get_section_by_name (sym_bfd, 
+						   "LC_SEGMENT.__LINKEDIT");
+	  if (linkedit_sect == NULL)
+	    error ("error parsing symbol file: no __LINKEDIT section was found");
+
+	  strtab_addr = bfd_section_vma (sym_bfd, linkedit_sect) + 
+			(stabstrsect->filepos - linkedit_sect->filepos);
+     	  DBX_STRINGTAB (objfile) = (char *)strtab_addr;
+	}
+      else
+	{	
+#endif
       /* Only check the length if our bfd is not in memory since the bfd
          read iovec functions we define in macosx-nat-dyld-info.c do not
 	 always have a length as our in memory executable images can now
@@ -397,6 +422,9 @@ macho_build_psymtabs (struct objfile *objfile, int mainline,
 
       if (!val)
         perror_with_name (name);
+#if defined (TARGET_ARM) && defined (NM_NEXTSTEP)
+	}
+#endif
 #if HAVE_MMAP
     }
 #endif
@@ -640,10 +668,9 @@ macho_read_indirect_symbols (bfd *abfd,
 
           if (cursym >= dysymtab->nindirectsyms)
             {
-              warning
-                ("Indirect symbol entry out of range in \"%s\" (%llu >= %lu)",
-                 abfd->filename, cursym,
-                 (unsigned long) dysymtab->nindirectsyms);
+              warning ("Indirect symbol entry out of range in \"%s\" (0x%s >= 0x%s)",
+                       abfd->filename, paddr_nz (cursym),
+                       paddr_nz (dysymtab->nindirectsyms));
               return 0;
             }
           ret =

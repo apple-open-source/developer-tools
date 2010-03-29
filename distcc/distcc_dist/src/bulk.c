@@ -1,23 +1,24 @@
-/* -*- c-file-style: "java"; indent-tabs-mode: nil; fill-column: 78; -*-
- * 
+/* -*- c-file-style: "java"; indent-tabs-mode: nil; tab-width: 4; fill-column: 78 -*-
+ *
  * distcc -- A simple distributed compiler system
  *
  * Copyright (C) 2002, 2003, 2004 by Martin Pool <mbp@samba.org>
+ * Copyright 2007 Google Inc.
  *
  * This program is free software; you can redistribute it and/or
- * modify it under the terms of the GNU General Public License as
- * published by the Free Software Foundation; either version 2 of the
- * License, or (at your option) any later version.
+ * modify it under the terms of the GNU General Public License
+ * as published by the Free Software Foundation; either version 2
+ * of the License, or (at your option) any later version.
  *
- * This program is distributed in the hope that it will be useful, but
- * WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
- * General Public License for more details.
- * 
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ *
  * You should have received a copy of the GNU General Public License
  * along with this program; if not, write to the Free Software
- * Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA 02111-1307
- * USA
+ * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301,
+ * USA.
  */
 
                 /* "A new contraption to capture a dandelion in one
@@ -38,9 +39,9 @@
  * @note We don't time transmission of files: because the write returns when
  * they've just been written into the OS buffer, we don't really get
  * meaningful numbers except for files that are very large.
- **/ 
+ **/
 
-#include "config.h"
+#include <config.h>
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -78,10 +79,10 @@
  *
  * The caller is responsible for closing @p ifd.
  **/
-static int dcc_open_read(const char *fname, int *ifd, off_t *fsize)
+int dcc_open_read(const char *fname, int *ifd, off_t *fsize)
 {
     struct stat buf;
-    
+
     *ifd = open(fname, O_RDONLY|O_BINARY);
     if (*ifd == -1) {
         int save_errno = errno;
@@ -96,7 +97,7 @@ static int dcc_open_read(const char *fname, int *ifd, off_t *fsize)
     }
 
     if (fstat(*ifd, &buf) == -1) {
-	rs_log_error("fstat %s failed: %s", fname, strerror(errno));
+        rs_log_error("fstat %s failed: %s", fname, strerror(errno));
         dcc_close(*ifd);
         return EXIT_IO_ERROR;
     }
@@ -105,7 +106,6 @@ static int dcc_open_read(const char *fname, int *ifd, off_t *fsize)
 
     return 0;
 }
-
 
 void dcc_calc_rate(off_t size_out,
                    struct timeval *before,
@@ -117,7 +117,7 @@ void dcc_calc_rate(off_t size_out,
 
     /* FIXME: Protect against division by zero and other floating-point
      * exceptions. */
-    
+
     timeval_subtract(&delta, after, before);
 
     *secs = (double) delta.tv_sec + (double) delta.tv_usec / 1e6;
@@ -183,11 +183,13 @@ int dcc_x_file(int ofd,
 
     if (dcc_open_read(fname, &ifd, &f_size))
         return EXIT_IO_ERROR;
+    if (ifd == -1)
+        return EXIT_IO_ERROR;
     if (f_size_out)
         *f_size_out = f_size;
 
-    rs_trace("send %lu byte file %s with token %s",
-             (unsigned long) f_size, fname, token);
+    rs_trace("send %lu byte file %s with token %s and compression %d",
+             (unsigned long) f_size, fname, token, compression);
 
     if (compression == DCC_COMPRESS_NONE) {
         if ((ret = dcc_x_token_int(ofd, token, f_size)))
@@ -201,7 +203,7 @@ int dcc_x_file(int ofd,
         ret = dcc_pump_readwrite(ofd, ifd, (size_t) f_size);
 #endif
     } else if (compression == DCC_COMPRESS_LZO1X) {
-        ret = dcc_x_file_lzo1x(ofd, ifd, token, f_size);        
+        ret = dcc_x_file_lzo1x(ofd, ifd, token, f_size);
     } else {
         rs_log_error("invalid compression");
         return EXIT_PROTOCOL_ERROR;
@@ -219,12 +221,13 @@ int dcc_x_file(int ofd,
 
 
 /**
- * Receive a file stream from the network into a local file.  
+ * Receive a file stream from the network into a local file.
+ * Make all necessary directories if they don't exist.
  *
  * Can handle compression.
  *
  * @param len Compressed length of the incoming file.
- * @param filename local filename to create.  
+ * @param filename local filename to create.
  **/
 int dcc_r_file(int ifd, const char *filename,
                unsigned len,
@@ -249,6 +252,11 @@ int dcc_r_file(int ifd, const char *filename,
      * However, failure to remove the file does not cause a warning; we may
      * not have write permission on the directory, but +w for the file.
      */
+
+    if (dcc_mk_tmp_ancestor_dirs(filename)) {
+        rs_log_error("failed to create path for '%s'", filename);
+        return EXIT_IO_ERROR;
+    }
 
     if (stat(filename, &s) == 0) {
         if (s.st_size != 0) {
@@ -294,7 +302,7 @@ int dcc_r_file(int ifd, const char *filename,
 /**
  * Receive a file and print timing statistics.  Only used for big files.
  *
- * Wrapper around dcc_r_file(). 
+ * Wrapper around dcc_r_file().
  **/
 int dcc_r_file_timed(int ifd, const char *fname, unsigned size,
                      enum dcc_compress compr)
@@ -311,7 +319,7 @@ int dcc_r_file_timed(int ifd, const char *fname, unsigned size,
         rs_log_warning("gettimeofday failed");
     } else {
         double secs, rate;
-        
+
         dcc_calc_rate(size, &before, &after, &secs, &rate);
         rs_log_info("%ld bytes received in %.6fs, rate %.0fkB/s",
                     (long) size, secs, rate);
@@ -319,7 +327,6 @@ int dcc_r_file_timed(int ifd, const char *fname, unsigned size,
 
     return ret;
 }
-
 
 int dcc_r_token_file(int in_fd,
                      const char *token,
@@ -331,9 +338,31 @@ int dcc_r_token_file(int in_fd,
 
     if ((ret = dcc_r_token_int(in_fd, token, &i_size)))
         return ret;
-    
+
     if ((ret = dcc_r_file_timed(in_fd, fname, (size_t) i_size, compr)))
         return ret;
 
+    return 0;
+}
+
+int dcc_copy_file_to_fd(const char *in_fname, int out_fd)
+{
+    off_t len;
+    int ifd;
+    int ret;
+
+    if ((ret = dcc_open_read(in_fname, &ifd, &len)))
+        return ret;
+
+#ifdef HAVE_SENDFILE
+    ret = dcc_pump_sendfile(out_fd, ifd, (size_t) len);
+#else
+    ret = dcc_pump_readwrite(out_fd, ifd, (size_t) len);
+#endif
+
+    if (ret) {
+        close(ifd);
+        return ret;
+    }
     return 0;
 }

@@ -32,6 +32,7 @@
 #include "sim-regno.h"
 #include "gdbcore.h"
 #include "osabi.h"
+#include "libbfd.h"            /* bfd_default_compatible */
 
 #include "version.h"
 
@@ -585,10 +586,41 @@ set_gdbarch_from_file (bfd *abfd)
   gdbarch = gdbarch_from_bfd (abfd);
   if (gdbarch == NULL)
     error (_("Architecture of file not recognized."));
+#if defined (TARGET_ARM) && defined (TM_NEXTSTEP)
+  /* APPLE LOCAL: We may have a arm binary with a lesser CPU subtype running on
+     a more capable device. We need to pick the highest of the two architectures
+     and go with that.  */
+  if (!target_architecture_auto && gdbarch != current_gdbarch)
+    {
+      const struct bfd_arch_info *abfd_bfd_arch_info;
+      const struct bfd_arch_info *curr_bfd_arch_info;
+      const struct bfd_arch_info *compatible_bfd_arch_info = NULL;
+      abfd_bfd_arch_info = bfd_get_arch_info (abfd);
+      curr_bfd_arch_info = gdbarch_bfd_arch_info (current_gdbarch);
+      if (abfd_bfd_arch_info != NULL && curr_bfd_arch_info != NULL)
+	{
+	  compatible_bfd_arch_info = bfd_default_compatible (abfd_bfd_arch_info, 
+							 curr_bfd_arch_info);
+	  if (compatible_bfd_arch_info == NULL)
+	    {
+	      warning ("Architecture of file \"%s\" (%s) is not compatible "
+		       "with the user selected architecture (%s).",
+		       abfd->filename ? abfd->filename : "<UNKNOWN>",
+		       curr_bfd_arch_info->printable_name,
+		       abfd_bfd_arch_info->printable_name);
+	    }
+	}
+      /* Only select the gdbarch from ABFD if it was the compatible one.  */
+      if (compatible_bfd_arch_info == abfd_bfd_arch_info)
+	deprecated_current_gdbarch_select_hack (gdbarch);
+    }
+
+#else
   if (!target_architecture_auto && gdbarch != current_gdbarch)
     error ("Architecture of file \"%s\" does not match user selected architecture.",
 	   abfd->filename ? abfd->filename : "<UNKNOWN>" );
   deprecated_current_gdbarch_select_hack (gdbarch);
+#endif
 }
 
 /* Initialize the current architecture.  Update the ``set

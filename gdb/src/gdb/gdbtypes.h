@@ -327,6 +327,11 @@ enum type_code
 #define TYPE_FLAG_RESTRICT (1 << 17)
 #define TYPE_RESTRICT(t)	(TYPE_INSTANCE_FLAGS (t) & TYPE_FLAG_RESTRICT)
 
+/* APPLE LOCAL: This flag marks function types that were optimized by
+   the compiler.  */
+#define TYPE_FLAG_OPTIMIZED (1 << 18)
+#define TYPE_OPTIMIZED(t)       (TYPE_FLAGS (t) & TYPE_FLAG_OPTIMIZED)
+
 /*  Array bound type.  */
 enum array_bound_type
 {
@@ -1325,7 +1330,8 @@ extern struct type *make_pointer_type (struct type *, struct type **);
 
 extern struct type *lookup_pointer_type (struct type *);
 
-extern struct type *make_function_type (struct type *, struct type **);
+/* APPLE LOCAL - Inform users about debugging optimized code  */
+extern struct type *make_function_type (struct type *, struct type **, int);
 
 extern struct type *lookup_function_type (struct type *);
 

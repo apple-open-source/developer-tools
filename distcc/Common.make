@@ -2,11 +2,11 @@
 # Makefile for Apple Release Control (common)
 #
 # Wilfredo Sanchez | wsanchez@apple.com
-# Copyright (c) 1997-1999 Apple Computer, Inc.
+# Copyright (c) 1997-2009 Apple Inc.
 #
 # @APPLE_LICENSE_HEADER_START@
 # 
-# Portions Copyright (c) 1999 Apple Computer, Inc.  All Rights
+# Portions Copyright (c) 1999-2009 Apple Inc.  All Rights
 # Reserved.  This file contains Original Code and/or Modifications of
 # Original Code as defined in and that are subject to the Apple Public
 # Source License Version 1.1 (the "License").  You may not use this file
@@ -47,7 +47,7 @@ include $(CoreOSMakefiles)/Standard/Standard.make
 
 #RC_ARCHS   = $(shell for i in `file /usr/lib/libSystem.B.dylib | grep 'shared library ' | sed 's|.*shared library ||'`; do $(CC) -arch $$i -E -x c /dev/null > /dev/null 2>&1 && echo $$i; done)
 ifndef RC_ARCHS
-RC_ARCHS = ppc i386 x86_64
+RC_ARCHS =  i386 
 endif
 ifndef RC_RELEASE
 RC_RELEASE = unknown

@@ -2,11 +2,11 @@
 # Makefile for Apple Release Control (GNU source projects)
 #
 # Wilfredo Sanchez | wsanchez@apple.com
-# Copyright (c) 1997-1999 Apple Computer, Inc.
+# Copyright (c) 1997-2009 Apple Inc.
 #
 # @APPLE_LICENSE_HEADER_START@
 # 
-# Portions Copyright (c) 1999 Apple Computer, Inc.  All Rights
+# Portions Copyright (c) 1999-2009 Apple Inc.  All Rights
 # Reserved.  This file contains Original Code and/or Modifications of
 # Original Code as defined in and that are subject to the Apple Public
 # Source License Version 1.1 (the "License").  You may not use this file

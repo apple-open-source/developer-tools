@@ -645,6 +645,8 @@ print_frame (struct frame_info *fi,
   CORE_ADDR inline_end_pc;
   int next_frame_is_inlined_p =  0;
   /* APPLE LOCAL end subroutine inlining  */
+  /* APPLE LOCAL - Inform users about debugging optimized code  */
+  int func_is_optimized = 0;
 
   stb = ui_out_stream_new (uiout);
   old_chain = make_cleanup_ui_out_stream_delete (stb);
@@ -749,6 +751,10 @@ print_frame (struct frame_info *fi,
 		   that's preferable to diplaying a mangled name. */
 		funname = SYMBOL_PRINT_NAME (func);
 	    }
+	  /* APPLE LOCAL begin Inform users about debugging optimized code  */
+	  if (TYPE_OPTIMIZED (SYMBOL_TYPE (func)))
+	    func_is_optimized = 1;
+	  /* APPLE LOCAL end Inform users about debugging optimized code  */
 	}
     }
   else
@@ -796,6 +802,11 @@ print_frame (struct frame_info *fi,
 			   DMGL_ANSI);
   ui_out_field_stream (uiout, "func", stb);
   ui_out_wrap_hint (uiout, "   ");
+
+  /* APPLE LOCAL - Inform users about debugging optimized code (mi)  */
+  if (ui_out_is_mi_like_p (uiout))
+    ui_out_field_int (uiout, "optimized", func_is_optimized);
+
   annotate_frame_args ();
 
   ui_out_text (uiout, " (");

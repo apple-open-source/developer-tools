@@ -1,24 +1,25 @@
 #! /usr/bin/python
 
-# distcc/benchmark -- automated system for testing distcc correctness
+# benchmark -- automated system for testing distcc correctness
 # and performance on various source trees.
 
 # Copyright (C) 2002, 2003, 2004 by Martin Pool
-
+# Copyright 2008 Google Inc.
+#
 # This program is free software; you can redistribute it and/or
-# modify it under the terms of the GNU General Public License as
-# published by the Free Software Foundation; either version 2 of the
-# License, or (at your option) any later version.
-
-# This program is distributed in the hope that it will be useful, but
-# WITHOUT ANY WARRANTY; without even the implied warranty of
-# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
-# General Public License for more details.
- 
+# modify it under the terms of the GNU General Public License
+# as published by the Free Software Foundation; either version 2
+# of the License, or (at your option) any later version.
+#
+# This program is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
+#
 # You should have received a copy of the GNU General Public License
 # along with this program; if not, write to the Free Software
-# Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA 02111-1307
-# USA
+# Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301,
+# USA.
 
 
 # Unlike the main distcc test suite, this program *does* require you
@@ -47,12 +48,6 @@
 
 # TODO: Allow choice of which compiler and make options to use.
 
-# TODO: Try building something large in C++.
-
-# TODO: Set CXX as well.
-
-# TODO: Add option to run tests repeatedly and show mean and std. dev.
-
 # TODO: Perhaps add option to do "make clean" -- this might be faster
 # than unzipping and configuring every time.  But perhaps also less
 # reproducible.
@@ -60,8 +55,11 @@
 # TODO: Add option to run tests on different sets or orderings of
 # machines.
 
+import os
+import re
+import sys
+import time
 
-import re, os, sys, time
 from getopt import getopt
 
 from Summary import Summary
@@ -111,17 +109,35 @@ By default, all known projects are built.
 Options:
   --help                     show brief help message
   --list-projects            show defined projects
-  -c, --compiler=COMPILER    specify one compiler to use
+  --cc=PATH                  specify base value of CC to pass to configure
+  --cxx=PATH                 specify base value of CXX to pass to configure
+  --output=FILE              print final summary to FILE in addition to stdout
+  -c, --compiler=COMPILER    specify one compiler to use; format is
+                             {local|dist|lzo|pump},h<NUMHOSTS>,j<NUMJOBS>
   -n N                       repeat compilation N times
   -a, --actions=ACTIONS      comma-separated list of action phases
                              to perform
+  -f N, --force=N            If set to 0, skip download, unpack, and
+                             configure actions if they've already been
+                             successfully performed; if set to 1 (the
+                             default), only skip the download action;
+                             if set to 2, do not skip any action
 
-Compilers can be specified as either "local,N" to run N copies of gcc,
-or dist,N to run N copies of distcc.  Multiple -c options specify
-different scenarios to measure.  The default is to run a nonparallel
-local compile and a parallel distributed compile.
+The C and C++ compiler versions used can be set with the --cc and --cxx
+options.
+
+Use of distcc features is set with the -c/--compiler option.  The argument
+to -c/--compiler has three components, separated by commas.  The first
+component specifies which distcc features to enabled: "local" means
+run cc locally, "distcc" means use plain distcc, "lzo" means enabled
+compression, and "pump" means to enable pump mode and compression.
+The second component specifies how many distcc hosts to use.  The third
+component specifies how many jobs to run (the -j/--jobs option to "make").
+Multiple -c/--compiler options specify different scenarios to measure.
+The default is to measure a few reasonable scenarios.
+
 """
-actions.action_help()
+    actions.action_help()
 
 
 # -a is for developer use only and not documented; unless you're
@@ -133,12 +149,27 @@ actions.action_help()
 ######################################################################
 def main():
     """Run the benchmark per arguments"""
+
+    # Ensure that stdout and stderr are line buffered, rather than
+    # block buffered, as might be the default when running with
+    # stdout/stderr redirected to a file; this ensures that the
+    # output is prompt, even when the script takes a long time for
+    # a single step, and it also avoids confusing intermingling of
+    # stdout and stderr.
+    sys.stdout = os.fdopen(1, "w", 1)
+    sys.stderr = os.fdopen(2, "w", 1)
+
     sum = Summary()
-    options, args = getopt(sys.argv[1:], 'a:c:n:',
-                           ['list-projects', 'actions=', 'help', 'compiler='])
+    options, args = getopt(sys.argv[1:], 'a:c:n:f:',
+                           ['list-projects', 'actions=', 'help', 'compiler=',
+                            'cc=', 'cxx=', 'output=', 'force='])
     opt_actions = actions.default_actions
-    set_compilers = []
+    opt_cc = 'cc'
+    opt_cxx = 'c++'
+    opt_output = None
+    opt_compilers = []
     opt_repeats = 1
+    opt_force = 1
 
     for opt, optarg in options:
         if opt == '--help':
@@ -149,13 +180,24 @@ def main():
             return
         elif opt == '--actions' or opt == '-a':
             opt_actions = actions.parse_opt_actions(optarg)
+        elif opt == '--cc':
+            opt_cc = optarg
+        elif opt == '--cxx':
+            opt_cxx = optarg
+        elif opt == '--output':
+            opt_output = optarg
         elif opt == '--compiler' or opt == '-c':
-            set_compilers.append(compiler.parse_opt(optarg))
+            opt_compilers.append(optarg)
         elif opt == '-n':
             opt_repeats = int(optarg)
+        elif opt == '-f' or opt == '--force':
+            opt_force = int(optarg)
 
-    if not set_compilers:
-        set_compilers = compiler.default_compilers()
+    if opt_compilers:
+        set_compilers = [compiler.parse_compiler_opt(c, cc=opt_cc, cxx=opt_cxx)
+                         for c in opt_compilers]
+    else:
+        set_compilers = compiler.default_compilers(cc=opt_cc, cxx=opt_cxx)
 
     # Find named projects, or run all by default
     if args:
@@ -164,13 +206,31 @@ def main():
         chosen_projects = trees.values()
 
     for proj in chosen_projects:
-        proj.pre_actions(opt_actions)
+        # Ignore actions we did in a previous benchmark run, absent -f.
+        # We only run the project's pre-actions if one of the builds
+        # needs it because it hasn't successfully run 'configure' yet.
+        project_actions, _ = actions.remove_unnecessary_actions(
+                opt_actions, opt_force, proj.did_download(), 0)
+        proj.pre_actions(project_actions)
+
         for comp in set_compilers:
             build = Build(proj, comp, opt_repeats)
-            build.build_actions(opt_actions, sum)
+            _, build_actions = actions.remove_unnecessary_actions(
+                opt_actions, opt_force,
+                proj.did_download(), build.did_configure())
+
+            build.build_actions(build_actions, sum)
 
     sum.print_table()
+    # If --output was specified, print the table to the output-file too
+    if opt_output:
+        old_stdout = sys.stdout
+        sys.stdout = open(opt_output, 'w')
+        try:
+            sum.print_table()
+        finally:
+            sys.stdout.close()
+            sys.stdout = old_stdout
 
 if __name__ == '__main__':
     main()
-    

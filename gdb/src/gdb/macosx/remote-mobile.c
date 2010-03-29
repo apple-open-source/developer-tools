@@ -27,6 +27,8 @@
 #include <fcntl.h>
 #include <sys/un.h>
 #include <unistd.h>
+#include <string.h>
+#include <stdio.h>
 
 #include "defs.h"
 #include "target.h"
@@ -42,7 +44,6 @@
    push_remote_target to switch to the standard remote target.  */
 
 static struct target_ops remote_mobile_ops;
-static char *remote_executable_path;
 
 static char *remote_mobile_shortname = "remote-mobile";
 static char *remote_mobile_longname = "Remote connection to a mobile device using gdb-specific protocol";
@@ -182,7 +183,7 @@ remote_mobile_open (char *unix_sock_name, int from_tty)
   
   name = malloc (strlen ("filedesc:") + 12);
   sprintf (name, "filedesc:%d", md_fd);
-  push_remote_target (name, from_tty);
+  push_remote_macosx_target (name, from_tty);
 
   /* Now that we've gotten the remote target, let's fix up a few things. */
   current_target.to_shortname = remote_mobile_shortname;

@@ -22,6 +22,7 @@
    Boston, MA 02111-1307, USA.  */
 
 #include "macosx-nat-dyld-info.h"
+#include "macosx-nat-dyld.h"
 #include "macosx-nat-dyld-path.h"
 #include "macosx-nat-dyld-process.h"
 
@@ -35,6 +36,8 @@
 #include "gdbcmd.h"
 #include "objfiles.h"
 #include "ui-out.h"
+
+#include "mach-o.h" /* for BFD mach definitions.  */
 
 const char *
 dyld_reason_string (dyld_objfile_reason r)
@@ -131,10 +134,67 @@ dyld_check_entry (struct dyld_objfile_entry *e)
 {
 }
 
+int
+dyld_objfile_entry_in_shared_cache (struct dyld_objfile_entry *e)
+{
+  if (e != NULL && e->dyld_valid)
+    {
+      /* Read the mach header for this entry if it already hasn't been read.
+         We can tell if the entry hasn't been read yet by looking at the magic
+	 field and if it is set to zero (which gets done by
+	 DYLD_OBJFILE_ENTRY_CLEAR) then we haven't read it yet.  */
+      if (e->mem_header.magic == 0)
+       target_read_mach_header (e->dyld_addr, &e->mem_header);
+      
+      /* The high bit of the flags member from the in memory version of the 
+         mach_header declares if this mach image is in the shared cache.  */
+      if (e->mem_header.flags & 0x80000000)
+	return 1;
+    }
+  return 0; /* Not in shared cache.  */
+}
+
+
+enum gdb_osabi
+dyld_objfile_entry_osabi (const struct dyld_objfile_entry *e)
+{
+  if (e != NULL && e->dyld_valid)
+    {
+      /* Read the mach header for this entry if it already hasn't been read.
+         We can tell if the entry hasn't been read yet by looking at the magic
+	 field and if it is set to zero (which gets done by
+	 DYLD_OBJFILE_ENTRY_CLEAR) then we haven't read it yet.  */
+      if (e->mem_header.magic == 0)
+       target_read_mach_header (e->dyld_addr, &e->mem_header);
+
+      if (e->mem_header.cputype == BFD_MACH_O_CPU_TYPE_ARM)
+	{
+	  switch (e->mem_header.cpusubtype)
+	    {
+	      case BFD_MACH_O_CPU_SUBTYPE_ARM_6:
+		return GDB_OSABI_DARWINV6;
+
+	      case BFD_MACH_O_CPU_SUBTYPE_ARM_7:
+		return GDB_OSABI_DARWINV7;
+		    
+	      default:
+		return GDB_OSABI_DARWIN;
+	    }
+	}
+      else if (e->mem_header.cputype & CPU_ARCH_ABI64)
+	return GDB_OSABI_DARWIN64;
+      else
+	return GDB_OSABI_DARWIN;
+   }
+  return GDB_OSABI_UNKNOWN;
+}
+
 void
 dyld_objfile_entry_clear (struct dyld_objfile_entry *e)
 {
   e->prefix = NULL;
+
+  memset (&e->mem_header, 0, sizeof(e->mem_header));
 
   e->dyld_name = NULL;
   e->dyld_name_valid = 0;
@@ -180,10 +240,6 @@ dyld_objfile_entry_clear (struct dyld_objfile_entry *e)
   e->load_flag = -1;
 
   e->reason = 0;
-
-  /* This isn't really correct -- we should use an invalid value like -1 here
-     to indicate "uninitialized" instead of making a stealthy default of 0.  */
-  e->in_shared_cache = 0;
 
   e->allocated = 0;
 }
@@ -267,6 +323,14 @@ dyld_objfile_entry_compare (struct dyld_objfile_entry *a,
 
   COMPARE_STRING (prefix);
 
+  COMPARE_SCALAR (mem_header.magic);
+  COMPARE_SCALAR (mem_header.cputype);
+  COMPARE_SCALAR (mem_header.cpusubtype);
+  COMPARE_SCALAR (mem_header.filetype);
+  COMPARE_SCALAR (mem_header.ncmds);
+  COMPARE_SCALAR (mem_header.sizeofcmds);
+  COMPARE_SCALAR (mem_header.flags);
+  
   COMPARE_STRING (dyld_name);
   COMPARE_SCALAR (dyld_name_valid);
 

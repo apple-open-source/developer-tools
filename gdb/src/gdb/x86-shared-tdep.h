@@ -107,5 +107,7 @@ void x86_frame_this_id (struct frame_info *next_frame, void **this_cache, struct
 
 void x86_frame_prev_register (struct frame_info *next_frame, void **this_cache, int regnum, enum opt_state *optimizedp, enum lval_type *lvalp, CORE_ADDR *addrp, int *realnump, gdb_byte *valuep);
 
+CORE_ADDR x86_cxx_virtual_override_thunk_trampline (CORE_ADDR pc);
+
 
 #endif /* X86_SHARED_TDEP_H */

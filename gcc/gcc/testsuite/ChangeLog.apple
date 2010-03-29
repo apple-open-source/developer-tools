@@ -1,3 +1,18 @@
+2009-11-03  Stuart Hastings  <stuart@apple.com>
+
+	Radar 6951876
+	* gcc.dg/6951876.c: New.
+
+2009-11-02  Stuart Hastings  <stuart@apple.com>
+
+	Radar 7105615
+	* gcc.dg/7105615.c: New.
+
+2009-06-15  Fariborz Jahanian <fjahanian@apple.com>
+
+        Radar 6936421
+	* obj-c++.dg/property-as-initializer.mm: New
+
 2009-05-06  Fariborz Jahanian <fjahanian@apple.com>
 
 	Radar 6083666

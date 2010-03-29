@@ -42,6 +42,10 @@ void dyld_load_library (const struct dyld_path_info * d,
 void dyld_load_libraries (const struct dyld_path_info * d,
                           struct dyld_objfile_info * result);
 
+void dyld_load_library_from_memory (const struct dyld_path_info *d,
+                                    struct dyld_objfile_entry *e,
+                                    int print_errors);
+
 void dyld_merge_libraries (struct dyld_objfile_info * old,
                            struct dyld_objfile_info * new,
                            struct dyld_objfile_info * result);
@@ -104,6 +108,8 @@ void dyld_load_symfile_preserving_objfile (struct dyld_objfile_entry *e);
 struct pre_run_memory_map *create_pre_run_memory_map (struct bfd *abfd);
 
 void free_pre_run_memory_map (struct pre_run_memory_map *map);
+
+void dyld_slide_objfile (struct objfile *objfile, CORE_ADDR dyld_slide, struct section_offsets *new_offsets); 
 
 
 #endif /* __GDB_MACOSX_NAT_DYLD_PROCESS_H__ */

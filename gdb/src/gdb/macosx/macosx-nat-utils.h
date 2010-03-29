@@ -25,6 +25,10 @@ const void *macosx_parse_plist (const char *plist_path);
 
 void macosx_free_plist (const void **plist);
 
+struct value *macosx_load_dylib (char *name, char *flags);
+
+int macosx_check_safe_call (int which, enum check_which_threads thread_mode);
+
 const char *macosx_get_plist_posix_value (const void *plist, const char* key);
 
 const char *macosx_get_plist_string_value (const void *plist, const char* key);

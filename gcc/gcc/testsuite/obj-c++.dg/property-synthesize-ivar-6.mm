@@ -20,7 +20,7 @@
 @end
 
 @implementation Test6
-@synthesize prop;  /* { dg-error "property \\'prop\\' attempting to use ivar \\'prop\\' in super class \\'Test6\\'" } */
+@synthesize prop;  /* { dg-error "property \\'prop\\' attempting to use ivar \\'prop\\' declared in super class of \\'Test6\\'" } */
 @end
 
 #endif

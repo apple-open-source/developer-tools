@@ -160,11 +160,158 @@ modify_trace_bit (thread_t thread, int value)
 
 }
 
-#elif defined (TARGET_ARM) /* ARM HACK: kernel doesn't support hardware single step on ARM.  */
+#elif defined (TARGET_ARM)
+
+#include "arm-macosx-thread-status.h"
+#include "arm-tdep.h"
+
+// BCR address match type
+#define BCR_M_IMVA_MATCH        ((uint32_t)(0u << 21))
+#define BCR_M_CONTEXT_ID_MATCH  ((uint32_t)(1u << 21))
+#define BCR_M_IMVA_MISMATCH     ((uint32_t)(2u << 21))
+#define BCR_M_RESERVED          ((uint32_t)(3u << 21))
+
+// Link a BVR/BCR or WVR/WCR pair to another
+#define E_ENABLE_LINKING	((uint32_t)(1u << 20))
+
+// Byte Address Select
+#define BAS_IMVA_PLUS_0		((uint32_t)(1u << 5))
+#define BAS_IMVA_PLUS_1		((uint32_t)(1u << 6))
+#define BAS_IMVA_PLUS_2		((uint32_t)(1u << 7))
+#define BAS_IMVA_PLUS_3		((uint32_t)(1u << 8))
+#define BAS_IMVA_0_1		((uint32_t)(3u << 5))
+#define BAS_IMVA_2_3		((uint32_t)(3u << 7))
+#define BAS_IMVA_ALL		((uint32_t)(0xfu << 5))
+
+// Break only in priveleged or user mode
+#define S_RSVD			((uint32_t)(0u << 1))
+#define S_PRIV			((uint32_t)(1u << 1))
+#define S_USER			((uint32_t)(2u << 1))
+#define S_PRIV_USER		((S_PRIV) | (S_USER))
+
+#define BCR_ENABLE		((uint32_t)(1u))
+#define WCR_ENABLE		((uint32_t)(1u))
+
+// Watchpoint load/store
+#define WCR_LOAD		((uint32_t)(1u << 3))
+#define WCR_STORE		((uint32_t)(1u << 4))
+
+ULONGEST read_memory_unsigned_integer (CORE_ADDR memaddr, int len);
+
+extern arm_macosx_tdep_inf_status_t arm_macosx_tdep_inf_status;
+
 kern_return_t
 modify_trace_bit (thread_t thread, int value)
 {
-  /* abort (); */
+  kern_return_t kret;
+  gdb_arm_thread_debug_state_t dbg;
+  unsigned int state_count;
+  const uint32_t hw_idx = 0;
+  int update_dregs = 0;
+  /* Set the debug state to all zeros and only fill it in if we are enabling
+     a hardware breakpoint.  */
+  state_count = GDB_ARM_THREAD_DEBUG_STATE_COUNT;
+  kret = thread_get_state (thread, GDB_ARM_THREAD_DEBUG_STATE,
+			   (thread_state_t) &dbg, &state_count);
+  inferior_debug(3, "modify_trace_bit(%4.4x, %i): "
+		 "thread_get_state(%4.4x, %i, ***, %i) => kret = %8.8x, "
+		 "BRP%u = 0x%8.8x 0x%8.8x, state_count = %i\n", 
+		 thread, value, thread, GDB_ARM_THREAD_DEBUG_STATE, 
+		 GDB_ARM_THREAD_DEBUG_STATE_COUNT, kret, hw_idx, 
+		 dbg.bvr[hw_idx], dbg.bcr[hw_idx], state_count);
+  MACH_PROPAGATE_ERROR (kret);
+
+  if (value)
+    {
+      /* Enable trace bit.  */
+      arm_macosx_tdep_inf_status.macosx_half_step_pc = (CORE_ADDR)-1;
+
+      /* Read the general regs first so we can get the PC.  */
+      gdb_arm_thread_state_t gpr;
+      state_count = GDB_ARM_THREAD_STATE_COUNT;
+      kret = thread_get_state (thread, GDB_ARM_THREAD_STATE,
+			       (thread_state_t) &gpr, &state_count);
+      MACH_PROPAGATE_ERROR (kret);
+
+      inferior_debug(3, "modify_trace_bit(%4.4x, %i): pc = 0x%8.8x\n", 
+		     gpr.r[15]);
+      
+      /* Set a hardware breakpoint that will stop when the PC changes.  */
+      
+      /* Set the current PC as the breakpoint address with bits 1:0 removed.  */
+      dbg.bvr[hw_idx] = gpr.r[15] & 0xFFFFFFFCu;
+      /* Stop on address mismatch (BCR_M_IMVA_MISMATCH), when any address bits 
+         change (BAS_IMVA_ALL), stop only in user mode only (S_USER), and 
+	 enable this hardware breakpoint (BCR_ENABLE).  */
+      dbg.bcr[hw_idx] = BCR_M_IMVA_MISMATCH | S_USER | BCR_ENABLE;
+      
+      if (gpr.cpsr & FLAG_T)
+	{
+	  // Thumb breakpoint
+	  if (gpr.r[15] & 2)
+	    dbg.bcr[hw_idx] |= BAS_IMVA_2_3;
+	  else
+	    dbg.bcr[hw_idx] |= BAS_IMVA_0_1;
+
+	  uint32_t insn = read_memory_unsigned_integer (gpr.r[15], 2);
+	  if (((insn & 0xE000) == 0xE000) && insn & 0x1800)
+	    {
+	      // 32 bit thumb opcode...
+	      if (gpr.r[15] & 2)
+		{
+		  // We can't take care of a 32 bit thumb instruction that lies
+		  // on a 2 byte boundary with a single IVA mismatch. We will 
+		  // need to chain an extra hardware single step in order to 
+		  // complete this single step since some architectures 
+		  // (pre ARMv6T2) treat 32 bit thumb instructions as two fixed
+		  // length opcodes, later cores treat 32 bit thumb instructions
+		  // as a single opcode (variable length). Store the address of
+		  // this 32 bit opcode along with the ptid, so we can complete
+		  // the single step without stopping half way through this
+		  // opcode.
+		  arm_macosx_tdep_inf_status.macosx_half_step_pc = gpr.r[15] + 2;
+		}
+	      else
+		{
+		  // This 32 bit thumb instruction starts on a four byte 
+		  // boundary so we can use single IVA mismtach to complete
+		  // the step.
+		  dbg.bcr[hw_idx] |= BAS_IMVA_ALL;
+		}
+	    }
+	}
+      else
+	{
+	  // ARM breakpoint, stop when any address bits change
+	  dbg.bcr[hw_idx] |= BAS_IMVA_ALL;
+	}
+      update_dregs = 1;
+    }
+  else
+    {
+      /* Disable trace bit.  */
+      if (dbg.bcr[hw_idx] & BCR_ENABLE)
+	{
+	  dbg.bvr[hw_idx] = 0;
+	  dbg.bcr[hw_idx] = 0;
+	  update_dregs = 1;
+	}
+    }
+    
+  if (update_dregs)
+    {
+      state_count = GDB_ARM_THREAD_DEBUG_STATE_COUNT;
+      kret = thread_set_state (thread, GDB_ARM_THREAD_DEBUG_STATE,
+			       (thread_state_t) &dbg, 
+			       GDB_ARM_THREAD_DEBUG_STATE_COUNT);
+      inferior_debug(3, "modify_trace_bit(%4.4x, %i): thread_set_state(%4.4x, "
+		     "%i, ***, %i) => kret = %8.8x, BRP%u = %8.8x %8.8x\n", 
+		     thread, value, thread, GDB_ARM_THREAD_DEBUG_STATE, 
+		     state_count, kret, hw_idx, dbg.bvr[hw_idx], 
+		     dbg.bcr[hw_idx]);
+      MACH_PROPAGATE_ERROR (kret);
+    }
+
   return KERN_SUCCESS;
 }
 #else
@@ -255,9 +402,10 @@ prepare_threads_after_stop (struct macosx_inferior_status *inferior)
   MACH_WARN_ERROR (kret);
 }
 
-void prepare_threads_before_run
-  (struct macosx_inferior_status *inferior, int step, thread_t current,
-   int stop_others)
+void 
+prepare_threads_before_run (struct macosx_inferior_status *inferior, 
+			    int step, thread_t current,
+			    int stop_others)
 {
   thread_array_t thread_list = NULL;
   unsigned int nthreads = 0;
@@ -1042,6 +1190,10 @@ macosx_print_thread_details (struct ui_out *uiout, ptid_t ptid)
 void
 _initialize_threads ()
 {
+#if defined (TARGET_ARM)
+  arm_macosx_tdep_inf_status.macosx_half_step_pc = (CORE_ADDR)-1;
+#endif
+
   add_cmd ("suspend", class_run, thread_suspend_command,
            "Increment the suspend count of a thread.", &thread_cmd_list);
 

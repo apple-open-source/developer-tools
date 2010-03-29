@@ -135,6 +135,15 @@ static struct rb_tree_node *implementation_tree = NULL;
 static CORE_ADDR  lookup_implementation_in_cache (CORE_ADDR class, CORE_ADDR sel);
 static void add_implementation_to_cache (CORE_ADDR class, CORE_ADDR sel, CORE_ADDR implementation);
 
+/* APPLE LOCAL: This tree keeps the map of class -> real class.  We find the "real class" by
+   getting the object's "isa" pointer then calling that classes "class" method for this object.  
+   We need to do this because the KVO system overwrites the "isa" pointer with the synthesized class
+   that does the KVO notification, but htat's not the class people want to see... 
+   We are assuming here that the synthesized class will always return the same "real" class.  */
+static struct rb_tree_node *real_class_tree = NULL;
+static CORE_ADDR  lookup_real_class_in_cache (CORE_ADDR class);
+static void add_real_class_to_cache (CORE_ADDR class, CORE_ADDR real_class);
+
 /* Are we using the ObjC 2.0 runtime?  */
 static int new_objc_runtime_internals ();
 
@@ -394,7 +403,8 @@ value_nsstring (char *ptr, int len)
 
   if (func_type == NULL)
     func_type = alloc_type (NULL);
-  func_type = make_function_type (type, &func_type);
+  /* APPLE LOCAL - Inform user about debugging optimized code  */
+  func_type = make_function_type (type, &func_type, 0);
   ret_type = lookup_pointer_type (func_type);
 
   if (lookup_minimal_symbol ("_NSNewStringFromCString", 0, 0))
@@ -2951,6 +2961,11 @@ objc_clear_caches ()
       free_rb_tree_data (classname_tree, xfree);
       classname_tree = NULL;
     }
+  if (real_class_tree != NULL)
+    {
+      free_rb_tree_data (real_class_tree, xfree);
+      real_class_tree = NULL;
+    }
 }
 
 static CORE_ADDR 
@@ -4667,7 +4682,37 @@ make_cleanup_set_restore_debugger_mode (struct cleanup **cleanup, int level)
 }
 
 /* APPLE LOCAL begin use '[object class]' rather than isa  */
-     
+
+static CORE_ADDR 
+lookup_real_class_in_cache (CORE_ADDR class)
+{
+  struct rb_tree_node *found;
+
+  found = rb_tree_find_node_all_keys (real_class_tree, class, -1, -1);
+  if (found == NULL)
+    return 0;
+  else
+      return *((CORE_ADDR *) found->data);
+}
+
+static void
+add_real_class_to_cache (CORE_ADDR class, CORE_ADDR real_class)
+{
+  struct rb_tree_node *new_node = (struct rb_tree_node *) xmalloc (sizeof (struct rb_tree_node));
+  new_node->key = class;
+  new_node->secondary_key = -1;
+  new_node->third_key = -1;
+  new_node->data = xmalloc (sizeof (CORE_ADDR));
+  *((CORE_ADDR *) new_node->data) = real_class;
+  new_node->left = NULL;
+  new_node->right = NULL;
+  new_node->parent = NULL;
+  new_node->color = UNINIT;
+
+  rb_tree_insert (&real_class_tree, real_class_tree, new_node);
+}
+
+
 /* This function tries to find the address of the original user-defined
    class to which an object belongs.  This is necessary because, since
    Objective-C classes are mutable, sometimes an object's class may
@@ -4694,6 +4739,11 @@ get_class_address_from_object (CORE_ADDR object_addr)
 
   read_objc_object (object_addr, &orig_object);
 
+  ret_addr = lookup_real_class_in_cache (orig_object.isa);
+  if (ret_addr != 0x0)
+    {
+      return ret_addr;
+    }
 
   if (!target_has_execution)
     {
@@ -4780,7 +4830,7 @@ get_class_address_from_object (CORE_ADDR object_addr)
 	}
       do_cleanups (scheduler_cleanup);
     }
-
+  
   /* If for some reason we couldn't find the class address previously,
      (either we couldn't find a 'class' method, or the call
      didnt'work) we'd better fall back on using the object.isa
@@ -4790,12 +4840,22 @@ get_class_address_from_object (CORE_ADDR object_addr)
       && orig_object.isa != 0)
     ret_addr = orig_object.isa;
 
-  /* One other thing to check for: Sometimes the "object_addr" that
-     gets passed in already IS the real class addr.  In which case we
-     want to return the isa pointer.  */
+  /* One other thing to check for: When we get passed a class object,
+     "[object class]" returns the class object address, not the meta
+     class.  In which case we want to return the isa pointer, that's
+     what we need to call class methods.
+
+     We should probably do this by checking the info field of
+     orig_object.isa to see if it is a meta class.  For now we're just
+     triggering off the fact that the object and its class are
+     returned as the same...  */
 
   if (ret_addr == object_addr)
     ret_addr = orig_object.isa;
+
+  /* If we found a good address for ret_addr, cache it here.  */
+  if (ret_addr != 0)
+    add_real_class_to_cache (orig_object.isa, ret_addr);
 
   return ret_addr;
 }

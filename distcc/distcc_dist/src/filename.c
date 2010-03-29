@@ -1,27 +1,28 @@
-/* -*- c-file-style: "java"; indent-tabs-mode: nil -*- 
+/* -*- c-file-style: "java"; indent-tabs-mode: nil -*-
  *
  * distcc -- A simple distributed compiler system
  *
  * Copyright (C) 2002, 2003, 2004 by Martin Pool
+ * Copyright 2007 Google Inc.
  *
  * This program is free software; you can redistribute it and/or
- * modify it under the terms of the GNU General Public License as
- * published by the Free Software Foundation; either version 2 of the
- * License, or (at your option) any later version.
+ * modify it under the terms of the GNU General Public License
+ * as published by the Free Software Foundation; either version 2
+ * of the License, or (at your option) any later version.
  *
- * This program is distributed in the hope that it will be useful, but
- * WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
- * General Public License for more details.
- * 
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ *
  * You should have received a copy of the GNU General Public License
  * along with this program; if not, write to the Free Software
- * Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA 02111-1307
- * USA
+ * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301,
+ * USA.
  */
 
 
-#include "config.h"
+#include <config.h>
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -34,7 +35,6 @@
 #include "util.h"
 #include "exitcode.h"
 
-#include "cpp_dialect.h"
 
 
 /**
@@ -68,6 +68,24 @@ char * dcc_find_extension(char *sfile)
     return dot;
 }
 
+/**
+ * Return a pointer to the extension, including the dot, or NULL.
+ * Same as dcc_find_extension(), but the argument and return
+ * value are both pointers to const.
+ **/
+const char * dcc_find_extension_const(const char *sfile) {
+#if 0
+  return dcc_find_extension((char *) sfile);
+#else
+  /* The following intermediate variable works around a bug in gcc 4.2.3 where
+   * for the code above gcc spuriously reports "warning: passing argument 1
+   * of 'dcc_find_extension' discards qualifiers from pointer target type",
+   * despite the explicit cast. */
+  char *sfile_nonconst = (char *)sfile;
+  return dcc_find_extension(sfile_nonconst);
+#endif
+}
+
 
 /**
  * Return a pointer to the basename of the file (everything after the
@@ -80,13 +98,30 @@ const char * dcc_find_basename(const char *sfile)
 
     if (!sfile)
         return sfile;
-    
+
     slash = strrchr(sfile, '/');
 
-    if (slash == NULL || slash[1] == '\0') 
+    if (slash == NULL || slash[1] == '\0')
         return sfile;
 
     return slash+1;
+}
+
+/** Truncate the filename to its dirname (everything before the last slash).
+ *  If the filename ends with a slash, just lop off the last slash.
+ *  Note: this is destructive.
+ */
+void dcc_truncate_to_dirname(char *file)
+{
+    char *slash = 0;
+
+    slash = strrchr(file, '/');
+
+    if (slash == NULL) {
+      file[0] = '\0';
+    } else {
+        *slash = '\0';
+    }
 }
 
 
@@ -97,7 +132,11 @@ static int dcc_set_file_extension(const char *sfile,
     char *dot, *o;
 
     o = strdup(sfile);
-    dot = dcc_find_extension((char *) o);
+    if (!o) {
+        rs_log_error("strdup failed (out of memory?)");
+        return EXIT_DISTCC_FAILED;
+    }
+    dot = dcc_find_extension(o);
     if (!dot) {
         rs_log_error("couldn't find extension in \"%s\"", o);
         return EXIT_DISTCC_FAILED;
@@ -115,15 +154,15 @@ static int dcc_set_file_extension(const char *sfile,
 
 /*
  * Apple extensions:
- * file.mm, file.M 
- * Objective-C++ source code which must be preprocessed. (APPLE ONLY) 
+ * file.mm, file.M
+ * Objective-C++ source code which must be preprocessed. (APPLE ONLY)
  *
  * file.mii Objective-C++ source code which should not be
  * preprocessed. (APPLE ONLY)
  *
  * http://developer.apple.com/techpubs/macosx/DeveloperTools/gcc3/gcc/Overall-Options.html
  */
-    
+
 
 
 /**
@@ -139,24 +178,15 @@ const char * dcc_preproc_exten(const char *e)
     if (e[0] != '.')
         return NULL;
     e++;
-    /* Apple Local */
-    if (dcc_seen_opt_x) {
-        return dcc_opt_x_ext;
-    }
-    /* End Apple Local */
-    if (!strcmp(e, "i") || !strcmp(e, "c")) {
+    if (dcc_optx_ext) {
+        return dcc_optx_ext;
+    } else if (!strcmp(e, "i") || !strcmp(e, "c")) {
         return ".i";
     } else if (!strcmp(e, "c") || !strcmp(e, "cc")
                || !strcmp(e, "cpp") || !strcmp(e, "cxx")
                || !strcmp(e, "cp") || !strcmp(e, "c++")
                || !strcmp(e, "C") || !strcmp(e, "ii")) {
         return ".ii";
-    /* Apple Local */
-    } else if (!strcmp(e, "m") || !strcmp(e, "mi")) {
-        return ".mi";
-    } else if (!strcmp(e, "mm") || !strcmp(e, "M") || !strcmp(e, "mii")) {
-        return ".mii";
-    /* End Apple Local */
     } else if(!strcmp(e,"mi") || !strcmp(e, "m")) {
         return ".mi";
     } else if(!strcmp(e,"mii") || !strcmp(e,"mm")
@@ -166,7 +196,7 @@ const char * dcc_preproc_exten(const char *e)
         return ".s";
     } else {
         return NULL;
-    }        
+    }
 }
 
 
@@ -177,7 +207,7 @@ const char * dcc_preproc_exten(const char *e)
 int dcc_is_preprocessed(const char *sfile)
 {
     const char *dot, *ext;
-    dot = dcc_find_extension((char *) sfile);
+    dot = dcc_find_extension_const(sfile);
     if (!dot)
         return 0;
     ext = dot+1;
@@ -206,7 +236,7 @@ int dcc_is_preprocessed(const char *sfile)
 int dcc_is_source(const char *sfile)
 {
     const char *dot, *ext;
-    dot = dcc_find_extension((char *) sfile);
+    dot = dcc_find_extension_const(sfile);
     if (!dot)
         return 0;
     ext = dot+1;
@@ -254,7 +284,7 @@ int dcc_is_source(const char *sfile)
 int dcc_is_object(const char *filename)
 {
     const char *dot;
-    dot = dcc_find_extension((char *) filename);
+    dot = dcc_find_extension_const(filename);
     if (!dot)
         return 0;
 
@@ -277,7 +307,7 @@ dcc_source_needs_local(const char *filename)
 
     return 0;
 }
-    
+
 
 
 /**
@@ -297,7 +327,7 @@ int dcc_output_from_source(const char *sfile,
                            char **ofile)
 {
     char *slash;
-    
+
     if ((slash = strrchr(sfile, '/')))
         sfile = slash+1;
     if (strlen(sfile) < 3) {
@@ -307,4 +337,3 @@ int dcc_output_from_source(const char *sfile,
 
     return dcc_set_file_extension(sfile, out_extn, ofile);
 }
-
