@@ -113,7 +113,8 @@ typedef enum bfd_mach_o_load_command_type
   BFD_MACH_O_LC_LAZY_LOAD_DYLIB = 0x20,  /* delay load of dylib until first use */
   BFD_MACH_O_LC_ENCRYPTION_INFO = 0x21,  /* encrypted segment information */
   BFD_MACH_O_LC_DYLD_INFO = 0x22,        /* compressed dyld information */
-  BFD_MACH_O_LC_DYLD_INFO_ONLY = 0x22 | BFD_MACH_O_LC_REQ_DYLD  /* compressed dyld information only */
+  BFD_MACH_O_LC_DYLD_INFO_ONLY = 0x22 | BFD_MACH_O_LC_REQ_DYLD,  /* compressed dyld information only */
+  BFD_MACH_O_LC_LOAD_UPWARD_DYLIB = 0x23 | BFD_MACH_O_LC_REQ_DYLD /* Same as LC_LOAD_DYLIB */
 }
 bfd_mach_o_load_command_type;
 
@@ -457,7 +458,7 @@ bfd_mach_o_thread_command;
 
 typedef struct bfd_mach_o_dylinker_command
 {
-  unsigned long cmd;                   /* LC_ID_DYLIB or LC_LOAD_DYLIB.  */
+  unsigned long cmd;                   /* LC_ID_DYLIB or LC_LOAD_DYLIB or LC_LOAD_UPWARD_DYLIB  */
   unsigned long cmdsize;               /* Includes pathname string.  */
   unsigned long name_offset;           /* Offset to library's path name.  */
   unsigned long name_len;              /* Offset to library's path name.  */

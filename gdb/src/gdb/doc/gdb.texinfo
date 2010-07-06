@@ -9091,7 +9091,7 @@ clear -[NSWindow makeKeyAndOrderFront:]
 The print command has also been extended to accept methods.  For example:
 
 @smallexample
-print -[@var{object} hash]
+print [@var{object} hash]
 @end smallexample
 
 @cindex @code{_NSPrintForDebugger}, and printing Objective-C objects

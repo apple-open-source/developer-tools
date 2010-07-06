@@ -39,6 +39,7 @@
 #include "gdb_regex.h"
 /* APPLE LOCAL - subroutine inlining  */
 #include "inlining.h"
+#include "objfiles.c"
 
 /* FIXME: There is no general mi header to put this kind of utility function.*/
 extern void mi_report_var_creation (struct ui_out *uiout, struct varobj *var);
@@ -168,6 +169,13 @@ mi_print_frame_info_lite_base (struct ui_out *uiout,
   list_cleanup = make_cleanup_ui_out_tuple_begin_end (uiout, num_buf);
   ui_out_field_core_addr (uiout, "pc", pc);
   ui_out_field_core_addr (uiout, "fp", fp);
+
+  struct obj_section *osect = find_pc_sect_section (pc, NULL);
+  if (osect != NULL && osect->objfile != NULL && osect->objfile->name != NULL)
+      ui_out_field_string (uiout, "shlibname", osect->objfile->name);
+  else 
+      ui_out_field_string (uiout, "shlibname", "<UNKNOWN>");
+
   if (with_names)
     {
       struct minimal_symbol *msym ;

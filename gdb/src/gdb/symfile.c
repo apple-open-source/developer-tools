@@ -2522,7 +2522,7 @@ generic_load (char *args, int from_tty)
     cbdata.load_offset = 0;
 
   /* Open the file for loading. */
-  loadfile_bfd = bfd_openr (filename, gnutarget);
+  loadfile_bfd = bfd_openr (xstrdup (filename), gnutarget);
   if (loadfile_bfd == NULL)
     {
       perror_with_name (filename);
@@ -3204,7 +3204,6 @@ reread_symbols_for_objfile (struct objfile *objfile, long new_modtime,
   /* We need to do this whenever any symbols go away.  */
   make_cleanup (clear_symtab_users_cleanup, 0 /*ignore*/);
 
-
   /* If this objfile has a separate debug objfile, clear it
      out here.  */
   if (objfile->separate_debug_objfile != NULL)
@@ -3232,10 +3231,8 @@ reread_symbols_for_objfile (struct objfile *objfile, long new_modtime,
      ordered_section list.  */
   objfile_delete_from_ordered_sections (objfile);
 
-  /* Clean up any state BFD has sitting around.  We don't need
-     to close the descriptor but BFD lacks a way of closing the
-     BFD without closing the descriptor.  */
-  obfd_filename = bfd_get_filename (objfile->obfd);
+  obfd_filename = xstrdup (bfd_get_filename (objfile->obfd));
+  make_cleanup (xfree, obfd_filename);
 
   /* APPLE LOCAL: Remember to remove its sections from the 
      target "to_sections".  Normally this is done in 
@@ -3250,6 +3247,9 @@ reread_symbols_for_objfile (struct objfile *objfile, long new_modtime,
       update_exec_bfd = 1;
     }
 
+  /* Clean up any state BFD has sitting around.  We don't need
+     to close the descriptor but BFD lacks a way of closing the
+     BFD without closing the descriptor.  */
   if (!bfd_close (objfile->obfd))
     error (_("Can't close BFD for %s: %s"), objfile->name,
 	   bfd_errmsg (bfd_get_error ()));
@@ -3261,7 +3261,7 @@ reread_symbols_for_objfile (struct objfile *objfile, long new_modtime,
       /* if exec_bfd == objfile->obfd, it's already been closed.  */
       if (exec_bfd != objfile->obfd)
         {
-          char *name = bfd_get_filename (exec_bfd);
+          char *name = xstrdup (bfd_get_filename (exec_bfd));
           if (!bfd_close (exec_bfd))
             warning (_("cannot close \"%s\": %s"),
                      name, bfd_errmsg (bfd_get_error ()));
@@ -3272,7 +3272,9 @@ reread_symbols_for_objfile (struct objfile *objfile, long new_modtime,
          bfd or should it just point to the symfile_objfile's obfd?  It
          seems to be its own standalone copy right now so let's open it
          separately. */
-      exec_bfd = bfd_openr (obfd_filename, gnutarget);
+      /* NB: bfd_openr does not retain its own copy of the filename so
+         we need to strdup it here.  */
+      exec_bfd = bfd_openr (xstrdup (obfd_filename), gnutarget);
       if (exec_bfd == NULL)
         error (_("Can't open %s to read symbols."), objfile->name);
 
@@ -3285,7 +3287,9 @@ reread_symbols_for_objfile (struct objfile *objfile, long new_modtime,
         }
     }
 
-  objfile->obfd = bfd_openr (obfd_filename, gnutarget);
+  /* NB: bfd_openr does not retain its own copy of the filename so
+     we need to strdup it here.  */
+  objfile->obfd = bfd_openr (xstrdup (obfd_filename), gnutarget);
   if (objfile->obfd == NULL)
     error (_("Can't open %s to read symbols."), objfile->name);
 
@@ -3399,7 +3403,7 @@ reread_symbols_for_objfile (struct objfile *objfile, long new_modtime,
   memset (objfile->section_offsets, 0, SIZEOF_N_SECTION_OFFSETS (num_offsets));
 
   objfile->num_sections = num_offsets;
-	      init_entry_point_info (objfile);
+  init_entry_point_info (objfile);
 
   objfile_relocate (objfile, offsets);
 
@@ -3437,21 +3441,24 @@ reread_symbols_for_objfile (struct objfile *objfile, long new_modtime,
 
   /* Discard cleanups as symbol reading was successful.  */
   discard_cleanups (old_cleanups);
+  xfree (obfd_filename);
 
   /* If the mtime has changed between the time we set new_modtime
      and now, we *want* this to be out of date, so don't call stat
      again now.  */
   objfile->mtime = new_modtime;
 
-  /* APPLE LOCAL begin breakpoints */
   /* Finally, remember to call breakpoint_re_set with this
      objfile, so it will get on the change list.  */
   breakpoint_re_set (objfile);
-	      /* Also re-initialize the objc trampoline data in case it's the
-		 objc library that's either just been read in or has changed.  */
-	      if (objfile == find_libobjc_objfile ())
-		objc_init_trampoline_observer ();
-  /* APPLE LOCAL end breakpoints */
+  /* Also re-initialize the objc trampoline data in case it's the
+     objc library that's either just been read in or has changed.  */
+  if (objfile == find_libobjc_objfile ())
+    {
+      objc_init_trampoline_observer ();
+      objc_init_runtime_version ();
+    }
+
   return 1;
 }
 

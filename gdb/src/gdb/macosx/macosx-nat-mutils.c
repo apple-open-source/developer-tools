@@ -1057,9 +1057,6 @@ macosx_allocate_space_in_inferior (int len)
   struct cleanup *cleanups;
 
   cleanups = make_cleanup_ui_out_suppress_output (uiout);
-  /* Suppress the debugger mode here since we trust the system malloc
-     will never end up in the ObjC runtime.  */
-  make_cleanup_set_restore_debugger_mode (NULL, -1);
 
   alloc.len = len;
   alloc.addr = 0;
@@ -1909,9 +1906,9 @@ gc_free_data (struct value *addr_val)
 				      builtin_type_void_func_ptr);
   if (free_fn == NULL)
     error ("Couldn't find \"Auto::aux_free\" function in the inferior.\n");
-  make_cleanup_set_restore_debugger_mode (&old_cleanups, -1);
   make_cleanup_set_restore_scheduler_locking_mode 
                       (scheduler_locking_on);
+  make_cleanup_set_restore_debugger_mode (&old_cleanups, 0);
   call_function_by_hand (lookup_cached_function (free_fn), 1, &addr_val);  
   do_cleanups (old_cleanups);
 }
@@ -1966,7 +1963,7 @@ gc_root_tracing_command (char *arg, int from_tty)
   cleanup_chain = make_cleanup_set_restore_unwind_on_signal (1);
   make_cleanup_set_restore_scheduler_locking_mode 
                       (scheduler_locking_on);
-  make_cleanup_set_restore_debugger_mode (NULL, -1);
+  make_cleanup_set_restore_debugger_mode (NULL, 0);
   arg_list[0] 
     = call_function_by_hand (lookup_cached_function (auto_zone_fn), 
 			     0, NULL);
@@ -2083,7 +2080,7 @@ gc_reference_tracing_command (char *arg, int from_tty)
   cleanup_chain = make_cleanup_set_restore_unwind_on_signal (1);
   make_cleanup_set_restore_scheduler_locking_mode 
                       (scheduler_locking_on);
-  make_cleanup_set_restore_debugger_mode (NULL, -1);
+  make_cleanup_set_restore_debugger_mode (NULL, 0);
   arg_list[0] 
     = call_function_by_hand (lookup_cached_function (auto_zone_fn), 
 			     0, NULL);

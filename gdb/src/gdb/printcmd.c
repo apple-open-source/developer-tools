@@ -43,6 +43,7 @@
 #include "gdb_assert.h"
 #include "block.h"
 #include "disasm.h"
+#include "objc-lang.h"
 
 #ifdef TUI
 #include "tui/tui.h"		/* For tui_active et.al.   */
@@ -967,15 +968,29 @@ validate_format (struct format_data fmt, char *cmdname)
    first argument ("/x myvar" for example, to print myvar in hex).
  */
 
+static int print_command_runs_all_threads_p = 1;
+
 static void
 print_command_1 (char *exp, int inspect, int voidprint)
 {
   struct expression *expr;
   struct cleanup *old_chain = 0;
+  struct cleanup *smart_thread_running_cleanup = NULL;
   char format = 0;
   struct value *val;
   struct format_data fmt;
   int cleanup = 0;
+
+  /* We are trying to get the print command to run only the current thread if it has
+     to do an inferior function call.  But sometimes we can detect that that will lead
+     to a deadlock and so we allow all threads to run in that case IF it is safe to do
+     so.  However, don't do this if the user has explicitly said they only want this
+     thread to run, and if they have not explicitly overridden the ObjC runtime checking.  */
+
+  if (print_command_runs_all_threads_p)
+    {
+      target_setup_safe_print (&smart_thread_running_cleanup);
+    }
 
   /* Pass inspect flag to the rest of the print routines in a global (sigh). */
   inspect_it = inspect;
@@ -1038,6 +1053,10 @@ print_command_1 (char *exp, int inspect, int voidprint)
 
   if (cleanup)
     do_cleanups (old_chain);
+
+  if (print_command_runs_all_threads_p)
+    do_cleanups (smart_thread_running_cleanup);
+
   inspect_it = 0;		/* Reset print routines to normal */
 }
 
@@ -1883,6 +1902,7 @@ printf_command (char *arg, int from_tty)
   val_args = (struct value **) xmalloc (allocated_args
 					* sizeof (struct value *));
   old_cleanups = make_cleanup (free_current_contents, &val_args);
+  target_setup_safe_print (NULL);
 
   if (s == 0)
     error_no_arg (_("format-control string and values to print"));
@@ -2450,5 +2470,13 @@ Show the maximum length of characters to print in the symbol name in disassembly
   examine_h_type = init_type (TYPE_CODE_INT, 2, 0, "examine_h_type", NULL);
   examine_w_type = init_type (TYPE_CODE_INT, 4, 0, "examine_w_type", NULL);
   examine_g_type = init_type (TYPE_CODE_INT, 8, 0, "examine_g_type", NULL);
+
+  add_setshow_boolean_cmd ("runs-all-threads", no_class,
+			   &print_command_runs_all_threads_p, _("\
+Set whether the print command allows all threads to run if necessary."), _("\
+Show whether the print command allows all threads to run if necessary."), NULL,
+			   NULL,
+			   NULL,
+			   &setprintlist, &showprintlist);
 
 }

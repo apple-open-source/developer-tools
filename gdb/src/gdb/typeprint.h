@@ -28,4 +28,7 @@ void print_type_scalar (struct type * type, LONGEST, struct ui_file *);
 
 void c_type_print_varspec_suffix (struct type *, struct ui_file *, int,
 				  int, int);
+int set_single_quote_typename (int new_value);
+int get_single_quote_typename ();
+
 #endif

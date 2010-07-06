@@ -1,4 +1,4 @@
-# Developer Tools 3.2.2 GreenGarnet10M2148
+# Developer Tools 3.2.3 YellowGarnet10M2262
 adv_cmds	138.1	Other
 amavisd	114	Other
 apache	746	Other
@@ -42,7 +42,7 @@ bootstrap_cmds	72	Other
 bsdmake	24	Other
 bzip2	20	Other
 CarbonHeaders	18.1	Other
-cctools	773	Other
+cctools	782	Other
 cddafs	240.0.9	Other
 CF	550	Other
 ChatServer	326	Other
@@ -71,7 +71,7 @@ DirectoryService	621	Other
 DiskArbitration	213	Other
 diskdev_cmds	491	Other
 disklabel	2	Other
-distcc	1648	Other
+distcc	1686	Other
 doc_cmds	47	Other
 DSPasswordServerPlugin	281	Other
 DSTools	134	Other
@@ -89,9 +89,9 @@ file_cmds	202.2	Other
 files	553	Other
 flex	24.1	Other
 freeradius	25	Other
-gcc	5659	Other
+gcc	5664	Other
 gcc_select	70	Other
-gdb	1461.2	Other
+gdb	1469	Other
 glibtool	14	Other
 gm4	13	Other
 gnudiff	13	Other
@@ -143,7 +143,7 @@ kext_tools	177	Other
 keymgr	22	Other
 ksh	16.1	Other
 launchd	328	Other
-ld64	97.2	Other
+ld64	97.14	Other
 less	21.3	Other
 Libc	583	Other
 Libcpp_kext	8	Other

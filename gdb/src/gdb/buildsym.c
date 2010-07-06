@@ -676,7 +676,10 @@ start_subfile (char *name, char *dirname)
 
   for (subfile = subfiles; subfile; subfile = subfile->next)
     {
-      if (FILENAME_CMP (subfile->name, name) == 0)
+      if (FILENAME_CMP (subfile->name, name) == 0
+	  && ((subfile->dirname != NULL)
+	      && (dirname != NULL)
+	      && (FILENAME_CMP (subfile->dirname, dirname) == 0)))
 	{
 	  current_subfile = subfile;
 	  return;

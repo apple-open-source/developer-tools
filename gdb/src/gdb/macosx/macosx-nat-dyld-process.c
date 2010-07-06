@@ -222,6 +222,7 @@ dyld_add_image_libraries (struct dyld_objfile_info *info, bfd *abfd)
         case BFD_MACH_O_LC_LOAD_WEAK_DYLIB:
         case BFD_MACH_O_LC_LOAD_DYLINKER:
         case BFD_MACH_O_LC_LOAD_DYLIB:
+        case BFD_MACH_O_LC_LOAD_UPWARD_DYLIB:
           {
 
             struct dyld_objfile_entry *e = NULL;
@@ -254,6 +255,7 @@ dyld_add_image_libraries (struct dyld_objfile_info *info, bfd *abfd)
                   break;
                 }
               case BFD_MACH_O_LC_LOAD_DYLIB:
+              case BFD_MACH_O_LC_LOAD_UPWARD_DYLIB:
               case BFD_MACH_O_LC_LOAD_WEAK_DYLIB:
               case BFD_MACH_O_LC_REEXPORT_DYLIB:
                 {
@@ -265,7 +267,7 @@ dyld_add_image_libraries (struct dyld_objfile_info *info, bfd *abfd)
                   if (bfd_bread (name, dcmd->name_len, abfd) != dcmd->name_len)
                     {
                       warning
-                        ("Unable to find library name for LC_LOAD_DYLIB or LC_LOAD_WEAK_DYLIB or LC_REEXPORT_DYLIB command; ignoring");
+                        ("Unable to find library name for LC_LOAD_DYLIB, LC_LOAD_UPWARD_DYLIB, LC_LOAD_WEAK_DYLIB or LC_REEXPORT_DYLIB command; ignoring");
                       xfree (name);
                       continue;
                     }
@@ -364,6 +366,7 @@ dyld_add_image_libraries (struct dyld_objfile_info *info, bfd *abfd)
                 e->prefix = dyld_symbols_prefix;
                 break;
               case BFD_MACH_O_LC_LOAD_DYLIB:
+              case BFD_MACH_O_LC_LOAD_UPWARD_DYLIB:
               case BFD_MACH_O_LC_REEXPORT_DYLIB:
                 break;
               case BFD_MACH_O_LC_LOAD_WEAK_DYLIB:
@@ -1451,10 +1454,14 @@ dyld_symfile_loaded_hook (struct objfile *o)
 {
 
   /* I have to do this here as well as in macosx_dyld_update or 
-     this won't get re-initialized if you originally saw /usr/lib/libobjc.A.dylib,
-     THEN set DYLD_LIBRARY_PATH to point to an independent copy, and THEN reran...  */
+     this won't get re-initialized if you originally saw 
+     /usr/lib/libobjc.A.dylib, THEN set DYLD_LIBRARY_PATH to point to an 
+     independent copy, and THEN reran...  */
   if (o == find_libobjc_objfile ())
-    objc_init_trampoline_observer ();
+    {
+      objc_init_trampoline_observer ();
+      objc_init_runtime_version ();
+    }
 }
 
 /* dyld_slide_objfile applies the slide in NEW_OFFSETS, or in

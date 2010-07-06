@@ -480,8 +480,8 @@ hand_function_call (struct value *function, struct type *expect_type,
      the runtime, we added a gdb mode where hand_function_call ALWAYS checks
      whether the runtime is going to be a problem.  */
 
-  runtime_check_level = get_objc_runtime_check_level ();
-  if (runtime_check_level >= 0)
+  runtime_check_level = objc_runtime_check_enabled_p ();
+  if (runtime_check_level)
     {
       enum objc_debugger_mode_result retval;
       retval = make_cleanup_set_restore_debugger_mode (&runtime_cleanup, 
@@ -491,19 +491,25 @@ hand_function_call (struct value *function, struct type *expect_type,
           retval = objc_debugger_mode_success;
 
       if (retval != objc_debugger_mode_success)
-        {
-	  if  (retval == objc_debugger_mode_fail_spinlock_held
-                   || retval == objc_debugger_mode_fail_malloc_lock_held)
-	    error ("Cancelling call as the malloc lock is held so it isn't safe to call the runtime.\n"
-	         "Issue the command:\n"
-                 "    set objc-non-blocking-mode off \n"
-                 "to override this check if you are sure your call doesn't use the malloc libraries or the ObjC runtime.");
-
-         else
-	    error ("Cancelling call as the ObjC runtime would deadlock.\n"
-	         "Issue the command:\n"
-                 "    set objc-non-blocking-mode off \n"
-	         "to override this check if you are sure your call doesn't use the ObjC runtime.");
+	{
+          if  (retval == objc_debugger_mode_fail_spinlock_held
+               || retval == objc_debugger_mode_fail_malloc_lock_held)
+            if (ui_out_is_mi_like_p (uiout))
+              error ("");
+            else
+              error ("Canceling call as the malloc lock is held so it isn't safe to call the runtime.\n"
+                     "Issue the command:\n"
+                     "    set objc-non-blocking-mode off \n"
+                     "to override this check if you are sure your call doesn't use the malloc libraries or the ObjC runtime.");
+          
+          else
+            if (ui_out_is_mi_like_p (uiout))
+              error ("");
+            else
+              error ("Canceling call as the ObjC runtime would deadlock.\n"
+                     "Issue the command:\n"
+                     "    set objc-non-blocking-mode off \n"
+                     "to override this check if you are sure your call doesn't use the ObjC runtime.");
         }
     }
   else
@@ -930,6 +936,10 @@ You must use a pointer to function type variable. Command ignored."), arg_name);
     if (hand_call_function_hook != NULL)
       hand_call_function_hook ();
 
+    static int hand_call_function_timer = -1;
+    struct cleanup *hand_call_cleanup = 
+      start_timer (&hand_call_function_timer, "hand-call", "Starting hand-call");
+  
     if (target_can_async_p ())
       saved_async = target_async_mask (0);
     
@@ -964,14 +974,16 @@ You must use a pointer to function type variable. Command ignored."), arg_name);
 	signal (SIGALRM, SIG_DFL);
 	
 	if (e.reason != NO_ERROR)
-	  throw_exception (e);
-	
+            throw_exception (e);
       }
     else
       {
 	timer_fired  = 0;
 	proceed (real_pc, TARGET_SIGNAL_0, 0);
       }
+
+    /* Report out the timer: */
+    do_cleanups(hand_call_cleanup);
 
     hand_call_ptid = minus_one_ptid;
 

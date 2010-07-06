@@ -1,3 +1,37 @@
+2010-04-02 Fariborz Jahanian <fjahanian@apple.com>
+
+	Radar 7591784
+	* obj-c++.dg/property-getter-codegen.mm: Modified.
+
+2010-03-18  Jim Grosbach <grosbach@apple.com>
+
+        Radar 6671703
+	* objc.dg/arm-scalar-atomic-copyStruct.m: New.
+
+2010-03-18  Stuart Hastings  <stuart@apple.com>
+
+        Radar 7763139
+        * gcc.apple/asm-block-68.c: New.
+
+2010-03-16  Fariborz Jahanian <fjahanian@apple.com>
+
+	Radar 7760213
+	* gcc.apple/block-dynamic-array.c: Modified.
+	* g++.apple/block-dynamic-array.C: Modified.
+
+2010-03-12  Fariborz Jahanian <fjahanian@apple.com>
+
+	Radar 7735196
+	* gcc.apple/block-objectassign.c: Modified.
+	* g++.apple/block-objectassign.C: Modified.
+	* gcc.apple/block-struct-return.c: New
+
+2010-03-05  Fariborz Jahanian <fjahanian@apple.com>
+
+	Radar 7721728
+	* gcc.apple/block-dynamic-array.c: Modified.
+	* g++.apple/block-dynamic-array.C: Modified.
+
 2009-11-03  Stuart Hastings  <stuart@apple.com>
 
 	Radar 6951876

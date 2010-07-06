@@ -78,6 +78,7 @@ extern int lookup_objc_class_p;
 
 extern int objc_handle_update (CORE_ADDR stop_addr);
 void objc_init_trampoline_observer ();
+void objc_init_runtime_version ();
 int pc_in_objc_trampoline_p (CORE_ADDR pc, uint32_t *flags);
 
 void objc_invalidate_objc_class (struct type *type);
@@ -107,5 +108,11 @@ enum objc_handcall_fail_reasons
 enum objc_handcall_fail_reasons objc_pc_at_fail_point (CORE_ADDR pc);
 struct cleanup *make_cleanup_init_objc_exception_catcher (void);
 void reinitialize_objc ();
-int get_objc_runtime_check_level ();
+int objc_runtime_check_enabled_p ();
+
+/* Are we using the ObjC 2.0 runtime?  */
+int new_objc_runtime_internals ();
+
+/* This it the ObjC "make printing safe for ObjC" method. */
+int objc_setup_safe_print (struct cleanup **);
 #endif

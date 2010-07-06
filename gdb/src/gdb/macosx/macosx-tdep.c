@@ -1738,63 +1738,71 @@ fast_show_stack_trace_prologue (unsigned int count_limit,
     {
       char *name;
       struct minimal_symbol *msymbol;
-      struct objfile *libsystem_objfile;
+      struct objfile *ofile;
+      struct objfile *temp;
 
-      /* Grab the libSystem objfile.  */
-      libsystem_objfile = find_objfile_by_name ("libSystem.B.dylib", 0);
+      /* Some environments use a "shim" libSystem that patches some functions.
+         So we need to search all libraries calling themselves libSystem for the
+         sigtramp function.  I am still going to assume that only one of them
+         actually implements sigtramp, however.  If that ever changes, we'll have to
+         revise this...  */
 
-      /* APPLE LOCAL - Check to see if the libSystem objfile has a
-	 separate debug info objfile */
-      if (libsystem_objfile) 
-	{
-	  if (libsystem_objfile->msymbols == NULL
-	      && libsystem_objfile->separate_debug_objfile_backlink)
-	    libsystem_objfile = libsystem_objfile->separate_debug_objfile_backlink;
-	  
-	  /* If libSystem isn't loaded yet, NULL it out so we don't look up 
-	     and cache incorrect un-slid or faux-slid address values.  */
-	  if (!target_check_is_objfile_loaded (libsystem_objfile))
-	    libsystem_objfile = NULL;
-	}
-
-      /* If we have libSystem and it was loaded we should lookup sigtramp.  */
-      if (libsystem_objfile)
-	{
-	  /* Raise the load level and lookup the sigtramp symbol.  */
-	  objfile_set_load_state (libsystem_objfile, OBJF_SYM_ALL, 1);
-	  msymbol = lookup_minimal_symbol ("_sigtramp", NULL, libsystem_objfile);
-	}
-      else
-	{
-	  /* We either don't have libSystem, or it isn't loaded yet. Lets not
-	     do anything WRT sigtramp yet.  */
-	  msymbol = NULL;
-	}
-      
-      if (msymbol == NULL)
-	{
-	  /* Only warn if we found libSystem and it was loaded.  */
-	  if (libsystem_objfile != NULL)
-	    warning ("Couldn't find minimal symbol for \"_sigtramp\" - "
-		     "backtraces may be unreliable");
-	}
-      else
+      ALL_OBJFILES_SAFE (ofile, temp)
         {
-	  /* Shared libraries must be loaded for the code below to work since
-	     we are getting the MSYMBOL value, then using that to look the
-	     sigtramp range. If shared libraries aren't loaded, we could end
-	     up getting and un-slid or faux-slid value that we will then try
-	     and get the function bounds for which could return us the range
-	     for a totally different function.  */
-          pc = SYMBOL_VALUE_ADDRESS (msymbol);
-          if (find_pc_partial_function (pc, &name, sigtramp_start_ptr, 
-					sigtramp_end_ptr) == 0)
+          enum objfile_matches_name_return r;
+          struct objfile *libsystem_objfile = NULL;
+
+          r = objfile_matches_name (ofile, "libSystem.B.dylib");
+          if (r != objfile_match_base)
+            continue;
+
+          /* APPLE LOCAL - Check to see if the libSystem objfile has a
+             separate debug info objfile */
+          if (ofile->msymbols == NULL
+              && ofile->separate_debug_objfile_backlink)
+            libsystem_objfile = ofile->separate_debug_objfile_backlink;
+          else
+            libsystem_objfile = ofile;
+
+          /* If libSystem isn't loaded yet, NULL it out so we don't look up 
+             and cache incorrect un-slid or faux-slid address values.  */
+          if (!target_check_is_objfile_loaded (libsystem_objfile))
+            continue;
+      
+          /* If we have libSystem and it was loaded we should lookup sigtramp.  */
+          /* Raise the load level and lookup the sigtramp symbol.  */
+          objfile_set_load_state (libsystem_objfile, OBJF_SYM_ALL, 1);
+          msymbol = lookup_minimal_symbol ("_sigtramp", NULL, libsystem_objfile);
+
+          if (msymbol != NULL)
             {
-              warning
-		("Couldn't find minimal bounds for \"_sigtramp\" - "
-		 "backtraces may be unreliable");
-	      *sigtramp_start_ptr = (CORE_ADDR) -1;
-	      *sigtramp_end_ptr = (CORE_ADDR) -1;
+              /* Shared libraries must be loaded for the code below to work since
+                 we are getting the MSYMBOL value, then using that to look the
+                 sigtramp range. If shared libraries aren't loaded, we could end
+                 up getting and un-slid or faux-slid value that we will then try
+                 and get the function bounds for which could return us the range
+                 for a totally different function.  */
+              pc = SYMBOL_VALUE_ADDRESS (msymbol);
+
+              /* Warn if this is the second sigtramp we've found.  */
+              if (*sigtramp_start_ptr != 0 && *sigtramp_start_ptr != (CORE_ADDR) -1)
+                {
+                  warning ("Found two versions of sigtramp, one at 0x%s and one at 0x%s."
+                           "  Using the latter.",
+                           paddr_nz (*sigtramp_start_ptr), paddr_nz (pc));
+                }
+
+              if (find_pc_partial_function (pc, &name, sigtramp_start_ptr, 
+                                            sigtramp_end_ptr) == 0)
+                {
+                  warning
+                    ("Couldn't find minimal bounds for \"_sigtramp\" - "
+                     "backtraces may be unreliable");
+                  *sigtramp_start_ptr = (CORE_ADDR) -1;
+                  *sigtramp_end_ptr = (CORE_ADDR) -1;
+                }
+              else
+                  break;
             }
         }
     }

@@ -1,3 +1,114 @@
+2010-04-19  Greg Clayton  (gclayton@apple.com)
+
+	* arm-macosx-thread-status.h (struct gdb_arm_thread_vfpv1_state):
+	Added padding so we don't miss FPSCR on armv6.
+
+2010-04-01  Jason Molenda  (jmolenda@apple.com)
+
+	* macosx-nat-inferior.c (macosx_get_thread_name): If the thread
+	has no name set (from pthread_setname_np), check to see if libdispatch
+	has a queue name for this thread in case it is a GCD worker thread;
+	use that name if so.
+	* macosx-nat-infthread.c (get_dispatch_queue_name): Change linkage from
+	static to external.
+	* macosx-nat-infthread.h (get_dispatch_queue_name): Prototype added.
+
+2010-03-25  Jason Molenda  (jmolenda@apple.com)
+
+	* macosx-nat-dyld.c (macosx_dyld_update): Call 
+	objc_init_runtime_version().
+	* macosx-nat-dyld-process.c (dyld_symfile_loaded_hook): Ditto.
+
+2010-03-25  Jason Molenda  (jmolenda@apple.com)
+
+	* macosx-nat-infthread.c (get_dispatch_queue_addr): New function to get
+	the dispatch queue structure address to help identify different
+	dispatch queues.
+	(macosx_print_thread_details): Report the dispatch workqueue struct
+	address in the MI output.
+
+2010-03-23  Jason Molenda  (jmolenda@apple.com)
+
+	* macosx-nat-mutils.c (macosx_task_valid): Remove debug printf.
+
+2010-03-22  Jason Molenda  (jmolenda@apple.com)
+
+	* macosx-nat-mutils.c (macosx_task_valid): Add a temporary debug
+	printf so we can track down what's happening on a remote system.
+
+2010-03-17  Jim Ingham  <jingham@apple.com>
+
+	* remote-kdp.c (kdp_reboot_command): Change the command so that it only 
+	will reboot an already connected machine (but at least it will do 
+	that...)
+	* kdp-transactions.c (kdp_hostreboot): Assume that we are disconnected 
+	after we send the hostreboot packet.
+	
+2010-03-03  Jim Ingham  <jingham@apple.com>
+
+	* macosx-nat-utils.c (macosx_load_dylib): Setup debugger mode before 
+	calling value_string - since that too will call into the target.
+	
+2010-03-03  Jason Molenda  (jmolenda@apple.com)
+
+	* macosx-nat-infthread.c (print_thread_info): Display user time
+	and system time in base 10, not base 16.
+
+2010-03-02  Jim Ingham  <jingham@apple.com>
+
+	* macosx-nat-utils.c (maocsx_check_malloc_is_unsafe): Adopt new
+	meaning of "level" in make_cleanup_set_restore_debugger_mode.
+	(macosx_check_safe_call): CHECK_CURRENT_THREAD and CHECK_SCEDULER_VALUE
+	with the scheduler off are the same.
+	Also when checking ObjC in the new runtime on the current thread,
+	bail if any functions are in libobjc.
+	(macosx_load_dylib): Adopt new meaning of "level" in 
+	make_cleanup_set_restore_debugger_mode.
+	macosx-nat-mutils.c (macosx_allocate_space_in_inferior): Don't override
+	objc check.
+	(gc_free_data, gc_root_tracing_command, gc_reference_tracing_command): 
+	Adopt new meaning of "level" in make_cleanup_set_restore_debugger_mode.
+	macosx-nat-inferior.c (_initialize_macosx_inferior): Add 
+	objc_setup_safe_print to the macosx-child target vector.
+	
+2010-02-18  Jim Ingham  <jingham@apple.com>
+
+	* macosx-nat-dyld-process.c (dyld_add_image_libraries): The new
+	load command LC_LOAD_UPWARD_DYLIB is equivalent to LC_LOAD_DYLIB.
+	
+	* macosx-tdep.c (fast_show_stack_trace_prologue): Initialize the
+	libsystem_objfile.
+
+	* macosx-nat-dyld-path.c (dyld_resolve_path): dyld gives 
+	DYLD_FRAMEWORK_PATH priority over @executable_path so we should
+	too.
+	
+2010-02-09  Jim Ingham  <jingham@apple.com>
+
+	* machoread.c (macho_symfile_read): Clean up the minimal
+	symbol collection after installing it, otherwise you leak that
+	memory.
+	
+	* macosx-nat-inferior.c (macosx_kill_inferior): Keep fielding
+	events after sending the PT_KILL, sometimes we get a SIGKILL
+	soft signal before the target actually dies.
+
+2010-02-08  Jim Ingham  <jingham@apple.com>
+
+	* macosx-tdep.c (fast_show_stack_trace_prologue): Scan ALL the 
+	libSystems for the one that has _sigtramp.
+	
+2010-02-03  Greg Clayton  (gclayton@apple.com)
+
+	* i386-macosx-tdep.c (i386_fast_show_stack): Fixed an issue where
+	stack frames could get truncated to 5 frames if we couldn't resolve
+	_sigtramp.
+
+2010-01-21  Jason Molenda  (jmolenda@apple.com)
+
+	* macosx-nat-dyld.c (dyld_read_raw_infos): Fix offset of
+	dyldImageLoadAddress.
+
 2009-12-04  Jason Molenda  (jmolenda@apple.com)
 
         * macosx-nat-dyld.c (macosx_dyld_init): Verify that dyld is at the

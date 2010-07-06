@@ -12692,10 +12692,12 @@ gen_subprogram_die (tree decl, dw_die_ref context_die)
   /* APPLE LOCAL end radar 2338865 optimization notification  */
   /* APPLE LOCAL begin differentiate between arm & thumb.  */
 #ifdef TARGET_ARM
+  /* APPLE LOCAL begin 7581650 DW_AT_APPLE_isa should use data1 encoding */
   if (TARGET_THUMB)
-    add_AT_int (subr_die, DW_AT_APPLE_isa, DW_ISA_ARM_thumb);
+    add_AT_unsigned (subr_die, DW_AT_APPLE_isa, DW_ISA_ARM_thumb);
   else if (TARGET_ARM)
-    add_AT_int  (subr_die, DW_AT_APPLE_isa, DW_ISA_ARM_arm);
+    add_AT_unsigned (subr_die, DW_AT_APPLE_isa, DW_ISA_ARM_arm);
+  /* APPLE LOCAL end 7581650 DW_AT_APPLE_isa should use data1 encoding */
 #endif
   /* APPLE LOCAL end differentiate between arm & thumb.  */
   /* APPLE LOCAL confused diff */

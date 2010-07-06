@@ -903,6 +903,7 @@ bfd_mach_o_write_contents (bfd *abfd)
 	case BFD_MACH_O_LC_PREPAGE:
 	case BFD_MACH_O_LC_DYSYMTAB:
 	case BFD_MACH_O_LC_LOAD_DYLIB:
+        case BFD_MACH_O_LC_LOAD_UPWARD_DYLIB:
 	case BFD_MACH_O_LC_LOAD_WEAK_DYLIB:
 	case BFD_MACH_O_LC_REEXPORT_DYLIB:
 	case BFD_MACH_O_LC_ID_DYLIB:
@@ -1565,6 +1566,7 @@ bfd_mach_o_scan_read_dylib (bfd *abfd, bfd_mach_o_load_command *command)
 
   BFD_ASSERT ((command->type == BFD_MACH_O_LC_ID_DYLIB)
 	      || (command->type == BFD_MACH_O_LC_LOAD_DYLIB)
+	      || (command->type == BFD_MACH_O_LC_LOAD_UPWARD_DYLIB)
 	      || (command->type == BFD_MACH_O_LC_REEXPORT_DYLIB)
 	      || (command->type == BFD_MACH_O_LC_LOAD_WEAK_DYLIB));
 
@@ -1582,6 +1584,8 @@ bfd_mach_o_scan_read_dylib (bfd *abfd, bfd_mach_o_load_command *command)
 
   if (command->type == BFD_MACH_O_LC_LOAD_DYLIB)
     prefix = "LC_LOAD_DYLIB";
+  else if (command->type == BFD_MACH_O_LC_LOAD_UPWARD_DYLIB)
+    prefix = "LC_LOAD_UPWARD_DYLIB";
   else if (command->type == BFD_MACH_O_LC_LOAD_WEAK_DYLIB)
     prefix = "LC_LOAD_WEAK_DYLIB";
   else if (command->type == BFD_MACH_O_LC_REEXPORT_DYLIB)
@@ -2108,6 +2112,7 @@ bfd_mach_o_scan_read_command (bfd *abfd, bfd_mach_o_load_command *command)
 	return -1;
       break;
     case BFD_MACH_O_LC_LOAD_DYLIB:
+    case BFD_MACH_O_LC_LOAD_UPWARD_DYLIB:
     case BFD_MACH_O_LC_ID_DYLIB:
     case BFD_MACH_O_LC_LOAD_WEAK_DYLIB:
     case BFD_MACH_O_LC_REEXPORT_DYLIB:

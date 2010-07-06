@@ -1063,6 +1063,8 @@ char *
 language_class_name_from_physname (const struct language_defn *current_language,
 				   const char *physname)
 {
+  if (physname == NULL)
+    return NULL;
   if (current_language != NULL && current_language->la_class_name_from_physname)
     return current_language->la_class_name_from_physname (physname);
   return NULL;

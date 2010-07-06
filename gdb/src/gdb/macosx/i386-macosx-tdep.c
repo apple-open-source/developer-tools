@@ -675,12 +675,13 @@ i386_fast_show_stack (unsigned int count_limit, unsigned int print_limit,
      "fp" to get an actual EBP value for walking the stack.  */
 
   fp = get_frame_base (fi);
+  pc = get_frame_pc (fi);
   prev_fp = fp;             /* Start with a reasonable default value.  */
   fp = fp - 2 * wordsize;
   prev_fp = prev_fp - 2 * wordsize;
   while (1)
     {
-      if ((sigtramp_start <= pc) && (pc <= sigtramp_end))
+      if ((sigtramp_start <= pc) && (pc < sigtramp_end))
         {
           CORE_ADDR thread_state_at = 
                     i386_macosx_thread_state_addr_1 (sigtramp_start, pc, 

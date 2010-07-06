@@ -2059,7 +2059,7 @@ static int
 macosx_kill_inferior (void *arg)
 {
   kern_return_t *errval = (kern_return_t *) arg;
-  int status;
+  struct target_waitstatus wait_status;
 
   CHECK_FATAL (macosx_status != NULL);
   *errval = KERN_SUCCESS;
@@ -2109,13 +2109,57 @@ macosx_kill_inferior (void *arg)
       return 1;
     }
 
+  remove_breakpoints ();
   macosx_inferior_resume_mach (macosx_status, -1);
-  sched_yield ();
 
-  wait (&status);
+  inferior_debug (2, "Sent PT_KILL, resumed target, start to wait for it to die.\n");
 
+  while (1)
+    {
+      int signo;
+      struct gdb_exception e;
+      ptid_t stopped_ptid;
+
+      sched_yield ();
+      
+      wait_status.kind = TARGET_WAITKIND_SPURIOUS;
+
+      stopped_ptid = macosx_wait (macosx_status, &wait_status, NULL);
+
+      if (wait_status.kind == TARGET_WAITKIND_EXITED)
+	{
+	  inferior_debug (2, "Process exited.\n");
+	  break;
+	}
+      else if (wait_status.kind == TARGET_WAITKIND_SIGNALLED)
+	{
+	  inferior_debug (2, "Process signalled - signo: %d\n", wait_status.value.sig);
+	  break;
+	}
+      else if (wait_status.kind == TARGET_WAITKIND_STOPPED)
+	{
+	  inferior_debug (2, "Process stopped - signo: %d\n", wait_status.value.sig);
+	  signo = wait_status.value.sig;
+	}
+      else 
+	{
+	  inferior_debug (2, "Process stopped - reason: %d", wait_status.kind);
+	  signo = 0;
+	}
+      
+      TRY_CATCH (e, RETURN_MASK_ERROR)
+	{
+	  macosx_child_resume (stopped_ptid, 0, signo);
+	}
+      if (e.reason == RETURN_ERROR)
+	{
+	  warning ("Got an error resuming target to kill it: %s.", e.message);
+	  break;
+	}
+    }
+
+  target_executing = 0;
   target_mourn_inferior ();
-
   return 1;
 }
 
@@ -2641,7 +2685,6 @@ macosx_get_thread_name (ptid_t ptid)
   if (tp->private == NULL || tp->private->app_thread_port == 0)
     return NULL;
 
-#ifdef HAVE_THREAD_IDENTIFIER_INFO_DATA_T
   thread_identifier_info_data_t tident;
   unsigned int info_count;
   kern_return_t kret;
@@ -2654,10 +2697,21 @@ macosx_get_thread_name (ptid_t ptid)
   MACH_CHECK_ERROR (kret);
   retval = proc_pidinfo (pid, PROC_PIDTHREADINFO, tident.thread_handle,
                          &pth, sizeof (pth));
-  if (retval != 0 && pth.pth_name[0] != '\0')
-    strlcpy (buf, pth.pth_name, sizeof (buf));
-#endif
-
+  if (retval != 0 && pth.pth_name[0] != '\0') 
+    {
+      strlcpy (buf, pth.pth_name, sizeof (buf));
+    } 
+  else 
+    {
+      if (tident.thread_handle) 
+        {
+          char *queue_name = get_dispatch_queue_name (tident.dispatch_qaddr);
+          if (queue_name && queue_name[0] != '\0')
+            {
+              strlcpy (buf, queue_name, sizeof (buf));
+            }
+        }
+    }
   return buf;
 }
 
@@ -3167,6 +3221,7 @@ _initialize_macosx_inferior ()
   macosx_child_ops.to_async_mask_value = 1;
   macosx_child_ops.to_bind_function = dyld_lookup_and_bind_function;
   macosx_child_ops.to_check_safe_call = macosx_check_safe_call;
+  macosx_child_ops.to_setup_safe_print = objc_setup_safe_print;
   macosx_child_ops.to_allocate_memory = macosx_allocate_space_in_inferior;
   macosx_child_ops.to_check_is_objfile_loaded = dyld_is_objfile_loaded;
 #if defined (TARGET_ARM)

@@ -8798,12 +8798,13 @@
    (set_attr "predicable" "yes")]
 )
 
-(define_insn "*call_mem"
+;; APPLE LOCAL begin 7649286 always use blx for indirect call when available
+(define_insn "*call_mem_v4"
   [(call (mem:SI (match_operand:SI 0 "call_memory_operand" "m"))
 	 (match_operand 1 "" ""))
    (use (match_operand 2 "" ""))
    (clobber (reg:SI LR_REGNUM))]
-  "TARGET_ARM"
+  "TARGET_ARM && !arm_arch5"
   "*
   return output_call_mem (operands);
   "
@@ -8811,6 +8812,7 @@
    (set_attr "type" "call")
    (set_attr "predicable" "yes")]
 )
+;; APPLE LOCAL end 7649286 always use blx for indirect call when available
 
 ;; APPLE LOCAL v7 support. Merge from mainline
 (define_insn "*call_reg_thumb1_v5"
@@ -8908,13 +8910,14 @@
    (set_attr "predicable" "yes")]
 )
 
-(define_insn "*call_value_mem"
+;; APPLE LOCAL begin 7649286 always use blx for indirect call when available
+(define_insn "*call_value_mem_v4"
   [(set (match_operand 0 "" "")
 	(call (mem:SI (match_operand:SI 1 "call_memory_operand" "m"))
 	      (match_operand 2 "" "")))
    (use (match_operand 3 "" ""))
    (clobber (reg:SI LR_REGNUM))]
-  "TARGET_ARM && (!CONSTANT_ADDRESS_P (XEXP (operands[1], 0)))"
+  "TARGET_ARM && (!CONSTANT_ADDRESS_P (XEXP (operands[1], 0))) && !arm_arch5"
   "*
   return output_call_mem (&operands[1]);
   "
@@ -8922,6 +8925,7 @@
    (set_attr "type" "call")
    (set_attr "predicable" "yes")]
 )
+;; APPLE LOCAL end 7649286 always use blx for indirect call when available
 
 ;; APPLE LOCAL v7 support. Merge from mainline
 (define_insn "*call_value_reg_thumb1_v5"

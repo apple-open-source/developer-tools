@@ -1,4 +1,10 @@
-2008-07-01  Greg Clayton  <gclayton@apple.com>
+2010-02-18  Jim Ingham  <jingham@apple.com>
+
+	* mach-o.h: New load command LC_LOAD_UPWARD_DYLIB.
+	* mach-o.h (bfd_mach_o_scan_read_dylib, bfd_mach_o_write_contents):
+	LC_LOAD_UPWARD_DYLIB is the equivalent to  LC_LOAD_DYLIB.
+	
+2009-07-01  Greg Clayton  <gclayton@apple.com>
 
 	* archures.c: Added bfd_mach_arm_7.
 	* bfd-in2.h: Ditto.

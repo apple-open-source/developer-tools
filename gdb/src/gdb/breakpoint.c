@@ -5502,12 +5502,12 @@ set_longjmp_resume_breakpoint (CORE_ADDR pc, struct frame_id frame_id)
    won't be hit while in the middle of updating data formatters. 
 
    Always call this function through
-   "make_cleanup_enable_disable_bpts_during_varobj_operation" (see
+   "make_cleanup_enable_disable_bpts_during_operation" (see
    below) to make sure we don't leave the breakpoints permanently
    disabled by accident.  */
 
 static void
-disable_user_breakpoints_before_updating_data_formatters (void)
+disable_user_breakpoints_before_operation (void)
 {
   struct breakpoint *b;
 
@@ -5531,12 +5531,12 @@ disable_user_breakpoints_before_updating_data_formatters (void)
    while data formatters were being updated. 
 
    Always call this function through
-   "make_cleanup_enable_disable_bpts_during_varobj_operation" (see
+   "make_cleanup_enable_disable_bpts_during_operation" (see
    below) to make sure we don't leave the breakpoints permanently
    disabled by accident.  */
 
 void
-enable_user_breakpoints_after_updating_data_formatters (void)
+enable_user_breakpoints_after_operation (void)
 {
   struct breakpoint *b;
 
@@ -5554,10 +5554,10 @@ enable_user_breakpoints_after_updating_data_formatters (void)
    them for updating data formatters, and other varobj operations.  */
 
 struct cleanup *
-make_cleanup_enable_disable_bpts_during_varobj_operation (void)
+make_cleanup_enable_disable_bpts_during_operation (void)
 {
-  disable_user_breakpoints_before_updating_data_formatters ();
-  return make_cleanup (enable_user_breakpoints_after_updating_data_formatters,
+  disable_user_breakpoints_before_operation ();
+  return make_cleanup (enable_user_breakpoints_after_operation,
 		       NULL);
 }
 /* APPLE LOCAL end:  Disable user breakpoints while updating data
@@ -7443,7 +7443,7 @@ watch_command_1 (char *arg, int accessflag, int by_location, int from_tty)
     {
       struct value *orig_val;
       char *addr_str, *type_str, *tmp_str;
-      
+
       exp_start = arg;
       exp = parse_exp_1 (&arg, 0, 0);
       exp_end = arg;
@@ -7452,7 +7452,10 @@ watch_command_1 (char *arg, int accessflag, int by_location, int from_tty)
       if (value_lazy (orig_val))
 	value_fetch_lazy (orig_val);
       orig_val = value_addr (orig_val);
-      type_str = type_sprint (value_type (orig_val), "", -1);
+
+      /* APPLE LOCAL: Be sure to use type_sprint_quoted here, since this type name is
+         going into an expression that has to make it back through gdb's expression parser...  */
+      type_str = type_sprint_quoted (value_type (orig_val), "", -1);
 
       /* This is kind of grotty, but we need to change the expression 
 	 over so that we don't try to reset the watchpoint using the
@@ -10649,7 +10652,9 @@ tell_breakpoints_objfile_changed_internal (struct objfile *objfile,
                      breakpoints, this assures that once we've resolved to one
                      objfile's symbol, we re-insert this copy of the breakpoint
                      on just that objfile's symbol.  */
-                  if (b->bp_objfile->name)
+                  /* But don't do this if the library already has a requested_shlib,
+                     since that is presumably correct.  */
+                  if (!b->requested_shlib && b->bp_objfile->name)
                     {
                       /* Try to lose the full pathname; we may be dropping
                          the binary from one file path and re-adding it via

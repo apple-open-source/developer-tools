@@ -1197,7 +1197,7 @@ objc_add_property_variable (tree decl)
     }
   if (objc_implementation_context)
     {
-      error ("property cannot be declared inside @implemenation context");
+      error ("property cannot be declared inside @implementation context");
       return;
     }
   else if (!objc_interface_context)
@@ -1906,7 +1906,22 @@ objc_build_compound_setter_call (tree receiver, tree prop_ident, tree rhs)
       bind = build3 (BIND_EXPR, void_type_node, temp, NULL, NULL);
       TREE_SIDE_EFFECTS (bind) = 1;
       add_stmt (bind);
+      /* APPLE LOCAL begin radar 7591784 */
+#ifdef OBJCPLUS
+      {
+	tree type = TREE_TYPE (rhs);
+	if (TYPE_NEEDS_CONSTRUCTING (type))
+          {
+	    comma_exp = temp;
+	    error("setting a C++ non-POD object value is not implemented - assign the value to a temporary and use the temporary.");
+	  }
+	else
+      	  comma_exp = build_modify_expr (temp, NOP_EXPR, rhs);
+      }
+#else
       comma_exp = build_modify_expr (temp, NOP_EXPR, rhs);
+#endif
+      /* APPLE LOCAL end radar 7591784 */
       comma_exp = build_compound_expr (comma_exp,
 		    objc_setter_func_call (receiver, prop_ident, temp));
       /* APPLE LOCAL begin radar 6264448 */
@@ -9932,7 +9947,7 @@ build_v2_category_template (void)
 }
 
 
-/* Build following types which represent each class implemenation.
+/* Build following types which represent each class implementation.
 
   struct class_t {
     struct class_t *isa;
@@ -16151,13 +16166,21 @@ objc_synthesize_new_getter (tree class, tree class_method, tree property)
         /* APPLE LOCAL end radar 5376125 */
 
 	/* Handle struct-valued functions */
-	if ((TREE_CODE (ret_type) == RECORD_TYPE || TREE_CODE (ret_type) == UNION_TYPE)
+        /* APPLE LOCAL begin 6671703 ARM 64-bit atomic properties */
+        if (
+#ifdef TARGET_ARM
+          (IS_ATOMIC (property)
+           && TREE_INT_CST_LOW (TYPE_SIZE_UNIT (ret_type)) > 4) ||
+#endif
+          ((TREE_CODE (ret_type) == RECORD_TYPE
+            || TREE_CODE (ret_type) == UNION_TYPE)
             /* APPLE LOCAL radar 5080710 */
             && (TREE_ADDRESSABLE (ret_type) || targetm.calls.return_in_memory  (ret_type, 0))
-	    && (IS_ATOMIC (property) || 
-		(isStrong = ((flag_objc_gc || flag_objc_gc_only) 
-			     && aggregate_contains_objc_pointer (ret_type)))))
-	  {
+	    && (IS_ATOMIC (property) ||
+		(isStrong = ((flag_objc_gc || flag_objc_gc_only)
+			     && aggregate_contains_objc_pointer (ret_type))))))
+        /* APPLE LOCAL end 6671703 ARM 64-bit atomic properties */
+        {
 	    /* struct something tmp; 
 	       objc_copyStruct (&tmp, &structIvar, sizeof (struct something), isAtomic, false);
 	       return tmp;
@@ -16313,11 +16336,18 @@ objc_synthesize_new_setter (tree class, tree class_method, tree property)
         TREE_USED (rhs) = 1;
       /* APPLE LOCAL end radar 5232840 */
       ivar_type = TREE_TYPE (lhs);
-      if ((TREE_CODE (ivar_type) == RECORD_TYPE || TREE_CODE (ivar_type) == UNION_TYPE)
+      /* APPLE LOCAL begin 6671703 ARM 64-bit atomic properties */
+      if (
+#ifdef TARGET_ARM
+        (IS_ATOMIC (property)
+         && TREE_INT_CST_LOW (TYPE_SIZE_UNIT (ivar_type)) > 4) ||
+#endif
+       ((TREE_CODE (ivar_type) == RECORD_TYPE || TREE_CODE (ivar_type) == UNION_TYPE)
           /* APPLE LOCAL begin radar 5080710 */
           && IS_ATOMIC (property)
-          && (TREE_ADDRESSABLE (ivar_type) || targetm.calls.return_in_memory  (ivar_type, 0)))
+          && (TREE_ADDRESSABLE (ivar_type) || targetm.calls.return_in_memory  (ivar_type, 0))))
           /* APPLE LOCAL end radar 5080710 */
+      /* APPLE LOCAL end 6671703 ARM 64-bit atomic properties */
         {
 	  /* objc_copyStruct (&structIvar, &value, sizeof (struct something), true, false); */
 	  tree func_params;
@@ -16392,7 +16422,7 @@ lookup_accessor_in_base_class_impl (tree category_impl, tree base_class, tree me
 /* APPLE LOCAL end radar 4966565 */
 
 /* Main routine to generate code/data for all the property information for 
-   current implemenation (class or category). CLASS is the interface where
+   current implementation (class or category). CLASS is the interface where
    ivars are declared in. CLASS_METHODS is where methods are found which
    could be a class or a category depending on wheter we are implementing
    property of a class or a category.  */

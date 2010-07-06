@@ -906,8 +906,32 @@ verify_stack (void)
     {
       for (i = 2; i <= global_inlined_call_stack.nelts; i++)
 	if (!inlined_function_address_ranges_properly_contained (i-1, i))
-	  internal_error (__FILE__, __LINE__, 
-			  _("Inconsistent inlined call stack."));
+          {
+            /*  Temporarily disable this error; there is a known problem
+                with llvm/clang debug information for inlined subroutines.
+                Until they get that fixed, we need to not crash on the bad
+                data  */
+            /*
+              internal_error (__FILE__, __LINE__, 
+                              _("Inconsistent inlined call stack."));
+            */
+
+            /* We know the global_inlined_call_stack is messed up, and since
+               we aren't aborting, we need to turn off inlined stepping 
+               altogether, to prevent other nasty things happening:  */
+
+            /* FIXME:  When the llvm/clang compiler fixes its problem, 
+               remove the code below, and un-comment the internal error
+               above.  */
+
+            dwarf2_allow_inlined_stepping = 0;
+            inlined_function_reinitialize_call_stack ();
+            inlined_step_range_end = (CORE_ADDR) 0;
+            stepping_over_inlined_subroutine = 0;
+            stepping_into_inlined_subroutine = 0;
+            finishing_inlined_subroutine = 0;
+            flush_cached_frames ();
+          }
     }
 }
 

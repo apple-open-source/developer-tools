@@ -9110,4 +9110,20 @@ tree build_block_object_dispose_call_exp (tree src, int flag)
   return build_function_call (build_block_object_dispose_decl (), func_params);
 }
 /* APPLE LOCAL end radar 5847976 */
+/* APPLE LOCAL begin radar 7760213 */
+int HasByrefArray(tree byrefType)
+{
+  tree s1;
+  /* Check for possibility of an error condition. */
+  if (TREE_CODE(byrefType) != RECORD_TYPE)
+    return 0;
+
+  for (s1 = TYPE_FIELDS (byrefType); s1; s1 = TREE_CHAIN (s1))
+    {
+      if (TREE_CODE(TREE_TYPE(s1)) == ARRAY_TYPE)
+        return 1;
+    }
+  return 0;
+}
+/* APPLE LOCAL end radar 7760213 */
 #include "gt-c-common.h"

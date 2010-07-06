@@ -501,6 +501,8 @@ extern void type_print (struct type *type, char *varstring,
 
 extern char *type_sprint (struct type *type, char *varstring, int show);
 
+extern char *type_sprint_quoted (struct type *type, char *varstring, int show);
+
 extern gdb_byte *baseclass_addr (struct type *type, int index,
 				 gdb_byte *valaddr,
 				 struct value **valuep, int *errp);

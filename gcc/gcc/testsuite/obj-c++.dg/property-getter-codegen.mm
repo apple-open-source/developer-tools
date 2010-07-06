@@ -98,7 +98,11 @@ int main (int argc, const char * argv[])
 	
 	// Each of these looks like it should call the setPosition method.  However,
 	// if the Vector3D copy constructor is defined, this one won't.
-	myObject.position = Vector3D(1.0f, 1.0f, 1.0f);
+        // APPLE LOCAL begin radar 7591784
+        // Workaround for bug in radar 7591784
+        Vector3D V3D(1.0f, 1.0f, 1.0f);
+	myObject.position = V3D;
+        // APPLE LOCAL end radar 7591784
 	NSLog(@"After assignment the position is: %@", myObject.position.description());
 
 	[myObject setPosition: Vector3D(2.0f, 2.0f, 2.0f)];

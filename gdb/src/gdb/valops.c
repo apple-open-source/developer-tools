@@ -3131,6 +3131,11 @@ do_check_is_thread_unsafe (void *argptr)
             }
         }
 
+      /* Avoid an unnecessary unwind (since we might be doing this
+         on every thread in a program, it can add up...  */
+      if (frame_relative_level (fi) == args->stack_depth - 1)
+        break;
+
       fi = get_prev_frame (fi);
       if (!fi)
         break;

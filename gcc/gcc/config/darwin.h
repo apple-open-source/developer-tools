@@ -418,6 +418,11 @@ do {					\
    %{Zmultiplydefinedunused*:-multiply_defined_unused %*} \
    "/* APPLE LOCAL mainline 2007-06-01 5238485 */" \
    %{fpie:-pie} \
+   "/* APPLE LOCAL begin <rdar://problem/7651045> */" \
+   %{fPIE:-pie} \
+   %{fno-pie:-no_pie} \
+   %{fno-PIE:-no_pie} \
+   "/* APPLE LOCAL end <rdar://problem/7651045> */" \
    %{prebind} %{noprebind} %{nofixprebinding} %{prebind_all_twolevel_modules} \
    %{read_only_relocs} \
    %{sectcreate*} %{sectorder*} %{seg1addr*} %{segprot*} \

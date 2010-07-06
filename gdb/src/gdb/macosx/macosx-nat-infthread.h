@@ -24,4 +24,6 @@ void macosx_prune_threads (thread_array_t thread_list, unsigned int nthreads);
 
 void macosx_print_thread_details (struct ui_out *uiout, ptid_t ptid);
 
+char *get_dispatch_queue_name (CORE_ADDR dispatch_qaddr);
+
 #endif /* __GDB_MACOSX_NAT_INFTHREAD_H__ */

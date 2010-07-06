@@ -1,6 +1,8 @@
 /* APPLE LOCAL file radar 6212722 */
+/* APPLE LOCAL radar 7721728 */
+/* This is now error */
 /* Test for use of array (dynamic or static) as copied in object in a block. */
-/* { dg-do run { target *-*-darwin[1-2][0-9]* } } */
+/* { dg-do compile { target *-*-darwin[1-2][0-9]* } } */
 /* { dg-options "-mmacosx-version-min=10.6 -ObjC -framework Foundation" { target *-*-darwin* } } */
 /* { dg-skip-if "" { powerpc*-*-darwin* } { "-m64" } { "" } } */
 
@@ -30,7 +32,7 @@ int func ()
 		NSLog (@"c = %d", c);
 		for (i = 0; i < c; ++i)
 		{
-			NSLog (@"array[%d] = %d", i, array[i]);
+			NSLog (@"array[%d] = %d", i, array[i]);	/* { dg-error "cannot access copied-in variable of array type inside block" } */
 		}
 	
 	};
@@ -62,7 +64,7 @@ int main (int argc, const char *argv[])
 		NSLog (@"c = %d", c);
 		for (i = 0; i < c; ++i)
 		{
-			NSLog (@"array[%d] = %d", i, array[i]);
+			NSLog (@"array[%d] = %d", i, array[i]);	/* { dg-error "cannot access copied-in variable of array type inside block" } */
 		}
 	
 	};
@@ -72,4 +74,13 @@ int main (int argc, const char *argv[])
 
 	[pool drain];
 	return 0 + res;
+}
+
+int test()
+{
+__block int arr[100];
+
+  ^ {  
+      (void)arr[2];	/* { dg-error "cannot access __block variable of array type inside block" } */
+    };
 }

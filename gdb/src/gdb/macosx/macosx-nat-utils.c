@@ -476,10 +476,13 @@ macosx_check_malloc_is_unsafe ()
 	return -1;
     }
 
+  if (debug_handcall_setup)
+    printf_unfiltered ("Overriding debugger mode to call malloc check function.\n");
+
   scheduler_cleanup = make_cleanup_set_restore_scheduler_locking_mode
     (scheduler_locking_on);
   /* Suppress the objc runtime mode checking here.  */
-  make_cleanup_set_restore_debugger_mode (NULL, -1);
+  make_cleanup_set_restore_debugger_mode (NULL, 0);
 
   make_cleanup_set_restore_unwind_on_signal (1);
 
@@ -585,10 +588,12 @@ macosx_check_safe_call (int which, enum check_which_threads thread_mode)
 	}
 
       /* macosx_check_malloc_is_unsafe doesn't tell us about the current thread.
-	 So if the caller has asked explicitly about the current thread only, try
-	 the patterns.  */
-      if (thread_mode == CHECK_CURRENT_THREAD)
-	malloc_unsafe = -1;
+	 So if the caller has asked explicitly about the current thread only, or
+	 the scheduler mode is set to off, just try the patterns.  */
+
+      if (thread_mode == CHECK_CURRENT_THREAD 
+	  || (thread_mode = CHECK_SCHEDULER_VALUE && !scheduler_lock_on_p ()))
+          malloc_unsafe = -1;
       else
 	malloc_unsafe = macosx_check_malloc_is_unsafe ();
 
@@ -612,31 +617,75 @@ macosx_check_safe_call (int which, enum check_which_threads thread_mode)
   if (which & OBJC_SUBSYSTEM)
     {
       struct cleanup *runtime_cleanup;
-      enum objc_debugger_mode_result objc_retval;
+      enum objc_debugger_mode_result objc_retval = objc_debugger_mode_unknown;
       
       /* Again, the debugger mode requires you only run the current thread.  If the
 	 caller requested information about the current thread, that means she will
 	 be running the all threads - just with code on the current thread.  So we
 	 shouldn't use the debugger mode.  */
 
-      if (thread_mode != CHECK_CURRENT_THREAD)
+      if (thread_mode == CHECK_ALL_THREADS
+          || (thread_mode == CHECK_SCHEDULER_VALUE && scheduler_lock_on_p ()))
 	{
-	  objc_retval = make_cleanup_set_restore_debugger_mode (&runtime_cleanup, 0);
+	  objc_retval = make_cleanup_set_restore_debugger_mode (&runtime_cleanup, 1);
 	  do_cleanups (runtime_cleanup);
 	  if (objc_retval == objc_debugger_mode_success)
 	    {
+              /* This is cheating, but setting up the debugger mode checks all the
+                 other states first, so if we get this, we're done.  */
 	      return 1;
 	    }
 	}
 
       if (thread_mode == CHECK_CURRENT_THREAD
+          || (thread_mode == CHECK_SCHEDULER_VALUE && !scheduler_lock_on_p ())
 	  || objc_retval == objc_debugger_mode_fail_objc_api_unavailable)
         {
-          unsafe_patterns[num_unsafe_patterns]
-            = macosx_unsafe_patterns[OBJC_SUBSYSTEM_INDEX];
-          num_unsafe_patterns++;
-          if (depth < 5)
-            depth = 5;
+
+          /* If we have the new objc runtime, I am going to be a little more
+             paranoid, and if any frames in the first 5 stack frames are in 
+             libobjc, then I'll bail.  According to Greg, pretty much any routine
+             in libobjc in the new runtime is likely to hold an objc lock.  */
+
+          if (new_objc_runtime_internals ())
+            {
+              struct objfile *libobjc_objfile;
+              
+              libobjc_objfile = find_libobjc_objfile ();
+              if (libobjc_objfile != NULL)
+                {
+                  struct frame_info *fi;
+                  fi = get_current_frame ();
+                  if (!fi)
+                    {
+                      warning ("Cancelling operation - can't find base frame of "
+                               "the current thread to determine whether it is safe.");
+                      return 0;
+                    }
+	      
+                  while (frame_relative_level (fi) < 5)
+                    {
+                      struct obj_section *obj_sect = find_pc_section (get_frame_pc (fi));
+                      if (obj_sect == NULL || obj_sect->objfile == libobjc_objfile)
+                        {
+                          warning ("Cancelling call - objc code on the current "
+                                   "thread's stack makes this unsafe.");
+                          return 0;
+                        }
+                      fi = get_prev_frame (fi);
+                      if (fi == NULL)
+                        break;
+                    }
+                }
+            }
+          else
+            {
+              unsafe_patterns[num_unsafe_patterns]
+                = macosx_unsafe_patterns[OBJC_SUBSYSTEM_INDEX];
+              num_unsafe_patterns++;
+              if (depth < 5)
+                depth = 5;
+            }
         }
       else
         {
@@ -786,9 +835,10 @@ macosx_load_dylib (char *name, char *flags)
 
   sched_cleanup = make_cleanup_set_restore_scheduler_locking_mode (scheduler_locking_on);
 
-  arg_val[0] = value_coerce_array (value_string (name, strlen (name) + 1));
+  /* Pass in level of -1 since loading a dylib will very likely change the ObjC runtime, and so
+     we will have to get the write lock.  */
 
-  objc_retval = make_cleanup_set_restore_debugger_mode (&debugger_mode_cleanup, 1);
+  objc_retval = make_cleanup_set_restore_debugger_mode (&debugger_mode_cleanup, -1);
 
   if (objc_retval == objc_debugger_mode_fail_objc_api_unavailable)
     if (target_check_safe_call (OBJC_SUBSYSTEM, CHECK_SCHEDULER_VALUE))
@@ -796,6 +846,8 @@ macosx_load_dylib (char *name, char *flags)
 
   if (objc_retval != objc_debugger_mode_success)
     error ("Not safe to call dlopen at this time.");
+
+  arg_val[0] = value_coerce_array (value_string (name, strlen (name) + 1));
 
   ret_val = call_function_by_hand (lookup_cached_function (dlopen_function),
 				   2, arg_val);

@@ -123,6 +123,8 @@ struct arch_config_guess_map arch_config_map [] =
   {"ppc", "powerpc"},
   {"ppc64", "powerpc"},
   {"x86_64", "i686"},
+  /* Note: It's required that all supported ARM architectures be listed
+   * here explicitly */
   {"arm", "arm"},
   {"armv4t", "arm"},
   {"armv5", "arm"},
@@ -210,6 +212,10 @@ get_arch_name (const char *name)
       else map++;
     }
     a_info = (NXArchInfo *) NXGetArchInfoFromName (name);
+    /* radr://7148788  emit diagnostic for ARM architectures not explicitly
+     * handled by the driver. */
+    if (a_info && a_info->cputype == CPU_TYPE_ARM)
+      a_info = NULL;
   } else {
     a_info = (NXArchInfo *) NXGetLocalArchInfo();
     if (a_info) {

@@ -20849,7 +20849,7 @@ build_block_struct_type (struct block_sema_info * block_impl)
 /**
  build_block_struct_initlist - builds the initializer list:
  { &_NSConcreteStackBlock or &_NSConcreteGlobalBlock // __isa,
-   BLOCK_HAS_DESCRIPTOR | BLOCK_HAS_COPY_DISPOSE | BLOCK_IS_GLOBAL // __flags,
+   BLOCK_USE_STRET | BLOCK_HAS_COPY_DISPOSE | BLOCK_IS_GLOBAL // __flags,
    0, // __reserved,
    &helper_1, // __FuncPtr,
    &static_descriptor_variable // __descriptor,
@@ -20866,7 +20866,8 @@ build_block_struct_initlist (tree block_struct_type,
 			     struct block_sema_info *block_impl)
 {
   tree expr, chain, helper_addr;
-  unsigned flags = BLOCK_HAS_DESCRIPTOR;
+  /* APPLE LOCAL radar 7735196 */
+  unsigned flags = 0;
   static tree NSConcreteStackBlock_decl = NULL_TREE;
   static tree NSConcreteGlobalBlock_decl = NULL_TREE;
   VEC(constructor_elt,gc) *impl_v = NULL;
@@ -20882,6 +20883,10 @@ build_block_struct_initlist (tree block_struct_type,
   if (block_impl->BlockImportsCxxObjects)
     flags |= BLOCK_HAS_CXX_OBJ;
   /* APPLE LOCAL end radar 6214617 */
+/* APPLE LOCAL begin radar 7735196 */
+  if (block_impl->return_type && aggregate_value_p(block_impl->return_type, 0))
+    flags |= BLOCK_USE_STRET;
+  /* APPLE LOCAL end 7735196 */
   /* APPLE LOCAL begin radar 6230297 */
   if (!current_function_decl ||
       (block_impl->block_ref_decl_list == NULL_TREE &&

@@ -128,6 +128,7 @@ static unsigned int objc_class_method_limit = 10000;
 
 /* We don't yet have an dynamic way of figuring out what the ObjC
    runtime version is.  So this will override our guess.  */
+static int objc_runtime_version_user_override = 0;
 static int objc_runtime_version = 0;
 
 /* APPLE LOCAL: This tree keeps the map of {class, selector} -> implementation.  */
@@ -135,31 +136,44 @@ static struct rb_tree_node *implementation_tree = NULL;
 static CORE_ADDR  lookup_implementation_in_cache (CORE_ADDR class, CORE_ADDR sel);
 static void add_implementation_to_cache (CORE_ADDR class, CORE_ADDR sel, CORE_ADDR implementation);
 
-/* APPLE LOCAL: This tree keeps the map of class -> real class.  We find the "real class" by
-   getting the object's "isa" pointer then calling that classes "class" method for this object.  
+/* APPLE LOCAL: This tree is used for two purposes.  First, we put every valid class we see in the
+   tree using add_class_to_cache.  Use class_valid_p to see if we've seen your class already.
+
+   It also keeps the map of class -> real class.  We find the "real class" by
+   getting the object's "isa" pointer then calling that classes "class" method for this object.
+   
+   Note that you don't need to do both "add_class_to_cache" and "add_real_class_to_cache".  If you
+   have both class and real class, the latter function will add both.
+
    We need to do this because the KVO system overwrites the "isa" pointer with the synthesized class
    that does the KVO notification, but htat's not the class people want to see... 
+
    We are assuming here that the synthesized class will always return the same "real" class.  */
+
 static struct rb_tree_node *real_class_tree = NULL;
+
+
+int objc_setup_safe_print (struct cleanup **cleanup);
+
+static int class_valid_p (CORE_ADDR class);
+static struct rb_tree_node *add_class_to_cache (CORE_ADDR class);
 static CORE_ADDR  lookup_real_class_in_cache (CORE_ADDR class);
 static void add_real_class_to_cache (CORE_ADDR class, CORE_ADDR real_class);
-
-/* Are we using the ObjC 2.0 runtime?  */
-static int new_objc_runtime_internals ();
 
 /* APPLE LOCAL: This tree keeps the map of class -> class type.  The tree is probably overkill
  in this case, but it's easy to use and we won't have all that many of them.  */
 static struct rb_tree_node *classname_tree = NULL;
-
 static char *lookup_classname_in_cache (CORE_ADDR class);
 static void add_classname_to_cache (CORE_ADDR class, char *classname);
 
-/* This is the current objc objfile.  I mostly use this to tell if it's worthwhile
-   trying to call gdb_objc_startDebuggerMode.  */
+/* This is the current objc objfile.  I mostly use this to tell if it's 
+   worthwhile trying to call gdb_objc_startDebuggerMode.  */
 static struct objfile *cached_objc_objfile;
 static char *objc_library_name = "libobjc.A.dylib";
-void objc_init_trampoline_observer ();
 static void objc_clear_trampoline_data ();
+
+static void read_objc_object (CORE_ADDR addr, struct objc_object *object);
+
 /* APPLE LOCAL use '[object class]' rather than isa  */
 static CORE_ADDR get_class_address_from_object (CORE_ADDR);
 
@@ -238,7 +252,7 @@ lookup_objc_class (char *classname)
 
   /* Pass in "ALL_THREADS" since we've locked the scheduler.  */
 
-  objc_retval = make_cleanup_set_restore_debugger_mode (NULL, 0);
+  objc_retval = make_cleanup_set_restore_debugger_mode (NULL, 1);
   if (objc_retval == objc_debugger_mode_fail_objc_api_unavailable)
     if (target_check_safe_call (OBJC_SUBSYSTEM, CHECK_SCHEDULER_VALUE))
       objc_retval = objc_debugger_mode_success;
@@ -927,6 +941,39 @@ objc_read_trampoline_region (CORE_ADDR addr)
 
   discard_cleanups (region_cleanup);
   return region;
+}
+
+/* Programatically determine whether the libobjc this program is using is
+   a version 1 objc runtime (can inspect its internal data structures directly)
+   or a version 2 objc runtime (must run inferior funtion calls to get 
+   information).  */
+
+void 
+objc_init_runtime_version ()
+{
+  struct objfile *objc_objfile = find_libobjc_objfile ();
+  struct obj_section *os;
+  if (objc_objfile == NULL)
+    {
+      objc_runtime_version = 0;
+      return;
+    }
+  ALL_OBJFILE_OSECTIONS (objc_objfile, os)
+    {
+      if (os->the_bfd_section)
+        {
+          const char *n = bfd_section_name (objc_objfile, os->the_bfd_section);
+          if (n && strcmp (n, "LC_SEGMENT.__OBJC") == 0)
+            {
+              objc_runtime_version = 1;
+              return;
+            }
+        }
+    }
+  /* No __OBJC section, assume we're looking at a version 2 objc
+     runtime.  We could check explicitly for __DATA,__objc_imageinfo
+     but Jim wants us to just assume it's v2 at this point.  */
+  objc_runtime_version = 2;
 }
 
 /* This is the function that initializes all our data structures for 
@@ -2147,13 +2194,158 @@ find_imps (struct symtab *symtab, struct block *block,
   return method + (tmp - buf);
 }
 
+/* This is a little utility routine that checks malloc, spinlock & objc on the
+   current thread to see if it safe to run code on this thread, allowing the other
+   threads to run.  */
+
+int
+objc_check_safe_to_run_all_threads ()
+{
+  /* Okay, let's see if we can let all the other threads run
+     and that will allow the PO to succeed.  */
+  
+  if (!target_check_safe_call (MALLOC_SUBSYSTEM, CHECK_CURRENT_THREAD))
+    {
+      warning ("Canceling operation - malloc lock could be held on current thread.");
+      return 0;
+    }
+  else if (!target_check_safe_call (SPINLOCK_SUBSYSTEM, CHECK_CURRENT_THREAD))
+    {
+      warning ("Canceling operation - spin_lock could be held on current thread.");
+      return 0;
+    }
+  else if (!target_check_safe_call (OBJC_SUBSYSTEM, CHECK_CURRENT_THREAD))
+    {
+      warning ("Canceling call as the ObjC runtime would deadlock.");
+      return 0;
+    }
+  return 1;
+}
+
+/* Sets up for safe printing.  A new cleanup is always added that that will
+   restore whatever we had to do to make things safe.  If CLEANUP is
+   not NULL, sets it to the old point in the chain.  
+
+   Returns 1 if we could make printing safe, 0 otherwise.  */
+
+int
+objc_setup_safe_print (struct cleanup **cleanup)
+{
+  enum objc_debugger_mode_result retval;
+  struct cleanup *ret_cleanup = make_cleanup (null_cleanup, NULL);
+  struct cleanup *lock_cleanup;
+  int safe_p = 0;
+
+  /* We always return a cleanup, so make a NULL one here, and then any other
+     cleanups we need to add to set up the safe mode will be subsumed under this
+     one.  */
+  if (cleanup != NULL)
+    *cleanup = ret_cleanup;
+
+  if (objc_runtime_check_enabled_p ())
+    {
+      static struct ui_out *null_uiout = NULL, *stored_uiout;
+      struct gdb_exception e;
+      /* I want to suppress output here, because if there is some problem,
+         I'm going to try to work around it and so the warning messages would
+         not be helpful.  I can't use the cleanup method because then I couldn't
+         turn it back on again - there's no way to excise a cleanup from the chain
+         and do just it...  */
+      
+      if (null_uiout == NULL)
+        null_uiout = cli_out_new (gdb_null);
+      stored_uiout = uiout;
+      uiout = null_uiout;
+      
+      /* This is a separate cleanup, since we want to undo this if there's
+         an error, but still pass out ret_cleanup.  */
+      lock_cleanup = make_cleanup_set_restore_scheduler_locking_mode (scheduler_locking_on);
+      
+      TRY_CATCH (e, RETURN_MASK_ERROR)
+        {
+          retval = make_cleanup_set_restore_debugger_mode (NULL, 1);
+        }
+      
+      if (debug_handcall_setup)
+        {
+          char *data = ui_file_data (gdb_null);
+          if (data == NULL)
+            data = "";
+          
+          fprintf_unfiltered ( gdb_stdout, "Setting debugger mode returned: %d output: \"%s\"\n",
+                               retval, data);
+        }
+      
+      ui_file_rewind (gdb_null);
+      uiout = stored_uiout;
+      
+      if (e.reason != NO_ERROR)
+        {
+          if (debug_handcall_setup || info_verbose)
+            fprintf_unfiltered (gdb_stdout, "Got uncaught error setting debugger mode, returning NULL cleanup.\n");
+          do_cleanups (lock_cleanup);
+          safe_p = 0;
+        }
+      else if (retval == objc_debugger_mode_fail_objc_api_unavailable)
+        {
+          if (debug_handcall_setup || info_verbose)
+            fprintf_unfiltered (gdb_stdout, "Can't find objc non-blocking mode, falling back to old print behavior.\n");
+          do_cleanups (lock_cleanup);
+          safe_p = 0;
+        }
+      else
+        {
+          if (retval == objc_debugger_mode_success)
+            {
+              safe_p = 1;
+            }
+          else
+            {
+              /* Turn off the old scheduler locking.  */
+              do_cleanups (lock_cleanup);
+
+              if (scheduler_lock_on_p ())
+                {
+                  /* The caller has scheduler locking turned on.  We shouldn't override that here.  */
+                  
+                  if (debug_handcall_setup || info_verbose)
+                    fprintf_unfiltered (gdb_stdout, "Would have to allow all threads to run to avoid the "
+                                        "possible deadlock, but scheduler locking is on.  Returning NULL cleanup.\n");
+                  safe_p = 0;
+                }
+              else if (objc_check_safe_to_run_all_threads())
+                {
+                  /* Set us to run all threads and override the debug mode check.  */
+
+                  if (debug_handcall_setup || info_verbose)
+                    fprintf_unfiltered (gdb_stdout, "Allowing all threads to run to avoid the possible deadlock.\n");
+
+                  ret_cleanup = make_cleanup_set_restore_scheduler_locking_mode (scheduler_locking_off);	      
+                  make_cleanup_set_restore_debugger_mode (NULL, 0);
+                  safe_p = 1;
+                }
+              else
+                {
+                  /* The current thread is unsafe, even with the other threads running.  */
+                  if (debug_handcall_setup || info_verbose)
+                    fprintf_unfiltered (gdb_stdout, "It is unsafe to run code on the current thread, returning NULL cleanup.\n");
+                  
+                  safe_p = 0;
+                }
+            }
+        }
+    }
+
+  return safe_p;
+}
+
 static void 
 print_object_command (char *args, int from_tty)
 {
   struct value *object, *function, *description;
   struct cleanup *cleanup_chain = NULL;
   struct cleanup *debugger_mode;
-  CORE_ADDR string_addr, object_addr;
+  CORE_ADDR string_addr;
   int i = 0;
   gdb_byte c = 0;
   const char *fn_name;
@@ -2168,90 +2360,23 @@ print_object_command (char *args, int from_tty)
   if (call_po_at_unsafe_times)
     {
       /* Set the debugger mode so that we don't do any checking.  */
-        make_cleanup_set_restore_debugger_mode (&debugger_mode, -1);
+        make_cleanup_set_restore_debugger_mode (&debugger_mode, 0);
     }
   else
     {
-      /* If the ObjC debugger mode exists, use that.  But not that that requires
-	 that the scheduler is locked.  */
-      
-      enum objc_debugger_mode_result retval;
-
-      retval = make_cleanup_set_restore_debugger_mode (&debugger_mode, 0);
-
-      if (retval == objc_debugger_mode_fail_objc_api_unavailable)
-        if (target_check_safe_call (OBJC_SUBSYSTEM, CHECK_SCHEDULER_VALUE))
-          retval = objc_debugger_mode_success;
-
-      if (retval != objc_debugger_mode_success)
-	{
-          do_cleanups (debugger_mode);
-	  
-	  /* Okay, let's see if we can let all the other threads run
-	     and that will allow the PO to succeed.  */
-	  
-	  if (!target_check_safe_call (MALLOC_SUBSYSTEM, CHECK_CURRENT_THREAD))
-	    {
-	      warning ("Cancelling print_object - malloc lock could be held on current thread.");
-	      return;
-	    }
-	  else
-	    {
-	  
-	      /* If we have the new objc runtime, I am going to be a little more
-		 paranoid, and if any frames in the first 5 stack frames are in 
-		 libobjc, then I'll bail.  */
-	      
-	      if (new_objc_runtime_internals ())
-		{
-		  struct objfile *libobjc_objfile;
-		  
-		  libobjc_objfile = find_libobjc_objfile ();
-		  if (libobjc_objfile != NULL)
-		    {
-		      struct frame_info *fi;
-		      fi = get_current_frame ();
-		      if (!fi)
-			{
-			  warning ("Cancelling print_object - can't find base frame of "
-				   "the current thread to determine whether it is safe.");
-			  return;
-			}
-		      
-		      while (frame_relative_level (fi) < 5)
-			{
-			  struct obj_section *obj_sect = find_pc_section (get_frame_pc (fi));
-			  if (obj_sect == NULL || obj_sect->objfile == libobjc_objfile)
-			    {
-			      warning ("Cancelling call - objc code on the current "
-				       "thread's stack makes this unsafe.");
-			      return;
-			    }
-			  fi = get_prev_frame (fi);
-			  if (fi == NULL)
-			    break;
-			}
-		    }
-		}
-	      else if (!target_check_safe_call (OBJC_SUBSYSTEM, CHECK_CURRENT_THREAD))
-		{
-		  warning ("Cancelling call as the ObjC runtime would deadlock.");
-		  return;
-		}
-	    }
-	  if (let_po_run_all_threads)
-	    {
-	      printf_unfiltered ("Allowing all threads to run to avoid the possible deadlock.\nprint-object result:\n");
-	      make_cleanup_set_restore_debugger_mode (&debugger_mode, -1);
-	      make_cleanup_set_restore_scheduler_locking_mode (scheduler_locking_off);
-	    }
-	  else
-	    {
-	      warning ("Cancelling call as running only this thread would cause a deadlock.\n"
-		       "Set let-po-run-all-threads to \"on\" to try with all threads running.");
-	      return;
-	    }
-	}
+      int safe_p;
+      safe_p = target_setup_safe_print (&debugger_mode);
+      if (!safe_p)
+        {
+          do_cleanups(debugger_mode);
+          if (scheduler_lock_on_p())
+            warning ("Running code with the scheduler locked on the current thread is likely to deadlock.\n"
+                     "Set scheduler-locking to off and try again.");
+          else
+              warning ("Canceling call as it likely running code on the current thread will deadlock.\n"
+                       "Set call-po-at-unsafe-times to override this check.");
+          return;
+        }
     }
 
   /* APPLE LOCAL begin initialize innermost_block  */
@@ -2274,9 +2399,13 @@ print_object_command (char *args, int from_tty)
     }
   /* APPLE LOCAL end */
 
-  /* Validate the address for sanity.  */
-  object_addr = value_as_address (object);
-  read_memory (object_addr, &c, 1);
+  struct objc_object obj;
+  read_objc_object (value_as_address (object), &obj);
+  if (obj.isa == 0)
+    {
+      error ("0x%s does not appear to point to a valid object.", 
+             paddr_nz (value_as_address (object)));
+    }
 
   /* APPLE LOCAL begin */
   fn_name = "_NSPrintForDebugger";
@@ -2439,7 +2568,8 @@ tell_objc_msgsend_cacher_objfile_changed (struct objfile *obj /* __attribute__ (
      stuff if the changed objfile is libobjc.A.dylib.  This should only happen if
      you're working on libobjc, but still...  */
 
-  if (strstr (obj->name, objc_library_name) != NULL)
+  if (obj != NULL && obj->name != NULL 
+      && strstr (obj->name, objc_library_name) != NULL)
     {
       cached_objc_objfile = NULL;
       objc_clear_trampoline_data ();
@@ -2558,18 +2688,24 @@ _initialize_objc_language (void)
 			    &setlist, &showlist);
 }
 
-/* In 64-bit programs the ObjC runtime uses a different layout for
-   its internal data structures.  In the future, 32-bit ObjC runtimes
-   may also switch over to this layout.  */
+/* The Objective-C 1.0 runtime uses simple internal data structures that gdb
+   can inspect directly; Objective-C 2.0 uses different internal data
+   structures, most of which gdb cannot inspect itself but must use inferior 
+   function calls instead.  */
 
-static int 
+int 
 new_objc_runtime_internals ()
 {
-  if (objc_runtime_version == 1)
+  if (objc_runtime_version_user_override == 1)
     return 0;
-  else if (objc_runtime_version == 2)
+  else if (objc_runtime_version_user_override == 2)
     return 1;
 
+  /* If it's been determined programatically, go with that.  */
+  if (objc_runtime_version != 0)
+    return objc_runtime_version;
+
+  /* Else fall back on some rules of thumb that are currently accurate.  */
 #if defined (TARGET_ARM)
   return 1;
 #else
@@ -2605,18 +2741,27 @@ new_objc_runtime_class_getClass (struct value *infargs)
   static int already_warned = 0;
   struct value *ret_value = NULL;
 
+  CORE_ADDR in_class_address = (CORE_ADDR) value_as_address (infargs);
+
+  /* We might have already looked up this class, in which case don't bother 
+     looking it up again.  Classes can't move.  */
+
+  if (class_valid_p (in_class_address))
+      return in_class_address;
+
   if (validate_function == NULL)
     {
       if (lookup_minimal_symbol ("gdb_class_getClass", 0, 0))
 	  validate_function = create_cached_function ("gdb_class_getClass",
-						      builtin_type_voidptrfuncptr);
+					           builtin_type_voidptrfuncptr);
       else
 	{
 	  if (!already_warned)
 	    {
 	      already_warned = 1;
-	      warning ("Couldn't find class validation function, calling methods on"
-		       " uninitialized objects may deadlock your program.");
+	      warning ("Couldn't find class validation function, calling "
+		       "methods on uninitialized objects may deadlock your "
+                       "program.");
 	    }
 	}
     }
@@ -2638,11 +2783,16 @@ new_objc_runtime_class_getClass (struct value *infargs)
       if (e.reason != NO_ERROR || ret_value == NULL)
 	{
 	  if (hand_function_call_timeout_p ())
-	    warning ("Call to get object type timed out.  Most likely somebody has the objc runtime lock.");
+	    warning ("Call to get object type timed out.  Most likely somebody "
+                     "has the objc runtime lock.");
 	  return (CORE_ADDR) 0;	  
 	}
       else
-	return (CORE_ADDR) value_as_address (ret_value);
+        {
+          CORE_ADDR class_address = (CORE_ADDR) value_as_address (ret_value);
+          add_class_to_cache (class_address);
+          return class_address;
+        }
     }
   else
     return (CORE_ADDR) 0;
@@ -2708,7 +2858,7 @@ new_objc_runtime_find_impl (CORE_ADDR class, CORE_ADDR sel, int stret)
      handle the error appropriately.  */
   make_cleanup_ui_out_suppress_output (uiout);
 
-  objc_retval = make_cleanup_set_restore_debugger_mode (NULL, 0);
+  objc_retval = make_cleanup_set_restore_debugger_mode (NULL, 1);
   if (retval == objc_debugger_mode_fail_objc_api_unavailable)
     if (target_check_safe_call (OBJC_SUBSYSTEM, CHECK_SCHEDULER_VALUE))
       retval = objc_debugger_mode_success;
@@ -2780,7 +2930,7 @@ new_objc_runtime_find_impl (CORE_ADDR class, CORE_ADDR sel, int stret)
              result code for the duration of our hand function call below.  */
 
           struct cleanup *make_call_cleanup;
-          make_cleanup_set_restore_debugger_mode (&make_call_cleanup, -1);
+          make_cleanup_set_restore_debugger_mode (&make_call_cleanup, 0);
 
           struct value *classval, *selval;
           struct value *infargs[2];
@@ -2829,7 +2979,7 @@ new_objc_runtime_find_impl (CORE_ADDR class, CORE_ADDR sel, int stret)
         }
       else
         {
-          warning ("Not safe to look up objc runtime data.");
+          fprintf_unfiltered (gdb_stdout, "Not safe to look up objc runtime data.\n");
         }
     }
 
@@ -2875,8 +3025,115 @@ read_objc_method_list_method (CORE_ADDR addr, unsigned long num,
 static void 
 read_objc_object (CORE_ADDR addr, struct objc_object *object)
 {
+  static struct cached_value *object_get_class_function = NULL;
+  static int already_warned = 0;
+
   int addrsize = TARGET_ADDRESS_BYTES;
-  object->isa = read_memory_unsigned_integer (addr, addrsize);
+  int success;
+
+  /* ADDR may be (1) uninitialized value, (2) pointer to ObjC object,
+     or (3) tagged pointer aka invalid memory location.
+     For (1), we want to set object->isa to 0 and return.
+     For (2) and (3) we want to set object->isa to the actual class
+     address.  
+     (3) and (1) may not be valid addresses - suppress the error output
+     from the memory read, especailly important in the case of (3) where
+     the memory error does not indicate a problem.  */
+
+  struct ui_file *prev_stderr = gdb_stderr;
+  gdb_stderr = gdb_null;
+  success = safe_read_memory_unsigned_integer (addr, addrsize, 
+                                                     &(object->isa));
+  gdb_stderr = prev_stderr;
+  ui_file_rewind (gdb_null);
+
+  if (!new_objc_runtime_internals())
+    {
+      if (success)
+        {
+          return;
+        }
+      else
+        {
+          object->isa = (CORE_ADDR) 0;
+          return;
+        }
+    }
+  
+  /* After this point this is all the new runtime.  */
+
+  if (success)
+    {
+      if (class_valid_p (object->isa))
+        return;
+    }
+  
+  if (object_get_class_function == NULL)
+    {
+      if (lookup_minimal_symbol ("object_getClass", 0, 0))
+        {
+          object_get_class_function = create_cached_function 
+                                                    ("object_getClass",
+                                                  builtin_type_voidptrfuncptr);
+        }
+      else
+        {
+          if (info_verbose && !already_warned)
+            {
+              already_warned = 1;
+              warning ("Couldn't find object_getClass, we may not properly "
+                       "handle objective-c tagged pointers.");
+            }
+        }
+    }
+  
+  if (object_get_class_function == NULL)
+    {
+      if (success)
+        return;
+      else
+        {
+          object->isa = (CORE_ADDR) 0;
+          return;
+        }
+    }
+  else
+    {
+      struct value *ret_value = NULL;
+      struct gdb_exception e;
+      int old_timeout = set_hand_function_call_timeout (500000);
+      struct value *object_ptr_val;
+      struct cleanup *unwind_cleanup;
+      
+      object_ptr_val = value_from_pointer (lookup_pointer_type
+                                           (builtin_type_void_data_ptr), addr);
+      
+      /* The following call can crash in the objc runtime in some
+         circumstances.  Unwind the crash if it happens.  */
+      unwind_cleanup = make_cleanup_set_restore_unwind_on_signal (1);
+
+      TRY_CATCH (e, RETURN_MASK_ALL)
+        {		    
+          ret_value = call_function_by_hand
+            (lookup_cached_function (object_get_class_function),
+             1, &object_ptr_val);
+        }
+
+      do_cleanups (unwind_cleanup);
+      set_hand_function_call_timeout (old_timeout);
+      
+      if (e.reason != NO_ERROR || ret_value == NULL)
+        {
+          if (hand_function_call_timeout_p ())
+            warning ("Call to get object class timed out.");
+          object->isa = (CORE_ADDR) 0;	  
+        }
+      else
+        {
+          object->isa = (CORE_ADDR) value_as_address (ret_value);      
+          add_class_to_cache (object->isa);
+        }
+    }
 }
 
 static void 
@@ -2912,10 +3169,6 @@ read_objc_class (CORE_ADDR addr, struct objc_class *class)
    machine.  */
 #define GC_IGNORED_SELECTOR_LE 0xfffeb010
 
-/* APPLE LOCAL: Build a cache of the (class,selector)->implementation lookups
-   that we do.  These are actually fairly expensive, and for inspecting ObjC
-   objects, we tend to do the same ones over & over.  */
-
 static void
 free_rb_tree_data (struct rb_tree_node *root, void (*free_fn) (void *))
 {
@@ -2925,7 +3178,7 @@ free_rb_tree_data (struct rb_tree_node *root, void (*free_fn) (void *))
   if (root->right)
     free_rb_tree_data (root->right, free_fn);
 
-  if (free_fn != NULL)
+  if (free_fn != NULL && root->data != NULL)
     free_fn (root->data);
   xfree (root);
 }
@@ -2967,6 +3220,10 @@ objc_clear_caches ()
       real_class_tree = NULL;
     }
 }
+
+/* APPLE LOCAL: We keep a cache of the (class,selector)->implementation lookups
+   that we do.  These are actually fairly expensive, and for inspecting ObjC
+   objects, we tend to do the same ones over & over.  */
 
 static CORE_ADDR 
 lookup_implementation_in_cache (CORE_ADDR class, CORE_ADDR sel)
@@ -3580,7 +3837,7 @@ should_lookup_objc_class ()
   return lookup_objc_class_p;
 }
 
-int
+static int
 new_objc_runtime_get_classname (CORE_ADDR class,
 				char *class_name, int size)
 {
@@ -3616,7 +3873,7 @@ new_objc_runtime_get_classname (CORE_ADDR class,
      function calls.  */
   make_cleanup_ui_out_suppress_output (uiout);
 
-  objc_retval = make_cleanup_set_restore_debugger_mode (NULL, 0);
+  objc_retval = make_cleanup_set_restore_debugger_mode (NULL, 1);
   if (objc_retval == objc_debugger_mode_fail_objc_api_unavailable)
     if (target_check_safe_call (OBJC_SUBSYSTEM, CHECK_SCHEDULER_VALUE))
       objc_retval = objc_debugger_mode_success;
@@ -4292,6 +4549,10 @@ do_end_debugger_mode (void *arg)
                       (scheduler_locking_on);
   make_cleanup_set_restore_unwind_on_signal (1);
 
+  /* Make sure we don't hit any user breakpoints while turning off
+     the debugger mode.  */
+  make_cleanup_enable_disable_bpts_during_operation ();
+
   if (maint_use_timers)
     start_timer (&debug_mode_timer, "objc-debug-mode", 
                  "Turning off debugger mode");
@@ -4305,7 +4566,7 @@ do_end_debugger_mode (void *arg)
 			     0, NULL);
     }
 
-  if (info_verbose)
+  if (debug_handcall_setup)
     fprintf_unfiltered (gdb_stdout, "Ended debugger mode.\n");
 
   debug_mode_set_p = debug_mode_not_checked;
@@ -4325,6 +4586,9 @@ do_reset_debug_mode_flag (void *unused)
 {
   debug_mode_set_p = debug_mode_not_checked;
   debug_mode_set_reason = objc_debugger_mode_unknown;
+  if (debug_handcall_setup)
+    fprintf_unfiltered (gdb_stdout, "Doing reset debug mode, "
+                  "debug_mode_set_p is %d\n", debug_mode_set_p);
 }
 
 static struct breakpoint *debugger_mode_fail_breakpoint;
@@ -4384,10 +4648,10 @@ objc_pc_at_fail_point (CORE_ADDR pc)
    and returns a cleanup that will put it back in regular
    mode.  If LEVEL is 0, then we request "limited access"
    which means that calls may fail if the write lock is
-   required.  If LEVEL is 1, we request full access, for
+   required.  If LEVEL is -1, we request full access, for
    instance if we need to run dlopen.
 
-   If LEVEL is -1 we will debug_mode_set_p to debug_mode_overridden, 
+   If LEVEL is 0 we will debug_mode_set_p to debug_mode_overridden, 
    and not turn on the debugger mode.  Use this to suppress hand_call_function's 
    automatic turning on of this mode.
 
@@ -4397,12 +4661,12 @@ objc_pc_at_fail_point (CORE_ADDR pc)
    mode function requires that once set we only run that thread.)
    However, if we return success we will lock the scheduler every time
    you call the function, UNLESS you have overridden the debugger mode
-   by setting LEVEL to -1.  That is required, since the debugger mode
+   by setting LEVEL to 0.  That is required, since the debugger mode
    must only be run on one thread.
 
-   If LEVEL was 0 or 1, *CLEANUP is set to either a no-op cleanup or a 
+   If LEVEL was 1 or -1, *CLEANUP is set to either a no-op cleanup or a 
    cleanup to undo the scheduler mode.
-   If LEVEL was -1, the cleanup will restore the debugger mode to
+   If LEVEL was 0, the cleanup will restore the debugger mode to
    debug_mode_not_checked.
 
    This function also interoperated with the debug_mode_set_p
@@ -4427,9 +4691,14 @@ make_cleanup_set_restore_debugger_mode (struct cleanup **cleanup, int level)
   struct cleanup *scheduler_cleanup;
   struct cleanup *timer_cleanup = NULL;
   struct cleanup *unwind_cleanup;
+  struct cleanup *breakpoint_cleanup;
 
   int success = 0;
   struct gdb_exception e;
+
+  if (debug_handcall_setup)
+    fprintf_unfiltered (gdb_stdout, "make_cleanup_set_restore_debugger_mode:"
+                        "Entering function: level %d.\n", level);
 
   /* Most of the exits from this function return a null cleanup;
      set that by default.  The couple of exits that set it to a real
@@ -4445,20 +4714,20 @@ make_cleanup_set_restore_debugger_mode (struct cleanup **cleanup, int level)
     {
       if (debug_handcall_setup)
 	fprintf_unfiltered (gdb_stdout, "make_cleanup_set_restore_debugger_mode:"
-			    " Debug mode set to %d, returning null cleanup.\n", debug_mode_set_p);
+			    " Debug mode set to overridden, returning null cleanup.\n");
       return debug_mode_set_reason;
     }
 
-  /* Otherwise if LEVEL is -1 we're deciding that it's OK to make
+  /* Otherwise if LEVEL is 0 we're deciding that it's OK to make
      inf. func calls regardless of what the reality might be.  So set our state
      to override, set ourselves to return success, and return a cleanup that
      will turn off the override state.  */
 
-  if (level == -1)
+  if (level == 0)
     {
       if (debug_handcall_setup)
 	fprintf_unfiltered (gdb_stdout, "make_cleanup_set_restore_debugger_mode:"
-                           " LEVEL is -1, returning reset cleanup.\n");
+                           " LEVEL is 0, returning reset cleanup.\n");
 
       /* In case the debugger mode is already set on, let's turn it off.  */
       if (debug_mode_set_p == debug_mode_okay)
@@ -4550,7 +4819,18 @@ make_cleanup_set_restore_debugger_mode (struct cleanup **cleanup, int level)
     (scheduler_locking_on);
 
   unwind_cleanup = make_cleanup_set_restore_unwind_on_signal (1);
-  tmp_value = value_from_longest (builtin_type_int, level);
+  
+  /* level = 1 means run in limited mode where we only require the read lock.
+     level = -1 means we also require the write lock.  
+     We should not get here with level 0.
+  */
+  if (level == 1)
+    tmp_value = value_from_longest (builtin_type_int, 0);
+  else if (level == -1)
+    tmp_value = value_from_longest (builtin_type_int, 1);
+  else
+    internal_error (__FILE__, __LINE__, 
+                    "Should not be calling the objc debugger mode if override was requested.");
 
   release_value (tmp_value);
   make_cleanup ((make_cleanup_ftype *) value_free, tmp_value);
@@ -4621,11 +4901,17 @@ make_cleanup_set_restore_debugger_mode (struct cleanup **cleanup, int level)
   debug_mode_set_p = debug_mode_okay;
   debug_mode_set_reason = objc_debugger_mode_success;
 
+  /* Temporarily disable user breakpoints so we don't hit them
+     while trying to turn on the debugger mode.  */
+  breakpoint_cleanup = make_cleanup_enable_disable_bpts_during_operation ();
+
   TRY_CATCH (e, RETURN_MASK_ALL)
     {
       tmp_value = call_function_by_hand 
                       (lookup_cached_function (start_function), 1, &tmp_value);
     }
+
+  do_cleanups (breakpoint_cleanup);
 
   if (timer_cleanup != NULL)
     do_cleanups (timer_cleanup);
@@ -4639,7 +4925,7 @@ make_cleanup_set_restore_debugger_mode (struct cleanup **cleanup, int level)
 
   success = value_as_long (tmp_value);
 
-  if (info_verbose)
+  if (debug_handcall_setup)
     fprintf_filtered (gdb_stdout, "Tried to start debugger mode, return value: %d.\n", success);
 
   if (success == 0)
@@ -4661,7 +4947,7 @@ make_cleanup_set_restore_debugger_mode (struct cleanup **cleanup, int level)
      cleanup on the hand_call cleanup chain, and it will get turned off when 
      we run again.  */
 
-  if (get_objc_runtime_check_level () >= 0)
+  if (objc_runtime_check_enabled_p ())
     {
       if (debug_handcall_setup)
 	fprintf_unfiltered (gdb_stdout, 
@@ -4681,35 +4967,69 @@ make_cleanup_set_restore_debugger_mode (struct cleanup **cleanup, int level)
   return objc_debugger_mode_success;
 }
 
-/* APPLE LOCAL begin use '[object class]' rather than isa  */
+/* The next section manages the "class cache".  When we see a class, we stick 
+   it in this cache.  Since classes don't move being in the cache means that 
+   is a valid class address.  Then when we look up the "real class" 
+   i.e. the class the user actually defined for this object - we add the 
+   real class address to this entry.  */
+
+static int
+class_valid_p (CORE_ADDR class)
+{
+  struct rb_tree_node *found;
+
+  found = rb_tree_find_node (real_class_tree, class, -1);
+  return (found != NULL);
+}
 
 static CORE_ADDR 
 lookup_real_class_in_cache (CORE_ADDR class)
 {
   struct rb_tree_node *found;
 
-  found = rb_tree_find_node_all_keys (real_class_tree, class, -1, -1);
-  if (found == NULL)
-    return 0;
+  found = rb_tree_find_node (real_class_tree, class, -1);
+  if (found == NULL || found->data == NULL)
+    return (CORE_ADDR) 0;
   else
       return *((CORE_ADDR *) found->data);
 }
 
-static void
-add_real_class_to_cache (CORE_ADDR class, CORE_ADDR real_class)
+static struct rb_tree_node *
+add_class_to_cache (CORE_ADDR class)
 {
-  struct rb_tree_node *new_node = (struct rb_tree_node *) xmalloc (sizeof (struct rb_tree_node));
+  struct rb_tree_node *new_node;
+
+  new_node = rb_tree_find_node (real_class_tree, class, -1);
+  if (new_node != NULL)
+    return new_node;
+
+  new_node = (struct rb_tree_node *) xmalloc (sizeof (struct rb_tree_node));
+  
   new_node->key = class;
   new_node->secondary_key = -1;
   new_node->third_key = -1;
-  new_node->data = xmalloc (sizeof (CORE_ADDR));
-  *((CORE_ADDR *) new_node->data) = real_class;
+  new_node->data = NULL;
   new_node->left = NULL;
   new_node->right = NULL;
   new_node->parent = NULL;
   new_node->color = UNINIT;
 
   rb_tree_insert (&real_class_tree, real_class_tree, new_node);
+  return new_node;
+}
+
+static void
+add_real_class_to_cache (CORE_ADDR class, CORE_ADDR real_class)
+{
+  struct rb_tree_node *new_node;
+
+  /* REAL_CLASS is also a valid class.  */
+  add_class_to_cache (real_class);
+
+  new_node = add_class_to_cache (class);
+
+  new_node->data = xmalloc (sizeof (CORE_ADDR));
+  *((CORE_ADDR *) new_node->data) = real_class;
 }
 
 
@@ -4787,7 +5107,7 @@ get_class_address_from_object (CORE_ADDR object_addr)
 
       make_cleanup_ui_out_suppress_output (uiout);
 
-      objc_retval = make_cleanup_set_restore_debugger_mode (NULL, 0);
+      objc_retval = make_cleanup_set_restore_debugger_mode (NULL, 1);
       if (objc_retval == objc_debugger_mode_fail_objc_api_unavailable)
         if (target_check_safe_call (OBJC_SUBSYSTEM, CHECK_SCHEDULER_VALUE))
           objc_retval = objc_debugger_mode_success;
@@ -4873,17 +5193,12 @@ is_objc_exception_throw_breakpoint (struct breakpoint *b)
 }
 /* APPLE LOCAL end Disable breakpoints while updating data formatters.  */
 
-static const char *non_blocking_modes[] = {"off", "limited", "on", NULL};
-static const char *non_blocking_mode;
+static int use_non_blocking_mode = 1;
+
 int
-get_objc_runtime_check_level ()
+objc_runtime_check_enabled_p ()
 {
-  if (strcmp (non_blocking_mode, "off") == 0)
-    return -1;
-  else if (strcmp (non_blocking_mode, "limited") == 0)
-    return 0;
-  else
-    return 1;
+  return use_non_blocking_mode;
 }
 
 static void
@@ -4892,7 +5207,7 @@ set_non_blocking_mode_func (char *args, int from_tty,
 {
   /* If we're turning off the non-blocking mode, then we need to 
      end the debugging mode if it is currently on.  */
-  if (get_objc_runtime_check_level () == -1)
+  if (objc_runtime_check_enabled_p () == 0)
     {
       do_hand_call_cleanups (ALL_CLEANUPS);
     }
@@ -4930,7 +5245,7 @@ _initialize_objc_lang ()
 			   NULL, NULL,
 			   &setlist, &showlist);
 
-  add_setshow_zinteger_cmd ("objc-version", no_class, &objc_runtime_version,
+  add_setshow_zinteger_cmd ("objc-version", no_class, &objc_runtime_version_user_override,
 			   "Set the current Objc runtime version.  "
 			    "If non-zero, this will override the default selection.",
 			   "Show the current Objc runtime version.",
@@ -4938,18 +5253,12 @@ _initialize_objc_lang ()
 			   NULL, NULL,
 			   &setlist, &showlist);
 
-  add_setshow_enum_cmd ("objc-non-blocking-mode", no_class, non_blocking_modes, &non_blocking_mode,
-			   "Set whether all inferior function calls should use the objc non-blocking mode.\n\
-Note that this will mean the attempt to call the function will fail if we can't turn on\n\
-the non-blocking mode.\n\
-    off - don't use non-blocking mode\n\
-    limited - require that no thread have any runtime write locks\n\
-    full - require that no thread have any of the objc runtime locks",
+  add_setshow_boolean_cmd ("objc-non-blocking-mode", no_class, &use_non_blocking_mode,
+			   "Set whether all inferior function calls should use the objc non-blocking mode.\n"
+                           "Note that if this is on the attempt to call the function will fail if we can't turn on\n"
+                           "the non-blocking mode.\n",
 			   "Show whether all inferior function calls should use the objc non-blocking mode.",
 			   "??",
 			   set_non_blocking_mode_func, NULL,
 			   &setlist, &showlist);
-
-  non_blocking_mode = non_blocking_modes[1];
-
 }

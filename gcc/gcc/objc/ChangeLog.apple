@@ -1,3 +1,22 @@
+2010-04-02 Fariborz Jahanian <fjahanian@apple.com>
+
+        Radar 7591784
+	* objc-act.c (objc_build_compound_setter_call): Issue unimplemented 
+        error attempting to use dot-syntax on a RHS which is c++ object
+        requiring construction.
+
+2019-03-17  Jim Grosbach <grosbach@apple.com>
+
+        Radar 6671703
+	* objc-act.c (objc_synthesize_new_getter, objc_synthesize_new_setter):
+	On ARM, for atomic access to any type of larger than 4 bytes, use
+	objc_copyStruct().
+
+2010-02-15  Fariborz Jahanian <fjahanian@apple.com>
+	Radar 7178651
+        * objc-act.c: renamed all incarnations of implemenation
+        with implementation to fix spelling.
+
 2009-05-06  Fariborz Jahanian <fjahanian@apple.com>
 
         Radar 6083666

@@ -1195,9 +1195,21 @@ create_init_utf16_var (const unsigned char *inbuf, size_t length, size_t *numUni
   static int num;
   const char *name_prefix = "__utf16_string_";
   char *name;
+  int embedNull = 0;
 
   if (!cvt_utf8_utf16 (inbuf, length, &uniCharBuf, numUniChars))
     return NULL_TREE;
+
+  /* APPLE LOCAL begin 7589850 */
+  /* ustring with embedded null should go into __const. It should not be forced
+     into "__TEXT,__ustring" section. */
+  for (l = 0; l < length; l++) {
+    if (!inbuf[l]) {
+      embedNull = 1;
+      break;
+    }
+  }
+  /* APPLE LOCAL end 7589850 */
 
   for (l = 0; l < *numUniChars; l++)
     initlist = tree_cons (NULL_TREE, build_int_cst (char_type_node, uniCharBuf[l]), initlist);
@@ -1212,9 +1224,13 @@ create_init_utf16_var (const unsigned char *inbuf, size_t length, size_t *numUni
   DECL_ARTIFICIAL (decl) = 1;
   DECL_CONTEXT (decl) = NULL_TREE;
 
-  attribute = tree_cons (NULL_TREE, build_string (len, section_name), NULL_TREE);
-  attribute = tree_cons (get_identifier ("section"), attribute, NULL_TREE);
-  decl_attributes (&decl, attribute, 0);
+  /* APPLE LOCAL begin 7589850 */
+  if (!embedNull) {
+    attribute = tree_cons (NULL_TREE, build_string (len, section_name), NULL_TREE);
+    attribute = tree_cons (get_identifier ("section"), attribute, NULL_TREE);
+    decl_attributes (&decl, attribute, 0);
+  }
+  /* APPLE LOCAL end 7589850 */
   attribute = tree_cons (NULL_TREE, build_int_cst (NULL_TREE, 2), NULL_TREE);
   attribute = tree_cons (get_identifier ("aligned"), attribute, NULL_TREE);
   decl_attributes (&decl, attribute, 0);

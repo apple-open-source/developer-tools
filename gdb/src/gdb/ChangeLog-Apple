@@ -1,14 +1,208 @@
+2010-04-29  Greg Clayton  (gclayton@apple.com)
+
+	* arm-tdep.c (arm_register_reggroup_p): Corrected registers groups
+	for VFP registers so they save and restore s0-s15.
+
+2010-04-26  Jason Molenda  (jmolenda@apple.com)
+
+	* objc-lang.c (print_object_command): Unwind the objc runtime
+	call if it crashes on bad data.
+
+2010-04-20  Jason Molenda  (jmolenda@apple.com)
+
+	* infcall.c (hand_function_call): Fix typeo.
+	* objc-lang.c (objc_check_safe_to_run_all_threads): Fix typeo.
+	(print_object_command): Ditto.
+
+2010-04-15  Jason Molenda  (jmolenda@apple.com)
+
+	* objc-lang.c (print_object_command): Use read_objc_object to check
+	if the obj pointer looks like it might be viable.  We can still get
+	a pointer-to-uninitialized-memory past this check that's always been
+	the case.
+
+2010-04-15  Jason Molenda  (jmolenda@apple.com)
+
+	* objc-lang.c (print_object_command): Only try to read the object
+	if this is the old objc runtime.
+	(read_objc_object): Supress error output when we try to read the
+	address that may be and object, or may just be a tagged pointer.
+
+2010-04-15  Jason Molenda  (jmolenda@apple.com)
+
+	* objc-lang.c (read_objc_object): Call object_getClass instead of
+	the earlier gdb_object_getClass in the objc runtime.
+
+2010-04-12  Jason Molenda  (jmolenda@apple.com)
+
+	* symfile.c (generic_load): strdup the filename before passing
+	to bfd_openr - bfd_openr does not retain its own copy.
+	(reread_symbols_for_objfile): Make a copy of the bfd filenames
+	before bfd_closing them so we can still do strcmps.
+	strdup copies of filenames before passing them to bfd_openr - it
+	does not retain its own copy so we need to make one for it.
+
+2010-04-01  Jason Molenda  (jmolenda@apple.com)
+
+	* thread.c (info_threads_command): Stop printing the mach port # for
+	the threads; it is not useful information.  Increase the maximum length
+	of the thread name to 30 chars.
+
+2010-03-25  Jason Molenda  (jmolenda@apple.com)
+
+	* objc-lang.c: Rename 'objc_runtime_version' to 
+	'objc_runtime_version_user_override'.  Add new 'objc_runtime_version'.
+	(objc_init_runtime_version): New function to set objc_runtime_version
+	by looking at the libobjc loaded by the program.
+	(new_objc_runtime_internals): After checking for the user's specified	
+	objc runtime version (objc_runtime_verison_user_override), check the
+	programmatically determined version (objc_runtime_version).
+	* objc-lang.h: Prototype for objc_init_runtime_version.
+	* symfile.c (reread_symbols_for_objfile): Add call to 
+	objc_init_runtime_version.
+
+2010-03-23  Caroline Tice  <ctice@apple.com>
+
+	* inlining.c (verify_stack): Commented out internal_error when stack
+        verification fails; instead I silently disable inlined stepping
+        (this is temporary, until Clang/LLVM fixes radar 7780003, to get around
+        gdb crashing on bad inlined subroutine data).
+
 2010-03-02  Jason Molenda  (jmolenda@apple.com)
 
-        * dbxread.c (read_oso_nlists): Tighten N_DATA/N_BSS bitmask pattern match;
-        expressedly ignore symbols whose names start with a dot.
+	* dbxread.c (read_oso_nlists): Tighten N_DATA/N_BSS bitmask pattern 
+	match; expressedly ignore symbols whose names start with a dot.
 
+2010-03-02  Jim Ingham  <jingham@apple.com>
+
+	This patch adds support for the "print" command to try to run
+	only the current thread, but back off and run all threads if it
+	is safe to do so.
+
+	* breakpoint.c: (enable_user_breakpoints_after_updating_data_formatters,
+	make_cleanup_enable_disable_bpts_during_varobj_operation) Rename to be
+	more generic.
+	* breakpoint.h: Ditto.
+	* objc-lang.c (make_cleanup_set_restore_debugger_mode): Disable user 
+	breakpoints while turning on the debugger mode.
+	Also, changed meaning of "level" parameter.  All uses then needed to 
+	change, e.g.:
+	(new_objc_runtime_find_impl, new_objc_runtime_get_classname, 
+	 get_class_address_from_object, _initalize_objc_lang): Adopt new 
+	meaning of "level".
+	(gdb_objc_runtime_check_level): change to:
+	(objc_runtime_check_enabled_p): New function.
+	(print_object_command): Extracted the safety checks and debugger mode 
+	setup.
+	(objc_check_safe_to_run_all_threads): Here are the safety checks.
+	(objc_setup_safe_print): And here is the setup code.
+	(new_objc_runtime_internals): Export.
+	(do_end_debugger_mode): Disable user breakpoints during this call,
+	we don't want to be interrupted here.
+	* objc-lang.h: Export objc_runtime_check_enabled_p and 
+	new_objc_runtime_internals.
+	* printcmd.c (print_command_1, printf_command): Try to run these 
+	commands safely if requested to do so.
+	(_initialize_printcmd): Add a set variable to request doing go.
+	* target.{c,h}: Add to_setup_safe_print target method.
+	* remote.c: The macosx remote target uses objc_setup_safe_print.
+	
+	* valops.c (do_check_is_thread_unsafe): Remove on unnecessary level of 
+	stack crawl here.
+	
 2010-03-02  Jason Molenda  (jmolenda@apple.com)
 
         * dbxread.c (read_oso_nlists): The match should be against 
         N_DATA and N_BSS; symbols not in either of those two sections should
         head into this code path intended for function static variables.
 
+2010-03-01  Jim Ingham  <jingham@apple.com>
+
+	* language.c (language_class_name_from_physname): Check for 
+	NULL physname.
+
+2010-02-24  Jason Molenda  (jmolenda@apple.com)
+
+	* dbxread.c (read_oso_nlists): Fix correction of function static
+	nlist records - they have the N_ABS attribute set.
+
+2010-02-22  James Ingham  <jingham@apple.com>
+
+	* buildsym.c (start_subfile): Check directories (if defined)
+	before treating fines as equivalent.
+
+        * target.c (target_kill): Remove call to do_hand_call_cleanups.
+	
+2010-02-18  James Ingham <jingham@apple.com>
+
+        * valarith.c (value_sub): use find_size_for_pointer_math.
+
+2010-02-18  Jim Ingham  <jingham@apple.com>
+
+	* breakpoint.c (tell_breakpoints_objfile_changed_internal): Don't overwrite an
+	extant bp_shlib_name.
+	
+2010-02-12  Greg Clayton  <gclayton@apple.com>
+
+	* varobj.c (my_value_equal): Back out change below.
+	* gdbtypes.c (build_builtin_type_vec128): Make the 'uint128' member 
+	be unsigned instead of signed.
+	* valarith.c (value_binop): Added the ability to do bitwise AND, 
+	bitwise OR, bitwise	XOR, logical AND, logical OR, equal and not 
+	equal binary operations on uint128 and int128 types.
+
+2010-02-11  Greg Clayton  <gclayton@apple.com>
+
+	* varobj.c (my_value_equal): When seeing if two struct value objects
+	are equal, return 0 if they both have the same error like the comment
+	stated. Before this fix, integers that are larger than ULONGEST will 
+	throw errors and both fail to read their values and return 1 stating 
+	they were equal. This could happen during a varobj-update on vector
+	registers.
+
+2010-02-09  Jim Ingham  <jingham@apple.com>
+	    
+        * dbxread.c (read_dbx_symtab): The dirname_oso belongs on the obstack
+	of the containing objfile, or we will leak it when we reread symbols.
+	* dwarf2read.c (dwarf2_build_psymtabs_hard): Ditto for the dirname in
+        the pst.
+
+	* fork-child.c (fork_inferior): Pass the disable ASLR flag to posix
+	spawn.
+	(_initialize_fork_child): Add a "set-show" variable to control disabling
+	ASLR.
+
+2010-02-03  Jim Ingham  <jingham@apple.com>
+
+	* breakpoint.c (watch_command_1): When we're casting the expression
+	to the resultant type in the by_location case, be sure to single quote
+	the part of the type expression that has "::" in it.
+	* typeprint.c (type_sprint_quoted): This single quotes type names with
+	::'s in them while printing the type name.
+	(get_single_quote_typename, set_single_quote_typename): New functions.
+	* values.h: Declare type_sprint_quoted.
+	* typeprint.h: Declare get & set single_quote_typename.
+	* c-typeprint.c (c_print_typename_possibly_quoted): New function.
+	(c_type_print_base): Use c_print_typename_possibly_quoted.
+	
+2010-02-01  Jim Ingham  <jingham@apple.com>
+
+	* objc-lang.c (tell_objc_msgsend_cacher_objfile_changed): Guard against
+	NULL objfile and an objfile with a NULL name.
+	
+2010-01-12  Jim Ingham  <jingham@apple.com>
+
+	* objc-lang.c (read_objc_object): Cache the fact that we've seen
+	this class.  Also, if "gdb_object_getClass" exists use it to get the
+	correct value of the ISA pointer.
+	(new_objc_runtime_class_getClass): Use the "already seen this class"
+	cache through class_valid_p.  And add the new class if you validate it here.
+	(class_valid_p): New function.
+	(add_class_to_cache): New function.
+	(add_real_class_to_cache): Add the data to the class if it has already been
+	validated.
+	(free_rb_tree_data): Only free the data if it is not NULL.
+	
 2009-11-18  Jim Ingham  <jingham@apple.com>
 
 	* infcall.c (hand_function_call): Change an error message so it it

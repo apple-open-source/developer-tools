@@ -2511,9 +2511,14 @@ static tree get_final_block_variable (tree name, tree var) {
         || (TREE_CODE (decl) == VAR_DECL && COPYABLE_BYREF_LOCAL_VAR (decl)))
     {
       /* byref globals are directly accessed. */
-      if (!gdecl)
+      /* APPLE LOCAL begin radar 7760213 */
+      if (!gdecl) {
+        if (HasByrefArray(TREE_TYPE (decl)))
+          error ("cannot access __block variable of array type inside block");
       /* build a decl for the byref variable. */
         decl = build_block_byref_decl (name, decl, decl);
+      }
+      /* APPLE LOCAL end radar 7760213 */
       else
         add_block_global_byref_list (decl);
     }
@@ -2521,10 +2526,15 @@ static tree get_final_block_variable (tree name, tree var) {
     {
       /* 'byref' globals are never copied-in. So, do not add
        them to the copied-in list. */
-      if (!in_block_global_byref_list (decl))
+      if (!in_block_global_byref_list (decl)) {
+	/* APPLE LOCAL begin radar 7721728 */
+        if (TREE_CODE (TREE_TYPE (decl)) == ARRAY_TYPE)
+          error ("cannot access copied-in variable of array type inside block");
+	/* APPLE LOCAL end radar 7721728 */
       /* build a new decl node. set its type to 'const' type
         of the old decl. */
         decl = build_block_ref_decl (name, decl);
+      }
     }
   }
   return decl;

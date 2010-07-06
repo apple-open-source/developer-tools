@@ -21223,7 +21223,17 @@ handle_thumb_unexpanded_prologue (FILE *f, bool emit)
     {
       bytes += 4;
       if (emit)
-        asm_fprintf (f, "\tblx ___save_vfp_d8_d15_regs\n");
+        {
+          asm_fprintf (f, "\tblx ___save_vfp_d8_d15_regs\n");
+          /* Let the debugger know about the additional space used */
+          if (dwarf2out_do_frame ())
+            {
+              char *l = dwarf2out_cfi_label ();
+              /* d8 - d15 save is 64 bytes of space */
+              cfa_offset = cfa_offset + 64;
+              dwarf2out_def_cfa (l, SP_REGNUM, cfa_offset);
+            }
+	}
     }
   /* APPLE LOCAL end 6465387 exception handling interworking VFP save */
   return bytes;

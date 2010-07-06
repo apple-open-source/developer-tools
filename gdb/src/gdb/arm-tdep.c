@@ -5681,9 +5681,13 @@ arm_register_reggroup_p (struct gdbarch *gdbarch, int regnum,
     {
       if (regnum >= ARM_VFP_REGNUM_S0)
 	{
-	  if (group == float_reggroup
-	      || group == all_reggroup)
+	  if (group == float_reggroup || group == all_reggroup)
 	    return 1;
+	  else if (group == save_reggroup || group == restore_reggroup)
+	    return regnum < ARM_VFP_REGNUM_S0 + 16; 
+	  else if (group == vector_reggroup)
+	    return regnum >= ARM_SIMD_PSEUDO_REGNUM_Q0 && 
+	           regnum <= ARM_SIMD_PSEUDO_REGNUM_Q15;
 	  else
 	    return 0;
 	}

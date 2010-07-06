@@ -365,7 +365,8 @@ static int dcc_parse_tcp_host(struct dcc_hostdef *hostdef,
 static int dcc_parse_localhost(struct dcc_hostdef *hostdef,
                                const char * token_start)
 {
-    const char *token = token_start + strlen("localhost");
+    int parse_result;
+	const char *token = token_start + strlen("localhost");
 
     hostdef->mode = DCC_MODE_LOCAL;
     hostdef->hostname = strdup("localhost");
@@ -379,7 +380,24 @@ static int dcc_parse_localhost(struct dcc_hostdef *hostdef,
      */
     hostdef->n_slots = 2;
 
-    return dcc_parse_multiplier(&token, hostdef);
+	parse_result = dcc_parse_multiplier(&token, hostdef);
+
+	/* When dcc_pick_host_from_list_and_lock_it picks this host (localhost) it
+	 * will use hostdef->n_slots for getting a lock on the localhost.  If a job
+	 * fails remotely, it will rerun locally and use dcc_hostdef_local->n_slots.
+	 * But dcc_make_lock_filename folds these two different hostdefs into a
+	 * single, flat localhost lock namespace.  This means the local slots for
+	 * failures in dcc_hostdef_local can get starved by the requested local
+	 * compiles.  For this reason if hostdef gets more slots, we update
+	 * dcc_hostdef_local to match.
+	 * p.s.- you can use "--localslots=N" after the "localhost/M" entry to
+	 * force this chance for starvation again.
+	 */
+	if (hostdef->n_slots > dcc_hostdef_local->n_slots) {
+		dcc_hostdef_local->n_slots = hostdef->n_slots;
+	}
+
+	return parse_result;
 }
 
 /** Given a host with its protover fields set, set

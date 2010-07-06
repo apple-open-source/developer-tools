@@ -1,3 +1,9 @@
+2010-02-08  Jim Grosbach <grosbach@apple.com>
+
+	Radar 7148788
+	* driverdriver.c (get_arch_name): Issue diagnostic for ARM archs not
+	explicitly recognized.
+
 2009-05-27  Bob Wilson  <bob.wilson@apple.com>
 
 	Radar 6915254

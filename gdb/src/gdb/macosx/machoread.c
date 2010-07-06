@@ -478,6 +478,7 @@ static void
 macho_symfile_read (struct objfile *objfile, int mainline)
 {
   bfd *abfd = objfile->obfd;
+  struct cleanup *minsym_cleanup;
 
   struct bfd_mach_o_load_command *gsymtab, *gdysymtab;
 
@@ -503,7 +504,7 @@ macho_symfile_read (struct objfile *objfile, int mainline)
     return;
 
   init_minimal_symbol_collection ();
-  make_cleanup_discard_minimal_symbols ();
+  minsym_cleanup = make_cleanup_discard_minimal_symbols ();
 
   /* If we are reinitializing, or if we have never loaded syms yet,
      set table to empty.  MAINLINE is cleared so that *_read_psymtab
@@ -587,6 +588,7 @@ macho_symfile_read (struct objfile *objfile, int mainline)
     }
 
   install_minimal_symbols (objfile);
+  do_cleanups (minsym_cleanup);
 }
 
 /* Record minsyms for the dyld stub trampolines; prefix them with "dyld_stub_".  */

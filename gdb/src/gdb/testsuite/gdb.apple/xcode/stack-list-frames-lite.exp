@@ -53,6 +53,9 @@ gdb_expect {
   }
 }
 
+set stack_list_item "\{pc=\"$hex\",fp=\"$hex\"\[^\}\]*\}"
+set stack_list_item_with_value "\{pc=\"\($hex\)\",fp=\"\($hex\)\"\[^\}\]*\}"
+
 mi_run_cmd
 # The running part has been checked already by mi_run_cmd
 
@@ -67,13 +70,13 @@ mi_gdb_test "201-stack-list-frames-lite -names" {201\^error,msg="mi_cmd_stack_li
 mi_gdb_test "202-stack-list-frames-lite -names -limit" {202\^error,msg="mi_cmd_stack_list_frames_lite: Invalid argument to -names."} "-stack-list-frames-lite catch no argument to -names -limit error"
 
 mi_gdb_test "104-stack-list-frames-lite -limit 500" \
-  "104\\^done,frames=\\\[0=\{pc=\"$hex\",fp=\"$hex\"\},1=\{pc=\"$hex\",fp=\"$hex\"\},2=\{pc=\"$hex\",fp=\"$hex\"\},3=\{pc=\"$hex\",fp=\"$hex\"\},4=\{pc=\"$hex\",fp=\"$hex\"\}\\\],valid=\"1\",count=\"5\"" "-stack-list-frames-lite -limit 500 works"
+  "104\\^done,frames=\\\[0=$stack_list_item,1=$stack_list_item,2=$stack_list_item,3=$stack_list_item,4=$stack_list_item\\\],valid=\"1\",count=\"5\"" "-stack-list-frames-lite -limit 500 works"
 
 mi_gdb_test "105-stack-info-depth" \
   "105\\^done,depth=\"5\"" "check stack depth is as expected"
 
 mi_gdb_test "106-stack-list-frames-lite -limit 2" \
-  "106\\^done,frames=\\\[0=\{pc=\"$hex\",fp=\"$hex\"\},1=\{pc=\"$hex\",fp=\"$hex\"\}\\\],valid=\"1\",count=\"5\"" "-stack-list-frames-lite -limit 2 works"
+  "106\\^done,frames=\\\[0=$stack_list_item,1=$stack_list_item\\\],valid=\"1\",count=\"5\"" "-stack-list-frames-lite -limit 2 works"
 
 # Go to a deeper function.
 
@@ -96,22 +99,22 @@ send_gdb "000-exec-continue\n"
 mi_get_bp_stopped "2" "\[01\]" "" "foo8" "callfuncs.c" ".*" "run to foo8"
 
 mi_gdb_test "114-stack-list-frames-lite -limit 500" \
-  "114\\^done,frames=\\\[0=\{pc=\"$hex\",fp=\"$hex\"\},1=\{pc=\"$hex\",fp=\"$hex\"\},2=\{pc=\"$hex\",fp=\"$hex\"\},3=\{pc=\"$hex\",fp=\"$hex\"\},4=\{pc=\"$hex\",fp=\"$hex\"\},5=\{pc=\"$hex\",fp=\"$hex\"\},6=\{pc=\"$hex\",fp=\"$hex\"\},7=\{pc=\"$hex\",fp=\"$hex\"\},8=\{pc=\"$hex\",fp=\"$hex\"\}\\\],valid=\"1\",count=\"9\"" "-stack-list-frames-lite -limit 500 works"
+  "114\\^done,frames=\\\[0=$stack_list_item,1=$stack_list_item,2=$stack_list_item,3=$stack_list_item,4=$stack_list_item,5=$stack_list_item,6=$stack_list_item,7=$stack_list_item,8=$stack_list_item\\\],valid=\"1\",count=\"9\"" "-stack-list-frames-lite -limit 500 works"
 
 mi_gdb_test "115-stack-info-depth" \
   "115\\^done,depth=\"9\"" "check stack depth is as expected"
 
 mi_gdb_test "116-stack-list-frames-lite -limit 2" \
-  "116\\^done,frames=\\\[0=\{pc=\"$hex\",fp=\"$hex\"\},1=\{pc=\"$hex\",fp=\"$hex\"\}\\\],valid=\"1\",count=\"9\"" "-stack-list-frames-lite -limit 2 works"
+  "116\\^done,frames=\\\[0=$stack_list_item,1=$stack_list_item\\\],valid=\"1\",count=\"9\"" "-stack-list-frames-lite -limit 2 works"
 
 mi_gdb_test "116-stack-list-frames-lite -limit 2 -names 1" \
-  "116\\^done,frames=\\\[0=\{pc=\"$hex\",fp=\"$hex\",func=\"foo8\",has_debug=\"1\"\},1=\{pc=\"$hex\",fp=\"$hex\",func=\"foo7\",has_debug=\"1\"\}\\\],valid=\"1\",count=\"9\"" "-stack-list-frames-lite -limit 2 -names works"
+    "116\\^done,frames=\\\[0=\{pc=\"$hex\",fp=\"$hex\"\(,|,\[^,]*,\)func=\"foo8\",has_debug=\"1\"\},1=\{pc=\"$hex\",fp=\"$hex\"\(,|,\[^,]*,\)func=\"foo7\",has_debug=\"1\"\}\\\],valid=\"1\",count=\"9\"" "-stack-list-frames-lite -limit 2 -names works"
 
 mi_gdb_test "117-stack-list-frames-lite -limit 7" \
-  "117\\^done,frames=\\\[0=\{pc=\"$hex\",fp=\"$hex\"\},1=\{pc=\"$hex\",fp=\"$hex\"\},2=\{pc=\"$hex\",fp=\"$hex\"\},3=\{pc=\"$hex\",fp=\"$hex\"\},4=\{pc=\"$hex\",fp=\"$hex\"\},5=\{pc=\"$hex\",fp=\"$hex\"\},6=\{pc=\"$hex\",fp=\"$hex\"\}\\\],valid=\"1\",count=\"9\"" "-stack-list-frames-lite -limit 7 works"
+  "117\\^done,frames=\\\[0=$stack_list_item,1=$stack_list_item,2=$stack_list_item,3=$stack_list_item,4=$stack_list_item,5=$stack_list_item,6=$stack_list_item\\\],valid=\"1\",count=\"9\"" "-stack-list-frames-lite -limit 7 works"
 
 mi_gdb_test "117-stack-list-frames-lite -names 1 -limit 7" \
-  "117\\^done,frames=\\\[0=\{pc=\"$hex\",fp=\"$hex\",func=\"foo8\"\,has_debug=\"1\"},1=\{pc=\"$hex\",fp=\"$hex\",func=\"foo7\",has_debug=\"1\"\},2=\{pc=\"$hex\",fp=\"$hex\",func=\"foo6\",has_debug=\"1\"\},3=\{pc=\"$hex\",fp=\"$hex\",func=\"foo5\",has_debug=\"1\"\},4=\{pc=\"$hex\",fp=\"$hex\",func=\"foo4\",has_debug=\"1\"\},5=\{pc=\"$hex\",fp=\"$hex\",func=\"foo3\",has_debug=\"1\"\},6=\{pc=\"$hex\",fp=\"$hex\",func=\"foo2\",has_debug=\"1\"\}\\\],valid=\"1\",count=\"9\"" "-stack-list-frames-lite -names -limit 7 works"
+  "117\\^done,frames=\\\[0=\{pc=\"$hex\",fp=\"$hex\"\(,|,\[^,]*,\)func=\"foo8\"\,has_debug=\"1\"},1=\{pc=\"$hex\",fp=\"$hex\"\(,|,\[^,]*,\)func=\"foo7\",has_debug=\"1\"\},2=\{pc=\"$hex\",fp=\"$hex\"\(,|,\[^,]*,\)func=\"foo6\",has_debug=\"1\"\},3=\{pc=\"$hex\",fp=\"$hex\"\(,|,\[^,]*,\)func=\"foo5\",has_debug=\"1\"\},4=\{pc=\"$hex\",fp=\"$hex\"\(,|,\[^,]*,\)func=\"foo4\",has_debug=\"1\"\},5=\{pc=\"$hex\",fp=\"$hex\"\(,|,\[^,]*,\)func=\"foo3\",has_debug=\"1\"\},6=\{pc=\"$hex\",fp=\"$hex\"\(,|,\[^,]*,\)func=\"foo2\",has_debug=\"1\"\}\\\],valid=\"1\",count=\"9\"" "-stack-list-frames-lite -names -limit 7 works"
 
 set slow_worked 0
 set fast_worked 0
@@ -144,7 +147,7 @@ gdb_expect {
 
 send_gdb "121-stack-list-frames-lite\n"
 gdb_expect {
-    -re "121\\^done,frames=\\\[0=\{pc=\"($hex)\",fp=\"($hex)\"\},1=\{pc=\"($hex)\",fp=\"($hex)\"\},2=\{pc=\"($hex)\",fp=\"($hex)\"\},3=\{pc=\"($hex)\",fp=\"($hex)\"\},4=\{pc=\"($hex)\",fp=\"($hex)\"\},5=\{pc=\"($hex)\",fp=\"($hex)\"\},6=\{pc=\"($hex)\",fp=\"($hex)\"\},7=\{pc=\"($hex)\",fp=\"($hex)\"\},8=\{pc=\"($hex)\",fp=\"($hex)\"\}\\\],valid=\"1\",count=\"9\"\[\r\n\]+$mi_gdb_prompt$" {
+    -re "121\\^done,frames=\\\[0=$stack_list_item_with_value,1=$stack_list_item_with_value,2=$stack_list_item_with_value,3=$stack_list_item_with_value,4=$stack_list_item_with_value,5=$stack_list_item_with_value,6=$stack_list_item_with_value,7=$stack_list_item_with_value,8=$stack_list_item_with_value\\\],valid=\"1\",count=\"9\"\[\r\n\]+$mi_gdb_prompt$" {
 	pass "get values from stack-list-frames-lite"
 	set wildnum 1
 	for {set lev 0} {$lev < 8} {incr lev} {
@@ -175,12 +178,12 @@ if { $slow_worked && $fast_worked } {
 	if {$foo_addr($foonum) == $foo_addr_lite($foonum)} {
 	    pass "foo$foonum () address from stack-list-frames and stack-list-frames-lite matches"
 	} else {
-	    fail "foo$foonum () address from stack-list-frames and stack-list-frames-lite matches"
+	    fail "foo$foonum () address from stack-list-frames and stack-list-frames-lite matches - slow: $foo_addr($foonum) fast: $foo_addr_lite($foonum)"
 	}
 	if {$foo_fp($foonum) == $foo_fp_lite($foonum)} {
 	    pass "foo$foonum () fp from stack-list-frames and stack-list-frames-lite matches"
 	} else {
-	    fail "foo$foonum () fp from stack-list-frames and stack-list-frames-lite matches"
+	    fail "foo$foonum () fp from stack-list-frames and stack-list-frames-lite matches - slow: $foo_fp($foonum) fast: $foo_fp_lite($foonum)"
 	}
     }
 
@@ -223,7 +226,7 @@ return 0
 #mi_get_bp_stopped "3" "\[01\]" "" "sigfoo8" "callfuncs.c" ".*" "run to sigfoo8"
 #
 #mi_gdb_test "131-stack-list-frames-lite -limit 8" \
-#  "131\\^done,frames=\\\[0=\{pc=\"$hex\",fp=\"$hex\"\},1=\{pc=\"$hex\",fp=\"$hex\"\},2=\{pc=\"$hex\",fp=\"$hex\"\},3=\{pc=\"$hex\",fp=\"$hex\"\},4=\{pc=\"$hex\",fp=\"$hex\"\},5=\{pc=\"$hex\",fp=\"$hex\"\},6=\{pc=\"$hex\",fp=\"$hex\"\},7=\{pc=\"$hex\",fp=\"$hex\"\},8=\{pc=\"$hex\",fp=\"$hex\"\},9=\{pc=\"$hex\",fp=\"$hex\"\}\\\],valid=\"1\",count=\"10\"" "-stack-list-frames-lite -limit 500 works"
+#  "131\\^done,frames=\\\[0=$stack_list_item,1=$stack_list_item,2=$stack_list_item,3=$stack_list_item,4=$stack_list_item,5=$stack_list_item,6=$stack_list_item,7=$stack_list_item,8=$stack_list_item,9=$stack_list_item\\\],valid=\"1\",count=\"10\"" "-stack-list-frames-lite -limit 500 works"
 #
 #mi_gdb_test "132-stack-info-depth" \
 #  "132\\^done,depth=\"10\"" "check stack depth is as expected"
@@ -251,7 +254,7 @@ return 0
 #
 #send_gdb "133-stack-list-frames-lite -limit 7\n"
 #gdb_expect {
-#    -re "133\\^done,frames=\\\[0=\{pc=\"($hex)\",fp=\"($hex)\"\},1=\{pc=\"($hex)\",fp=\"($hex)\"\},2=\{pc=\"($hex)\",fp=\"($hex)\"\},3=\{pc=\"($hex)\",fp=\"($hex)\"\},4=\{pc=\"($hex)\",fp=\"($hex)\"\},5=\{pc=\"($hex)\",fp=\"($hex)\"\},6=\{pc=\"($hex)\",fp=\"($hex)\"\}\\\],valid=\"1\",count=\"10\"\[\r\n\]+$mi_gdb_prompt$" {
+#    -re "133\\^done,frames=\\\[0=$stack_list_item_with_value,1=$stack_list_item_with_value,2=$stack_list_item_with_value,3=$stack_list_item_with_value,4=$stack_list_item_with_value,5=$stack_list_item_with_value,6=$stack_list_item_with_value\\\],valid=\"1\",count=\"10\"\[\r\n\]+$mi_gdb_prompt$" {
 #	pass "get values from sigtramp stack-list-frames-lite"
 #	set wildnum 1
 #	for {set lev 0} {$lev < 8} {incr lev} {

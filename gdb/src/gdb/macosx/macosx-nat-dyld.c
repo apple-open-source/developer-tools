@@ -2331,8 +2331,8 @@ dyld_read_raw_infos (CORE_ADDR addr, struct dyld_raw_infos *info)
       .notification                    = i + i + p,
       .processDetachedFromSharedRegion = i + i + p + p,
       .libSystemInitialized            = i + i + p + p + b,
-      .dyldImageLoadAddress            = i + i + p + p + b + b,
       /* there is padding inserted before the next word-aligned field */
+      .dyldImageLoadAddress            = i + i + p + p + b + b + (p - 2 * b),
       .jitInfo                         = i + i + p + p + b + b + (p - 2 * b) + p,
       .dyldVersion                     = i + i + p + p + b + b + (p - 2 * b) + p + p,
       .errorMessage                    = i + i + p + p + b + b + (p - 2 * b) + p + p + p,
@@ -2654,6 +2654,7 @@ macosx_dyld_update (int dyldonly)
      hurt to do it here.  */
 
   objc_init_trampoline_observer ();
+  objc_init_runtime_version ();
 
   if (maint_use_timers)
     do_cleanups (timer_cleanup);

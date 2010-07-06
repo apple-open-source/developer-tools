@@ -23220,8 +23220,9 @@ iasm_x86_canonicalize_operands (const char **opcode_p, tree iargs, void *ep)
 	   || strcasecmp (opcode, "str") == 0
 	   || strcasecmp (opcode, "xlat") == 0)
     e->mod[0] = 0;
-  else if (strcasecmp (opcode, "rcr") == 0
+  else if (strcasecmp (opcode, "lea") == 0
 	   || strcasecmp (opcode, "rcl") == 0
+	   || strcasecmp (opcode, "rcr") == 0
 	   || strcasecmp (opcode, "rol") == 0
 	   || strcasecmp (opcode, "ror") == 0
 	   || strcasecmp (opcode, "sal") == 0

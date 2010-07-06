@@ -648,35 +648,15 @@ kdp_reboot_command (char *args, int from_tty)
 {
   kdp_return_t kdpret;
   char **argv;
-  char *host;
 
   argv = buildargv (args);
+  if (!c.connected)
+    error ("Must already be connected to the remote machine.");
 
-  if ((argv == NULL) || (argv[0] == NULL) || (argv[1] != NULL))
-    error ("usage: kdp-reboot <hostname>");
-
-  host = argv[0];
-
-  kdp_open (NULL, 0);
-
-  kdp_reset (&c);
-
-#if KDP_TARGET_POWERPC
-  kdp_set_little_endian (&c);
-#elif KDP_TARGET_I386
-  kdp_set_big_endian (&c);
-#elif KDP_TARGET_ARM
-  kdp_set_big_endian (&c);
-#else
-#error "unsupported architecture"
-#endif
-
-  kdpret =
-    kdp_create (&c, logger, argv[0], kdp_default_port, kdp_timeout,
-                kdp_retries);
-  if (kdpret != RR_SUCCESS)
-    error ("unable to create connection for host \"%s\": %s", args,
-           kdp_return_string (kdpret));
+  if (!((argv == NULL) || (argv[0] == NULL)))
+    {
+      error ("usage: kdp-reboot");      
+    }
 
   kdpret = kdp_hostreboot (&c);
 
@@ -2177,7 +2157,7 @@ _initialize_remote_kdp (void)
   add_com ("kdp-reattach", class_run, kdp_reattach_command,
            "Re-attach to a (possibly connected) remote Mac OS X kernel.\nThe kernel must support the reattach packet.");
   add_com ("kdp-reboot", class_run, kdp_reboot_command,
-           "Reboot a (possibly connected) remote Mac OS X kernel.\nThe kernel must support the reboot packet.");
+           "Reboot a connected remote Mac OS X kernel.\nThe kernel must support the reboot packet.");
   add_com ("kdp-detach", class_run, kdp_detach_command,
            "Reset a (possibly disconnected) remote Mac OS X kernel.\n");
   add_com ("kdp-kernelversion", class_run, kdp_kernelversion_command,

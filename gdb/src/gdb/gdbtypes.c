@@ -1163,7 +1163,7 @@ build_builtin_type_vec128 (void)
   struct type *t;
 
   t = init_composite_type ("__gdb_builtin_type_vec128", TYPE_CODE_UNION);
-  append_composite_type_field (t, "uint128", builtin_type_int128);
+  append_composite_type_field (t, "uint128", builtin_type_uint128);
   append_composite_type_field (t, "v4_float", builtin_type_v4_float);
   append_composite_type_field (t, "v4_int32", builtin_type_v4_int32);
   append_composite_type_field (t, "v8_int16", builtin_type_v8_int16);

@@ -36,6 +36,7 @@
 #include "typeprint.h"
 #include "gdb_string.h"
 #include <errno.h>
+#include "exceptions.h"
 
 /* For real-type printing in whatis_exp() */
 extern int objectprint;		/* Controls looking up an object's derived type
@@ -133,6 +134,39 @@ type_sprint (struct type *type, char *varstring, int show)
   return type_name;
 }
 
+static int single_quote_typename = 1;
+
+int 
+set_single_quote_typename (int new_value)
+{
+  int old_value = single_quote_typename;
+  single_quote_typename = new_value;
+  return old_value;
+}
+
+int
+get_single_quote_typename ()
+{
+  return single_quote_typename;
+}
+
+char *
+type_sprint_quoted (struct type *type, char *varstring, int show)
+{
+  char *ret_val;
+  struct gdb_exception e;
+  int old_value = set_single_quote_typename (1);
+  TRY_CATCH (e, RETURN_MASK_ERROR)
+    {
+      ret_val = type_sprint (type, varstring, show);
+    }
+  
+  set_single_quote_typename (old_value);
+  if (e.reason != NO_ERROR)
+    throw_exception (e);
+
+  return ret_val;
+}
 
 /* Print type of EXP, or last thing in value history if EXP == NULL.
    show is passed to type_print.  */

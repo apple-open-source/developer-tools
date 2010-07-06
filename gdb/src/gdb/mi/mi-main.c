@@ -1252,7 +1252,7 @@ mi_cmd_data_evaluate_expression (char *command, char **argv, int argc)
   stb = ui_out_stream_new (uiout);
 
   /* APPLE LOCAL Disable breakpoints while updating data formatters.  */
-  bp_cleanup = make_cleanup_enable_disable_bpts_during_varobj_operation ();
+  bp_cleanup = make_cleanup_enable_disable_bpts_during_operation ();
 
   if (argc == 1)
     {
@@ -1440,14 +1440,14 @@ mi_cmd_target_load_solib (char *command, char **argv, int argc)
       ret_val = target_load_solib (argv[0], argv[1]);
     }
 
-  if (ret_val == NULL)
-    {
-      mi_error_message = xstrprintf ("Unknown error loading shared library \"%s\"", argv[0]);
-      return MI_CMD_ERROR;
-    }
-  else if (e.reason != NO_ERROR)
+  if (e.reason != NO_ERROR)
     {
       mi_error_message = xstrdup (e.message);
+      return MI_CMD_ERROR;
+    }
+  else if (ret_val == NULL)
+    {
+      mi_error_message = xstrprintf ("Unknown error loading shared library \"%s\"", argv[0]);
       return MI_CMD_ERROR;
     }
 

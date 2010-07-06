@@ -1,7 +1,23 @@
+2010-04-12  Jason Molenda  (jmolenda@apple.com)
+
+	* gdb.mi/gdb669.exp: Update expected output of -thread-list-ids to
+	match the new output style.
+
 2010-03-02  Jason Molenda  (jmolenda@apple.com)
 
 	* gdb.apple/function-statics.{c,exp}: Check that we can locate
 	function static variables in the data and bss sections.
+
+2010-02-18  Jim Ingham  <jingham@apple.com>
+
+	* gdb.apple/xcode/stack-list-frames-lite.exp: Change lite stack
+	frame patterns to handle the shared library path element.
+
+2010-02-12  Jason Molenda  (jmolenda@apple.com)
+
+	* gdb.apple/po.exp: Fix regexp to match years past 2009.
+	* gdb.cp/local.exp: Class names are quoted now.
+	* gdb.cp/namespace.exp: Class names are quoted now.
 
 2009-12-07  Jason Molenda  (jmolenda@apple.com)
 

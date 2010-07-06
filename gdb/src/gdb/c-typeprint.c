@@ -52,9 +52,25 @@ static void c_type_print_varspec_prefix (struct type *, struct ui_file *, int,
 /* Print "const", "volatile", or address space modifiers. */
 static void c_type_print_modifier (struct type *, struct ui_file *,
 				   int, int);
+static void c_print_typename_possibly_quoted (struct type *type, struct ui_file *stream);
 
 
+static void 
+c_print_typename_possibly_quoted (struct type *type, struct ui_file *stream)
+{
+  int has_quotable = (strstr (TYPE_NAME (type), "::") != NULL);
 
+  c_type_print_modifier (type, stream, 0, 1);
+  
+  
+  if (has_quotable && get_single_quote_typename ())
+    fputs_filtered ("'", stream);
+  
+  fputs_filtered (TYPE_NAME (type), stream);
+  
+  if (has_quotable && get_single_quote_typename ())
+    fputs_filtered ("'", stream);
+}
 
 /* LEVEL is the depth to indent lines by.  */
 
@@ -695,8 +711,7 @@ c_type_print_base (struct type *type, struct ui_file *stream, int show,
   if (show <= 0
       && TYPE_NAME (type) != NULL)
     {
-      c_type_print_modifier (type, stream, 0, 1);
-      fputs_filtered (TYPE_NAME (type), stream);
+      c_print_typename_possibly_quoted (type, stream);
       return;
     }
 
@@ -1210,8 +1225,7 @@ c_type_print_base (struct type *type, struct ui_file *stream, int show,
          is no type name, then complain. */
       if (TYPE_NAME (type) != NULL)
 	{
-	  c_type_print_modifier (type, stream, 0, 1);
-	  fputs_filtered (TYPE_NAME (type), stream);
+          c_print_typename_possibly_quoted (type, stream);
 	}
       else
 	{

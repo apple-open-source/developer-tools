@@ -102,7 +102,7 @@ mi_cmd_var_create (char *command, char **argv, int argc)
     error (_("mi_cmd_var_create: name of object must begin with a letter"));
 
   /* APPLE LOCAL Disable breakpoints while updating data formatters.  */
-  bp_cleanup = make_cleanup_enable_disable_bpts_during_varobj_operation ();
+  bp_cleanup = make_cleanup_enable_disable_bpts_during_operation ();
 
   if (strcmp (frame, "*") == 0)
     var_type = USE_CURRENT_FRAME;
@@ -1016,7 +1016,7 @@ mi_cmd_var_evaluate_expression (char *command, char **argv, int argc)
     error ("mi_cmd_var_evaluate_expression: Usage: [-u] NAME.");
 
   /* APPLE LOCAL Disable breakpoints while updating data formatters.  */
-  bp_cleanup = make_cleanup_enable_disable_bpts_during_varobj_operation ();
+  bp_cleanup = make_cleanup_enable_disable_bpts_during_operation ();
 
   /* Get varobj handle, if a valid var obj name was specified */
   
@@ -1104,7 +1104,7 @@ mi_cmd_var_update (char *command, char **argv, int argc)
     }
 
   /* APPLE LOCAL Disable breakpoints while updating data formatters.  */
-  bp_cleanup = make_cleanup_enable_disable_bpts_during_varobj_operation ();
+  bp_cleanup = make_cleanup_enable_disable_bpts_during_operation ();
 
   prepare_tmp_mi_out ();
 

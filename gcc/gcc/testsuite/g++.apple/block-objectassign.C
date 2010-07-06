@@ -6,7 +6,6 @@
 
 #include <stdio.h>
 
-#define    BLOCK_HAS_DESCRIPTOR     (1 << 29)
 #define    BLOCK_HAS_COPY_DISPOSE  (1 << 25)
 
 struct Block_descriptor {
@@ -55,10 +54,6 @@ int main(int argc, char *argv[]) {
     // should be a copy helper generated with a calls to above routines
     // Lets find out!
     struct Block_layout *bl = (struct Block_layout *)(void *)myBlock;
-    if ((bl->flags & BLOCK_HAS_DESCRIPTOR) != BLOCK_HAS_DESCRIPTOR) {
-        printf("using old runtime layout!\n");
-        return 1;
-    }
     if ((bl->flags & BLOCK_HAS_COPY_DISPOSE) != BLOCK_HAS_COPY_DISPOSE) {
         printf("no copy dispose!!!!\n");
         return 1;

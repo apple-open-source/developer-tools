@@ -2113,6 +2113,7 @@ build_array_ref (tree array, tree index)
 				 "array indexing");
     }
 }
+
 
 /* Build an external reference to identifier ID.  FUN indicates
    whether this will be used for a function call.  LOC is the source
@@ -2176,9 +2177,14 @@ build_external_ref (tree id, int fun, location_t loc)
 	    {
 	      /* APPLE LOCAL begin radar 5803600 (C++ ci) */
 	      /* byref globals are directly accessed. */
-	      if (!gdecl)
+              /* APPLE LOCAL begin radar 7760213 */
+	      if (!gdecl) {
+                if (HasByrefArray(TREE_TYPE (decl)))
+       		  error ("cannot access __block variable of array type inside block");
 		/* build a decl for the byref variable. */
 		decl = build_block_byref_decl (id, decl, decl);
+              }
+              /* APPLE LOCAL end radar 7760213 */
 	      else
 		add_block_global_byref_list (decl);
 	    }
@@ -2186,10 +2192,15 @@ build_external_ref (tree id, int fun, location_t loc)
 	    {
 	      /* 'byref' globals are never copied-in. So, do not add
 		 them to the copied-in list. */
-	      if (!in_block_global_byref_list (decl))
+	      if (!in_block_global_byref_list (decl)) {
+		/* APPLE LOCAL begin radar 7721728 */
+                if (TREE_CODE (TREE_TYPE (decl)) == ARRAY_TYPE)
+       		  error ("cannot access copied-in variable of array type inside block");
+		/* APPLE LOCAL end radar 7721728 */
 		/* build a new decl node. set its type to 'const' type
 		   of the old decl. */
 		decl = build_block_ref_decl (id, decl);
+              }
 	      /* APPLE LOCAL end radar 5803600 (C++ ci) */
 	      /* APPLE LOCAL end radar 5803005 (C++ ci) */
 	    }

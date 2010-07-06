@@ -45,6 +45,7 @@
 #include "ui-out.h"
 #include "dis-asm.h"
 #include "gdbarch.h"
+#include "exceptions.h"
 
 static void target_info (char *, int);
 
@@ -347,6 +348,15 @@ default_terminal_info (char *args, int from_tty)
   printf_unfiltered (_("No saved terminal information.\n"));
 }
 
+static int
+default_setup_safe_print (struct cleanup **ret_cleanup)
+{
+  struct cleanup *tmp;
+  tmp = make_cleanup (null_cleanup, NULL);
+  if (ret_cleanup != NULL)
+    *ret_cleanup = tmp;
+  return 1;
+}
 /* This is the default target_create_inferior and target_attach function.
    If the current target is executing, it asks whether to kill it off.
    If this function returns without calling error(), it has killed off
@@ -502,6 +512,8 @@ update_current_target (void)
       INHERIT (to_get_thread_id_str, t);
       /* APPLE LOCAL safe call check */
       INHERIT (to_check_safe_call, t);
+      /* APPLE LOCAL safe_print_setup */
+      INHERIT (to_setup_safe_print, t);
       /* APPLE LOCAL objfile loaded check */
       INHERIT (to_check_is_objfile_loaded, t);
       /* APPLE LOCAL: Loading shared libraries */
@@ -716,6 +728,8 @@ update_current_target (void)
            (int (*) (char *)) return_one);
   de_fault (to_check_safe_call,
            (int (*) (char *)) return_one);
+  de_fault (to_setup_safe_print,
+           default_setup_safe_print);
   /* APPLE LOCAL alloc memory in inferior */
   de_fault (to_allocate_memory, allocate_space_in_inferior_malloc);
   de_fault (to_check_is_objfile_loaded,
@@ -1429,9 +1443,6 @@ target_preopen (int from_tty)
 void
 target_kill (void)
 {
-  /* Make sure to turn off debugger mode - 
-     we will let the target run a bit before killing it.  */
-  do_hand_call_cleanups (ALL_CLEANUPS);
   (current_target.to_kill) ();
 }
 

@@ -450,7 +450,6 @@ info_threads_command (char *arg, int from_tty)
   struct frame_id saved_frame_id = get_frame_id (get_selected_frame (NULL));
   char *extra_info;
   int longest_threadname = 0;
-  int longest_portnum = 0;
   int threadcount = 0;
 
   prune_threads ();
@@ -467,18 +466,12 @@ info_threads_command (char *arg, int from_tty)
           if (strlen (t) > longest_threadname)
             longest_threadname = strlen (t);
         }
-      t = target_get_thread_id_str (tp->ptid);
-      if (t)
-        {
-          if (strlen (t) > longest_portnum)
-            longest_portnum = strlen (t);
-        }
       threadcount++;
     }
 
-  /* Limit the thread name to 25 chars max for reasonable one-line printing. */
-  if (longest_threadname > 25)
-    longest_threadname = 25;
+  /* Limit the thread name to 30 chars max for reasonable one-line printing. */
+  if (longest_threadname > 30)
+    longest_threadname = 30;
 
   for (tp = thread_list; tp; tp = tp->next)
     {
@@ -494,19 +487,6 @@ info_threads_command (char *arg, int from_tty)
         
       ui_out_field_int (uiout, "threadno", tp->num);
       ui_out_text (uiout, " ");
-
-      char *tidstr = target_get_thread_id_str (tp->ptid);
-      if (tidstr)
-        {
-          ui_out_field_string (uiout, "target_tid", tidstr);
-          int spacer = strlen (tidstr);
-          while (spacer < longest_portnum)
-            {
-              ui_out_text (uiout, " ");
-              spacer++;
-            }
-          ui_out_text (uiout, " ");
-        }
 
       /* APPLE LOCAL: Get the thread name string, put quote marks around it,
          truncate or pad it out to LONGEST_THREADNAME characters, print it.  */

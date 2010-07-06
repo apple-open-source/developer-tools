@@ -1,3 +1,19 @@
+2010-03-04  Jim Ingham  <jingham@apple.com>
+
+	* mi-main (mi_cmd_target_load_solib): Reverse the order of the checks for
+	error, we should test for an exception first since that will also return NULL.
+	
+2010-03-02  Jim Ingham  <jingham@apple.com>
+
+	* mi-cmd-var.c (mi_var_create, mi_var_evaluate_expression, mi_var_update):
+	Adopt new name of make_cleanup_enable_disable_bpts_during_varobj_operation.
+	* mi-main.c (mi_cmd_data_evaluate_expression): Ditto.
+	
+2010-02-15  Jim Ingham  <jingham@apple.com>
+
+	* mi-cmd-stack.c (mi_print_frame_info_lite_base): Add sharedlibrary
+	name to the stack-list-frames-lite output.
+
 2009-08-06  Jason Molenda  (jmolenda@apple.com)
 
 	* mi-main.c (mi_cmd_target_load_solib): Initialize ret_val so

@@ -966,6 +966,9 @@ case "${host}" in
     host_makefile_frag="config/mh-ppc-darwin"
     ;;
   # APPLE LOCAL begin dynamic-no-pic
+  x86_64-*-darwin*)
+    host_makefile_frag="config/mh-x86-darwin"
+    ;;
   i[[3456789]]86-*-darwin*)
     host_makefile_frag="config/mh-x86-darwin"
     # gcc can default to x86_64 code generation, avoid that

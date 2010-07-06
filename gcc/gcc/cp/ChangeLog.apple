@@ -1,3 +1,22 @@
+2010-03-16  Fariborz Jahanian <fjahanian@apple.com>
+
+        Radar 7760213
+        * semantics.c (get_final_block_variable): Diagnose 
+	access of __block array.
+	
+2010-03-12  Fariborz Jahanian <fjahanian@apple.com>
+
+	Radar 7735196
+	* cp/parser.c (build_block_struct_initlist): 
+	Set BLOCK_USE_STRET flag in block descriptor for
+        blocks which return their aggregate value in memory.
+
+2010-03-05  Fariborz Jahanian <fjahanian@apple.com>
+
+        Radar 7721728
+        * semantics.c  (get_final_block_variable): Diagnose
+        importation of copied-in variables.
+
 2010-01-05  Jim Grosbach <grosbach@apple.com>
 
 	Radar 7465602

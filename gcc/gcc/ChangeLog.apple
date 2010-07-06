@@ -1,3 +1,64 @@
+2010-03-18  Stuart Hastings  <stuart@apple.com>
+
+        Radar 7763139
+        * config/i386/i386.c (iasm_x86_canonicalize_operands): Add LEA
+          to list of opcodes that ignore 2nd type attribute.
+
+2010-03-16  Fariborz Jahanian <fjahanian@apple.com>
+
+        Radar 7760213
+	* c-common.h (HasByrefArray): New decl.
+	* c-common.c (HasByrefArray): New definition.
+	* c-typeck.c (build_external_ref): Diagnose access of
+	__block array.
+
+2010-03-12  Jim Grosbach <grosbach@apple.com>
+
+	Radar 7744816
+
+	* expmed.c (synth_mult): Remove incorrect special case handling for
+	0xffffffff.
+
+2010-03-12  Fariborz Jahanian <fjahanian@apple.com>
+
+        Radar 7735196
+        * c-parser.c (build_block_struct_initlist): 
+        Set BLOCK_USE_STRET flag in block descriptor for
+        blocks which return their aggregate value in memory.
+	* c-common.h (BLOCK_USE_STRET): New flag.
+
+2010-03-05  Fariborz Jahanian <fjahanian@apple.com>
+
+	Radar 7721728
+	* c-typeck.c (build_external_ref): Diagnose
+	importation of copied-in variables.
+
+2010-02-16  Jim Grosbach <grosbach@apple.com>
+
+	Radar 7649286
+
+	* config/arm/arm.md (call_value_mem, call): Rename call_value_mem_v4,
+	call_mem_v4.  Restrict to only when blx is not available (pre-ARMv5).
+
+2010-02-08  Jim Grosbach <grosbach@apple.com>
+
+	Radar 7590305
+	* config/arm/arm.c (handle_thumb_unexpanded_prologue): When calling
+	helper function to save off VFP regs, update the DWARF call frame
+	information.
+
+2010-02-01  Stuart Hastings  <stuart@apple.com>
+
+        Radar 7599272
+        * gcc/config/darwin-c.c (create_init_utf16_var): Apply Evan's
+        LLVM-GCC r95013 patch to GCC.
+
+2010-01-27  Jim Grosbach <grosbach@apple.com>
+
+	Radar 7581650
+	* dwarf2out.c (gen_subprogram_die): DW_AT_APPLE_isa should use data1
+	encoding.
+
 2010-01-13  Jim Grosbach <grosbach@apple.com>
 
         Radar 7511696

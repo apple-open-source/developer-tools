@@ -2172,7 +2172,7 @@ read_dbx_symtab (struct objfile *objfile, int dbx_symcount)
 	      {
 		/* Save the directory name SOs locally, then save it into
 		   the psymtab when it's created below. */
-	        dirname_nso = xstrdup (namestring);
+	        dirname_nso = obsavestring (namestring, strlen (namestring), &objfile->objfile_obstack);
 	        continue;		
 	      }
             /* APPLE LOCAL: Try getting the file's language from 'desc' field */

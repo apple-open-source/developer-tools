@@ -47,7 +47,6 @@
 
 extern macosx_inferior_status *macosx_status;
 
-static char *get_dispatch_queue_name (CORE_ADDR dispatch_qaddr);
 static int get_dispatch_queue_flags (CORE_ADDR dispatch_qaddr, uint32_t *flags);
 
 #define set_trace_bit(thread) modify_trace_bit (thread, 1)
@@ -682,12 +681,31 @@ read_dispatch_offsets ()
   return dispatch_offsets;
 }
 
+/* Return the address of the dispatch queue structure in memory - can be
+   used by the UI to disambiguate between queues on multiple threads (same
+   dispatch queue struct addr) and multiple queues on multiple threads with
+   the same name (bad programmer, no cookie - different dispatch queue struct
+   addr).  
+   Returns 0 to indicate failure.  */
+
+static CORE_ADDR
+get_dispatch_queue_addr (CORE_ADDR dispatch_qaddr)
+{
+  ULONGEST queue = 0;
+  if (dispatch_qaddr == 0)
+    return 0;
+  int wordsize = TARGET_PTR_BIT / 8;
+  if (safe_read_memory_unsigned_integer (dispatch_qaddr, wordsize, &queue) != 0)
+    return queue;
+  return 0;
+}
+
 /* Retrieve the libdispatch work queue name given the dispatch_qaddr
    from thread_info (..., THREAD_IDENTIFIER_INFO, ...).  
    Returns NULL if a name could not be found.
    Returns a pointer to a static character buffer if it was found.  */
 
-static char *
+char *
 get_dispatch_queue_name (CORE_ADDR dispatch_qaddr)
 {
   static char namebuf[96];
@@ -789,7 +807,6 @@ print_thread_info (thread_t tid, int *gdb_thread_id)
     print_stack_frame (get_selected_frame (NULL), 0, LOCATION);
     switch_to_thread (current_ptid);
 
-#ifdef HAVE_THREAD_IDENTIFIER_INFO_DATA_T
   thread_identifier_info_data_t tident;
   info_count = THREAD_IDENTIFIER_INFO_COUNT;
   kret = thread_info (tid, THREAD_IDENTIFIER_INFO, (thread_info_t) &tident, 
@@ -835,8 +852,8 @@ print_thread_info (thread_t tid, int *gdb_thread_id)
       if (pth.pth_name[0] != '\0')
         printf_filtered ("\tthread name: \"%s\"\n", pth.pth_name);
 
-      printf_filtered ("\ttotal user time: 0x%" PRIx64 "\n", pth.pth_user_time);
-      printf_filtered ("\ttotal system time: 0x%" PRIx64 "\n", pth.pth_system_time);
+      printf_filtered ("\ttotal user time: %" PRIu64 "\n", pth.pth_user_time);
+      printf_filtered ("\ttotal system time: %" PRIu64 "\n", pth.pth_system_time);
       printf_filtered ("\tscaled cpu usage percentage: %d\n", pth.pth_cpu_usage);
       printf_filtered ("\tscheduling policy in effect: 0x%x\n", pth.pth_policy);
       printf_filtered ("\trun state: 0x%x", pth.pth_run_state);
@@ -859,7 +876,6 @@ print_thread_info (thread_t tid, int *gdb_thread_id)
       printf_filtered ("\tcurrent priority: %d\n", pth.pth_priority);
       printf_filtered ("\tmax priority: %d\n", pth.pth_maxpriority);
     }
-#endif /* HAVE_THREAD_IDENTIFIER_INFO_DATA_T */
 
   printf_filtered ("\tsuspend count: %d", info.suspend_count);
 
@@ -1157,7 +1173,6 @@ macosx_print_thread_details (struct ui_out *uiout, ptid_t ptid)
   ui_out_field_fmt (uiout, "mach-port-number", "0x%s", 
                     paddr_nz (app_thread_name));
 
-#ifdef HAVE_THREAD_IDENTIFIER_INFO_DATA_T
   thread_identifier_info_data_t tident;
   info_count = THREAD_IDENTIFIER_INFO_COUNT;
   kret = thread_info (tid, THREAD_IDENTIFIER_INFO, (thread_info_t) &tident, 
@@ -1180,10 +1195,16 @@ macosx_print_thread_details (struct ui_out *uiout, ptid_t ptid)
   if (tident.thread_handle != 0)
     {
       char *queue_name = get_dispatch_queue_name (tident.dispatch_qaddr);
-      if (queue_name && queue_name[0] != '\0')
-        ui_out_field_string (uiout, "workqueue", queue_name);
+      if (queue_name && queue_name[0] != '\0') 
+        {
+          ui_out_field_string (uiout, "workqueue", queue_name);
+          CORE_ADDR struct_addr;
+          struct_addr = get_dispatch_queue_addr (tident.dispatch_qaddr);
+          if (struct_addr != 0)
+            ui_out_field_fmt (uiout, "workqueue_addr", "0x%s",
+                              paddr_nz (struct_addr));
+        }
     }
-#endif /* HAVE_THREAD_IDENTIFIER_INFO_DATA_T */
 }
 
 

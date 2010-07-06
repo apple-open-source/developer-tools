@@ -914,6 +914,6 @@ extern void remove_duplicate_sals (struct symtabs_and_lines *,
 extern void breakpoints_relocate (struct objfile *, struct section_offsets *);
 
 /* APPLE LOCAL Disable breakpoints while updating data formatters.  */
-extern struct cleanup * make_cleanup_enable_disable_bpts_during_varobj_operation (void);
+extern struct cleanup * make_cleanup_enable_disable_bpts_during_operation (void);
 
 #endif /* !defined (BREAKPOINT_H) */

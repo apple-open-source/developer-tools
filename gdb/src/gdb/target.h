@@ -468,6 +468,16 @@ struct target_ops
        checking.  */
     int (*to_check_safe_call) (int subsystem, enum check_which_threads thread_mode);
 
+    /* APPLE LOCAL: Try to arrange to make printing as safe as
+       possible e.g. running only the current thread if possible,
+       otherwise running all threads if that wouldn't cause a deadlock
+       on the thread running code.  Returns 1 if it thinks printing is
+       currently safe, 0 otherwise.  Always adds a cleanup which you
+       should do when done printing.  If you pass in a non-NULL
+       cleanup handle, it will be set to the old_chain point.
+     */
+    int (*to_setup_safe_print) (struct cleanup **);
+
     /* APPLE LOCAL: Allocate SIZE bytes in the target. */
     CORE_ADDR (*to_allocate_memory) (int size);
 
@@ -1098,6 +1108,13 @@ extern void (*deprecated_target_new_objfile_hook) (struct objfile *);
 
 #define target_check_safe_call(WHICH, THREAD_MODE)	\
   (current_target.to_check_safe_call) (WHICH, THREAD_MODE)
+
+/*
+ * APPLE LOCAL: Check whether it is safe to call functions on this thread 
+ */
+
+#define target_setup_safe_print	\
+  (current_target.to_setup_safe_print)
 
 /*
  * APPLE LOCAL: Allocate memory in the target.

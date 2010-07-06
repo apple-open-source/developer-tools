@@ -9635,7 +9635,7 @@ build_descriptor_block_decl (tree block_struct_type, struct block_sema_info *blo
 /**
  build_block_struct_initlist - builds the initializer list:
  { &_NSConcreteStackBlock or &_NSConcreteGlobalBlock // __isa,
-   BLOCK_HAS_DESCRIPTOR | BLOCK_HAS_COPY_DISPOSE | BLOCK_IS_GLOBAL // __flags,
+   BLOCK_USE_STRET | BLOCK_HAS_COPY_DISPOSE | BLOCK_IS_GLOBAL // __flags,
    0, // __reserved
    &helper_1, // __FuncPtr,
    &static_descriptor_variable // __descriptor,
@@ -9650,7 +9650,8 @@ build_block_struct_initlist (tree block_struct_type,
 {
   tree initlist, helper_addr;
   tree chain, fields;
-  unsigned int flags = BLOCK_HAS_DESCRIPTOR;
+  /* APPLE LOCAL radar 7735196 */
+  unsigned int flags = 0;
   static tree NSConcreteStackBlock_decl = NULL_TREE;
   static tree NSConcreteGlobalBlock_decl = NULL_TREE;
   tree descriptor_block_decl = build_descriptor_block_decl (block_struct_type, block_impl);
@@ -9660,6 +9661,10 @@ build_block_struct_initlist (tree block_struct_type,
        we have destroy_helper_block/copy_helper_block helper
        routines. */
     flags |= BLOCK_HAS_COPY_DISPOSE;
+  /* APPLE LOCAL begin radar 7735196 */
+  if (block_impl->return_type && aggregate_value_p(block_impl->return_type, 0))
+    flags |= BLOCK_USE_STRET;
+  /* APPLE LOCAL end 7735196 */
 
   fields = TYPE_FIELDS (block_struct_type);
   /* APPLE LOCAL begin radar 6230297 */
@@ -9805,7 +9810,7 @@ build_block_struct_initlist (tree block_struct_type,
  3) build the temporary initialization:
  struct __block_literal_n I = {
    &_NSConcreteStackBlock or &_NSConcreteGlobalBlock // __isa,
-   BLOCK_HAS_DESCRIPTOR | BLOCK_HAS_COPY_DISPOSE | BLOCK_IS_GLOBAL // __flags,
+   BLOCK_USE_STRET | BLOCK_HAS_COPY_DISPOSE | BLOCK_IS_GLOBAL // __flags,
    0, // __reserved
    &helper_1, // __FuncPtr 
    &static_descriptor_variable // __descriptor,

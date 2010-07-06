@@ -58,6 +58,7 @@
 
 #include "remote-fileio.h"
 
+#include "objc-lang.h"
 #ifdef MACOSX_DYLD
 #include "macosx-nat-dyld.h"
 #include "macosx-nat-dyld-process.h"
@@ -6593,6 +6594,7 @@ init_remote_macosx_ops (void)
   remote_macosx_ops.to_magic = OPS_MAGIC;
   remote_macosx_ops.to_load_solib = macosx_load_dylib;
   remote_macosx_ops.to_check_safe_call = macosx_check_safe_call;
+  remote_macosx_ops.to_setup_safe_print = objc_setup_safe_print;
 
 #if defined (TARGET_ARM)
   remote_macosx_ops.to_keep_going = arm_macosx_keep_going;

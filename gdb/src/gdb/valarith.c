@@ -32,6 +32,7 @@
 #include "doublest.h"
 #include <math.h>
 #include "infcall.h"
+#include "parser-defs.h"
 
 /* Define whether or not the C operator '/' truncates towards zero for
    differently signed operands (truncation direction is undefined in C). */
@@ -153,7 +154,7 @@ value_sub (struct value *arg1, struct value *arg2)
 	       == TYPE_LENGTH (check_typedef (TYPE_TARGET_TYPE (type2))))
 	{
 	  /* pointer to <type x> - pointer to <type x>.  */
-	  LONGEST sz = TYPE_LENGTH (check_typedef (TYPE_TARGET_TYPE (type1)));
+	  LONGEST sz = find_size_for_pointer_math (type1);
 	  return value_from_longest
 	    (builtin_type_long,	/* FIXME -- should be ptrdiff_t */
 	     (value_as_long (arg1) - value_as_long (arg2)) / sz);
@@ -786,7 +787,7 @@ value_concat (struct value *arg1, struct value *arg2)
 struct value *
 value_binop (struct value *arg1, struct value *arg2, enum exp_opcode op)
 {
-  struct value *val;
+  struct value *val = NULL;
   struct type *type1, *type2;
 
   arg1 = coerce_ref (arg1);
@@ -942,6 +943,171 @@ value_binop (struct value *arg1, struct value *arg2, enum exp_opcode op)
 	  result_len = promoted_len1;
 	}
 
+      /* APPLE LOCAL BEGIN - large integer support.
+         Adding support for integers with sizes greater than ULONGEST.  */
+      if (result_len > sizeof (ULONGEST))
+	{
+	  if (result_len != TYPE_LENGTH (builtin_type_uint128))
+	    {
+	      error (_("value_binop(v1, v2, %s) not supported for %u byte integers"), 
+		     op_name_standard (op), 
+		     result_len);
+	    }
+	  else
+	    {
+	      int i;
+	      const gdb_byte *arg1_bytes = value_contents (arg1);
+	      const gdb_byte *arg2_bytes = value_contents (arg2);
+	      int arg1_len = TYPE_LENGTH (value_type (arg1));
+	      int arg2_len = TYPE_LENGTH (value_type (arg2));
+
+	      switch (op)
+		{
+		case BINOP_ADD:
+		case BINOP_SUB:
+		case BINOP_MUL:
+		case BINOP_DIV:
+		case BINOP_EXP:
+		case BINOP_REM:
+		case BINOP_MOD:
+		case BINOP_LSH:
+		case BINOP_RSH:
+		case BINOP_MIN:
+		case BINOP_MAX:
+		case BINOP_LESS:
+		  error (_("value_binop(v1, v2, %s) not supported for %u byte integers"), 
+			 op_name_standard (op), 
+			 result_len);
+		  break;
+
+		case BINOP_BITWISE_AND:
+		  {
+		    val = allocate_value (unsigned_operation ? 
+					  builtin_type_uint128 :
+					  builtin_type_int128);
+
+		    gdb_byte *val_bytes = value_contents_writeable (val);
+		    const int val_len = TYPE_LENGTH (value_type(val));
+
+		    for (i=0; i<val_len; i++)
+		      {
+			if (i < arg1_len && i < arg2_len)
+			  val_bytes[i] = arg1_bytes[i] & arg2_bytes[i];
+			else
+			  val_bytes[i] = 0;
+		      }
+		  }
+		  break;
+
+		case BINOP_BITWISE_IOR:
+		  {
+		    val = allocate_value (unsigned_operation ? 
+					  builtin_type_uint128 :
+					  builtin_type_int128);
+
+		    gdb_byte *val_bytes = value_contents_writeable (val);
+		    const int val_len = TYPE_LENGTH (value_type(val));
+
+		    for (i=0; i<val_len; i++)
+		      {
+			if (i < arg1_len && i < arg2_len)
+			  val_bytes[i] = arg1_bytes[i] | arg2_bytes[i];
+			else if (i < arg1_len)
+			  val_bytes[i] = arg1_bytes[i];
+			else if (i < arg2_len)
+			  val_bytes[i] = arg2_bytes[i];
+			else
+			  val_bytes[i] = 0;
+		      }
+		  }
+		  break;
+
+		case BINOP_BITWISE_XOR:
+		  {
+		    val = allocate_value (unsigned_operation ? 
+					  builtin_type_uint128 :
+					  builtin_type_int128);
+
+		    gdb_byte *val_bytes = value_contents_writeable (val);
+		    const int val_len = TYPE_LENGTH (value_type(val));
+
+		    for (i=0; i<val_len; i++)
+		      {
+			if (i < arg1_len && i < arg2_len)
+			  val_bytes[i] = arg1_bytes[i] ^ arg2_bytes[i];
+			else if (i < arg1_len)
+			  val_bytes[i] = arg1_bytes[i];
+			else if (i < arg2_len)
+			  val_bytes[i] = arg2_bytes[i];
+			else
+			  val_bytes[i] = 0;
+		      }
+		  }
+		  break;
+
+		case BINOP_LOGICAL_AND:
+		  {
+		    ULONGEST arg1_not_zero = 0;
+		    ULONGEST arg2_not_zero = 0;
+		    for (i=0; i<arg1_len && !arg1_not_zero; i++)
+		      arg1_not_zero = arg1_bytes[i] != 0;
+
+		    for (i=0; i<arg2_len && !arg2_not_zero; i++)
+		      arg2_not_zero = arg2_bytes[i] != 0;
+		    
+		    val = allocate_value (builtin_type_unsigned_long);
+		    store_unsigned_integer (value_contents_raw (val),
+					    TYPE_LENGTH (value_type (val)),
+					    arg1_not_zero && arg2_not_zero);
+		  }
+		  break;
+
+		case BINOP_LOGICAL_OR:
+		  {
+		    ULONGEST arg1_not_zero = 0;
+		    ULONGEST arg2_not_zero = 0;
+		    for (i=0; i<arg1_len && !arg1_not_zero; i++)
+		      arg1_not_zero = arg1_bytes[i] != 0;
+
+		    if (arg1_not_zero == 0)
+		      for (i=0; i<arg2_len && !arg2_not_zero; i++)
+			arg2_not_zero = arg2_bytes[i] != 0;
+		    
+		    val = allocate_value (builtin_type_unsigned_long);
+		    store_unsigned_integer (value_contents_raw (val),
+					    TYPE_LENGTH (value_type (val)),
+					    arg1_not_zero || arg2_not_zero);
+		  }
+		  break;
+
+		case BINOP_EQUAL:
+		case BINOP_NOTEQUAL:
+		  {
+		    ULONGEST equal = 1;
+		    const int max_len = arg1_len > arg2_len ? arg1_len : arg2_len;
+		    for (i=0; i<max_len && equal; i++)
+		      {
+			if (i < arg1_len && i < arg2_len)
+			  equal = arg1_bytes[i] == arg2_bytes[i];
+			else if (i < arg1_len)
+			  equal = arg1_bytes[i] == 0;
+		      else if (i < arg2_len)
+			  equal = arg2_bytes[i] == 0;
+		    }
+		    val = allocate_value (builtin_type_unsigned_long);
+		    store_unsigned_integer (value_contents_raw (val),
+					    TYPE_LENGTH (value_type (val)),
+					    op == BINOP_EQUAL ? equal : !equal);
+		  }
+		  break;
+
+		default:
+		  error (_("Invalid binary operation on numbers."));
+		}
+	    }
+	}
+      else
+      /* APPLE LOCAL END - large integer support.  */
       if (unsigned_operation)
 	{
 	  ULONGEST v1, v2, v = 0;

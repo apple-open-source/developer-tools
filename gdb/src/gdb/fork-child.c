@@ -43,6 +43,7 @@
 
 char *exec_argv0 = NULL;
 char *exec_pathname = NULL;
+int disable_aslr_flag = 1;
 
 /* This just gets used as a default if we can't find SHELL.  */
 #ifndef SHELL_FILE
@@ -405,6 +406,8 @@ fork_inferior (char *exec_file_arg, char *allargs, char **env,
 #ifdef USE_POSIX_SPAWN
 	  {
 	    posix_spawnattr_t attr;
+	    short ps_flags = 0;
+
 	    int retval;
 	    size_t copied;
 	    cpu_type_t cpu = 0;
@@ -457,12 +460,7 @@ fork_inferior (char *exec_file_arg, char *allargs, char **env,
 		warning ("Couldn't initialize attributes for posix_spawn, error: %d", retval);
 		goto try_execvp;
 	      }
-	    retval = posix_spawnattr_setflags(&attr, POSIX_SPAWN_SETEXEC);
-	    if (retval != 0)
-	      {
-		warning ("Couldn't add POSIX_SPAWN_SETEXEC to attributes, error: %d", retval);
-		goto try_execvp;
-	      }
+
 	    if (count == 1)
 	      {
 		retval = posix_spawnattr_setbinpref_np(&attr, 1, &cpu, &copied);
@@ -471,11 +469,30 @@ fork_inferior (char *exec_file_arg, char *allargs, char **env,
 		    warning ("Couldn't set the binary preferences, error: %d", retval);
 		  }
 	      }
+
 	    retval = posix_spawnattr_setpgroup (&attr, debug_setpgrp);
+
 	    if (retval != 0)
 	      {
 		warning ("Couldn't set the process group, error: %d", retval);
 	      }
+
+	    ps_flags = POSIX_SPAWN_SETEXEC;
+
+#ifndef _POSIX_SPAWN_DISABLE_ASLR
+#define _POSIX_SPAWN_DISABLE_ASLR 0x0100
+#endif
+	    if (disable_aslr_flag)
+	      ps_flags |= _POSIX_SPAWN_DISABLE_ASLR;
+
+	    retval = posix_spawnattr_setflags(&attr, ps_flags);
+
+	    if (retval != 0)
+	      {
+		warning ("Couldn't set the posix_spawn flags, error: %d trying execvp", retval);
+		goto try_execvp;
+	      }
+
 	    retval = posix_spawnp (&pid, fileptr, NULL,  &attr, argv, env);
 	    warning ("posix_spawn failed, trying execvp, error: %d", retval);
 	  }
@@ -650,6 +667,12 @@ x"), NULL,
 			   &start_with_shell_flag, _("\
 Set if GDB should use shell to invoke inferior (performs argument expansion in shell)."), _("\
 Show if GDB should use shell to invoke inferior (performs argument expansion in shell)."), NULL,
+			   NULL, NULL,
+			   &setlist, &showlist);
+  add_setshow_boolean_cmd ("disable-aslr", class_obscure,
+			   &disable_aslr_flag, _("\
+Set if GDB should disable shared library address randomization."), _("\
+Show if GDB should disable shared library address randomization."), NULL,
 			   NULL, NULL,
 			   &setlist, &showlist);
 
