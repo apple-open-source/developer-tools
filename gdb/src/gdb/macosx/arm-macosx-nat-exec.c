@@ -281,9 +281,9 @@ fetch_inferior_registers (int regno)
 	    {
 	      gdb_arm_thread_vfpv1_state_t fp_regs;
 	      mach_msg_type_number_t fp_count = GDB_ARM_THREAD_FPSTATE_VFPV1_COUNT;
-      ret = thread_get_state (current_thread, GDB_ARM_THREAD_FPSTATE,
-                              (thread_state_t) & fp_regs,
-                              &fp_count);
+	      ret = thread_get_state (current_thread, GDB_ARM_THREAD_FPSTATE,
+                                     (thread_state_t) & fp_regs,
+                                     &fp_count);
 	      if (ret != KERN_SUCCESS)
 		{
 		  printf ("Error calling thread_get_state for VFP registers for thread 0x%ulx", 
@@ -301,29 +301,14 @@ fetch_inferior_registers (int regno)
 	      ret = thread_get_state (current_thread, GDB_ARM_THREAD_FPSTATE,
 				      (thread_state_t) & fp_regs,
 				      &fp_count);
-      if (ret != KERN_SUCCESS)
-       {
-         printf ("Error calling thread_get_state for VFP registers for thread 0x%ulx", 
-		  current_thread);
-         MACH_CHECK_ERROR (ret);
-       }
-
-	      if (fp_count == GDB_ARM_THREAD_FPSTATE_VFPV1_COUNT)
+	      if (ret != KERN_SUCCESS)
 		{
-		  /* We asked for VFPv3 registers but we got VFPv1 registers 
-		     back. We may have our VFP settings incorrectly set.  */
-		  gdb_arm_thread_vfpv1_state_t *v1 = 
-				      (gdb_arm_thread_vfpv1_state_t *)&fp_regs;
-
-		  warning ("\nthread_get_state called with VFPv3 register count "
-			   "returned VFPv1 register count.\nUse '--osabi "
-			   "DarwinV6' when launching gdb to avoid this issue.");
-		  fp_regs.fpscr = v1->fpscr;
-		  memset (fp_regs.d, 0, sizeof(fp_regs.d));
-    }
-
+		  printf ("Error calling thread_get_state for VFP registers for thread 0x%ulx", 
+		          current_thread);
+		  MACH_CHECK_ERROR (ret);
+		}
 	      arm_macosx_fetch_vfpv3_regs (&fp_regs);
-}
+	    }
 	    break;
 
 	  default:
@@ -377,11 +362,11 @@ store_inferior_registers (int regno)
 	    {
 	      gdb_arm_thread_vfpv1_state_t fp_regs;
 	      arm_macosx_store_vfpv1_regs (&fp_regs);
-      ret = thread_set_state (current_thread, GDB_ARM_THREAD_FPSTATE,
-                              (thread_state_t) & fp_regs,
+	      ret = thread_set_state (current_thread, GDB_ARM_THREAD_FPSTATE,
+				      (thread_state_t) & fp_regs,
 				      GDB_ARM_THREAD_FPSTATE_VFPV1_COUNT);
-      MACH_CHECK_ERROR (ret);
-    }
+	      MACH_CHECK_ERROR (ret);
+	    }
 	    break;
 	    
 	  case ARM_VFP_VERSION_3:
@@ -392,7 +377,7 @@ store_inferior_registers (int regno)
 				      (thread_state_t) & fp_regs,
 				      GDB_ARM_THREAD_FPSTATE_VFPV3_COUNT);
 	      MACH_CHECK_ERROR (ret);
-}
+            }
 	    break;
 
  	  default:

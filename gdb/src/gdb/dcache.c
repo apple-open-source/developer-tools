@@ -110,12 +110,19 @@
 #define LINE_SIZE_POWER (6)
 #define LINE_SIZE (1 << LINE_SIZE_POWER)
 
-/* Each cache block holds LINE_SIZE bytes of data
-   starting at a multiple-of-LINE_SIZE address.  */
+/* APPLE LOCAL: The size of the cache used to be fixed by the LINE_SIZE define.
+   We made it settable.  The set variable is the line power, since this wants
+   the cache to be a power of 2.  The setter function will take care of setting
+   the line size & resizing the caches.  */
 
-#define LINE_SIZE_MASK  ((LINE_SIZE - 1))
-#define XFORM(x) 	((x) & LINE_SIZE_MASK)
-#define MASK(x)         ((x) & ~LINE_SIZE_MASK)
+static int g_line_power = LINE_SIZE_POWER;
+static int g_line_size = LINE_SIZE;
+
+/* Each cache block holds g_line_size bytes of data
+   starting at a multiple-of-g_line_size address.  */
+
+#define XFORM(x) 	((x) & (g_line_size - 1))
+#define MASK(x)         ((x) & ~(g_line_size - 1))
 
 
 #define ENTRY_BAD   0		/* data at this byte is wrong */
@@ -127,9 +134,9 @@ struct dcache_block
   {
     struct dcache_block *p;	/* next in list */
     CORE_ADDR addr;		/* Address for which data is recorded.  */
-    gdb_byte data[LINE_SIZE];	/* bytes at given address */
-    unsigned char state[LINE_SIZE];	/* what state the data is in */
-
+    /* APPLE LOCAL: data and state used to be fixed size.  */
+    gdb_byte *data;
+    unsigned char *state;
     /* whether anything in state is dirty - used to speed up the 
        dirty scan. */
     int anydirty;
@@ -163,6 +170,8 @@ struct dcache_struct
 
     /* The cache itself. */
     struct dcache_block *the_cache;
+    gdb_byte *data_block;
+    unsigned char *state_block;
   };
 
 static struct dcache_block *dcache_hit (DCACHE *dcache, CORE_ADDR addr);
@@ -187,9 +196,14 @@ show_dcache_enabled_p (struct ui_file *file, int from_tty,
   fprintf_filtered (file, _("Cache use for remote targets is %s.\n"), value);
 }
 
+/* APPLE LOCAL: The dcache system didn't used to keep track of all the caches
+   made, only the last one.  This worked fine because it turns out only one cache
+   was ever made, but that was kind of hacky.  Since I need to know all the caches
+   that are out there so I can resize them, I made an array to store "them" in.  */
 
-DCACHE *last_cache;		/* Used by info dcache */
-
+static DCACHE **g_cache_array = NULL;
+static int g_num_caches = 0;
+static int g_max_num_caches = 0;
 
 /* Free all the data cache blocks, thus discarding all cached data.  */
 
@@ -258,7 +272,7 @@ dcache_write_line (DCACHE *dcache, struct dcache_block *db)
   if (!db->anydirty)
     return 1;
 
-  len = LINE_SIZE;
+  len = g_line_size;
   memaddr = db->addr;
   myaddr  = db->data;
 
@@ -340,7 +354,7 @@ dcache_read_line (DCACHE *dcache, struct dcache_block *db)
 	return 0;
     }
   
-  len = LINE_SIZE;
+  len = g_line_size;
   memaddr = db->addr;
   myaddr  = db->data;
 
@@ -370,7 +384,7 @@ dcache_read_line (DCACHE *dcache, struct dcache_block *db)
       len -= res;
     }
 
-  memset (db->state, ENTRY_OK, sizeof (db->data));
+  memset (db->state, ENTRY_OK, g_line_size * sizeof (unsigned char));
   db->anydirty = 0;
   
   return 1;
@@ -404,7 +418,7 @@ dcache_alloc (DCACHE *dcache, CORE_ADDR addr)
   db->addr = MASK(addr);
   db->refs = 0;
   db->anydirty = 0;
-  memset (db->state, ENTRY_BAD, sizeof (db->data));
+  memset (db->state, ENTRY_BAD, g_line_size * sizeof (unsigned char));
 
   /* append this line to end of valid list */
   if (!dcache->valid_head)
@@ -485,6 +499,30 @@ dcache_poke_byte (DCACHE *dcache, CORE_ADDR addr, gdb_byte *ptr)
   return 1;
 }
 
+static void
+dcache_set_data (DCACHE *dcache)
+{
+
+  int i;
+
+  dcache->data_block = xmalloc (g_line_size * DCACHE_SIZE * sizeof (gdb_byte));
+  dcache->state_block = xmalloc (g_line_size * DCACHE_SIZE * sizeof (unsigned char));
+  
+  for (i = 0; i < DCACHE_SIZE; i++)
+    {
+      dcache->the_cache[i].data = dcache->data_block + (i * g_line_size);
+      dcache->the_cache[i].state = dcache->state_block + (i * g_line_size);
+    }
+}
+
+static void
+dcache_resize (DCACHE *dcache)
+{
+  xfree (dcache->data_block);
+  xfree (dcache->state_block);
+  dcache_set_data (dcache);
+}
+
 /* Initialize the data cache.  */
 DCACHE *
 dcache_init (void)
@@ -497,9 +535,17 @@ dcache_init (void)
   dcache->the_cache = (struct dcache_block *) xmalloc (csize);
   memset (dcache->the_cache, 0, csize);
 
+  dcache_set_data (dcache);
+
   dcache_invalidate (dcache);
 
-  last_cache = dcache;
+  if (g_num_caches == g_max_num_caches)
+    {
+      g_max_num_caches += 4;
+      g_cache_array = xrealloc (g_cache_array, g_max_num_caches * sizeof (DCACHE *));
+    }
+  g_cache_array[g_num_caches++] = dcache;
+
   return dcache;
 }
 
@@ -507,10 +553,23 @@ dcache_init (void)
 void
 dcache_free (DCACHE *dcache)
 {
-  if (last_cache == dcache)
-    last_cache = NULL;
+  int i;
+
+  for (i = 0; i < g_num_caches; i++)
+    {
+      if (g_cache_array[i] == dcache)
+          break;
+    }
+
+  g_num_caches--;
+  if (i < g_num_caches)
+    {
+      bcopy (g_cache_array + i + 1, g_cache_array + i, (g_num_caches - i) * sizeof (DCACHE *));
+    }
 
   xfree (dcache->the_cache);
+  xfree (dcache->data_block);
+  xfree (dcache->state_block);
   xfree (dcache);
 }
 
@@ -555,28 +614,48 @@ static void
 dcache_info (char *exp, int tty)
 {
   struct dcache_block *p;
+  int i;
 
   printf_filtered (_("Dcache line width %d, depth %d\n"),
-		   LINE_SIZE, DCACHE_SIZE);
+		   g_line_size, DCACHE_SIZE);
 
-  if (last_cache)
+  for (i = 0; i < g_num_caches; i++)
     {
       printf_filtered (_("Cache state:\n"));
 
-      for (p = last_cache->valid_head; p; p = p->p)
+      for (p = g_cache_array[i]->valid_head; p; p = p->p)
 	{
 	  int j;
 	  printf_filtered (_("Line at %s, referenced %d times\n"),
 			   paddr (p->addr), p->refs);
 
-	  for (j = 0; j < LINE_SIZE; j++)
+	  for (j = 0; j < g_line_size; j++)
 	    printf_filtered ("%02x", p->data[j] & 0xFF);
 	  printf_filtered (("\n"));
 
-	  for (j = 0; j < LINE_SIZE; j++)
+	  for (j = 0; j < g_line_size; j++)
 	    printf_filtered ("%2x", p->state[j]);
 	  printf_filtered ("\n");
 	}
+    }
+}
+
+static void
+set_cache_line_power (char *args, int from_tty, struct cmd_list_element *c)
+{
+  int i;
+  if (g_num_caches == 0)
+    return;
+
+  for (i = 0; i < g_num_caches; i++)
+      dcache_invalidate (g_cache_array[i]);
+
+  g_line_size = 1 << g_line_power;
+
+  for (i = 0; i < g_num_caches; i++)
+    {
+      dcache_resize (g_cache_array[i]);
+      dcache_invalidate (g_cache_array[i]);
     }
 }
 
@@ -599,4 +678,12 @@ volatile registers are in use.  By default, this option is off."),
   add_info ("dcache", dcache_info,
 	    _("Print information on the dcache performance."));
 
+  add_setshow_zinteger_cmd ("dcache-linesize-power", class_support,
+                        &g_line_power, 
+                        "Set the power for the cache line size",
+                        "Show the power for the cache line size",
+"Sets the power for the cache line size, the actual cache line will be 2^cache-line-power.",
+                         set_cache_line_power,
+                         NULL,
+                         &setlist, &showlist);
 }

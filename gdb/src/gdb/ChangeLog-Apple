@@ -1,3 +1,33 @@
+2010-07-08  Jim Ingham  <jingham@apple.com>
+
+        * dcache.c: These changes make the LINE_SIZE dynamically adjustable.
+        (dcache_read_line, dcache_write_line, dcache_alloc): 
+	LINE_SIZE->g_line_size.
+        (dcache_set_data, dcache_resize): New functions.
+        (dcache_init): Have to set the data & state with dcache_set_data, and 
+        remember the cache in g_cache_array.
+        (dcache_free): Remove the cache from the g_cache_array, and free the 
+        dynamic data & state.
+        (dcache_info): Use g_cache_array not last_cache.
+        (set_cache_line_power): New function.
+        (_initialize_dcache): Add set command for dcache_linesize_power.
+
+        * objc-lang.c (do_cleanup_objc_exception_breakpoint): Delete the
+        objc exception breakpoint rather than just disabling it.  Shouldn't
+        really be holding onto a pointer to this long-term or it could get
+        deleted out from under us.
+
+2010-05-26  Caroline Tice  <ctice@apple.com>
+
+	* objc-lang.c (print_object_command):  Comment out recent new code
+        that calls read_objc_object; restore the old code that was replaced
+        by the code that called read_objc_object.
+        (read_objc_object):  Modify to remove calls to object_getClass, which
+        does not do what we thought it did; replaced them with calls to
+        gdb_object_getClass, which currently doesn't exist, so really it will
+        fall back on default old behavior, until gdb_object_getClass is
+        written.
+
 2010-04-29  Greg Clayton  (gclayton@apple.com)
 
 	* arm-tdep.c (arm_register_reggroup_p): Corrected registers groups

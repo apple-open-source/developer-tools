@@ -1,3 +1,8 @@
+2010-04-30  Greg Clayton  (gclayton@apple.com)
+
+	* arm-macosx-nat-exec.c (fetch_inferior_registers): Fixed an issue
+	that would cause armv7 targets to not have access to d16-d31 (q8-q15).
+
 2010-04-19  Greg Clayton  (gclayton@apple.com)
 
 	* arm-macosx-thread-status.h (struct gdb_arm_thread_vfpv1_state):

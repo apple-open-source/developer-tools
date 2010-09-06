@@ -2345,7 +2345,7 @@ print_object_command (char *args, int from_tty)
   struct value *object, *function, *description;
   struct cleanup *cleanup_chain = NULL;
   struct cleanup *debugger_mode;
-  CORE_ADDR string_addr;
+  CORE_ADDR string_addr, object_addr;
   int i = 0;
   gdb_byte c = 0;
   const char *fn_name;
@@ -2399,13 +2399,25 @@ print_object_command (char *args, int from_tty)
     }
   /* APPLE LOCAL end */
 
-  struct objc_object obj;
-  read_objc_object (value_as_address (object), &obj);
-  if (obj.isa == 0)
-    {
-      error ("0x%s does not appear to point to a valid object.", 
-             paddr_nz (value_as_address (object)));
-    }
+  /* APPLE LOCAL begin -temporarily comment out new code(see old code below) */
+  /*
+   * struct objc_object obj;
+   * read_objc_object (value_as_address (object), &obj);
+   * if (obj.isa == 0)
+   *  {
+   *    error ("0x%s does not appear to point to a valid object.", 
+   *           paddr_nz (value_as_address (object)));
+   *  }
+   */
+  /* APPLE LOCAL begin -temporarily comment out new code(see old code below) */
+
+  /* APPLE LOCAL begin - temporarily replace old code  (see new code above) */
+
+  /* Validate the address for sanity.  */
+  object_addr = value_as_address (object);
+  read_memory (object_addr, &c, 1);
+
+  /* APPLE LOCAL end   - temporarily replace old code  (see new code above) */
 
   /* APPLE LOCAL begin */
   fn_name = "_NSPrintForDebugger";
@@ -3067,13 +3079,15 @@ read_objc_object (CORE_ADDR addr, struct objc_object *object)
       if (class_valid_p (object->isa))
         return;
     }
+  else
+    object->isa = (CORE_ADDR) 0;
   
   if (object_get_class_function == NULL)
     {
-      if (lookup_minimal_symbol ("object_getClass", 0, 0))
+      if (lookup_minimal_symbol ("gdb_object_getClass", 0, 0))
         {
           object_get_class_function = create_cached_function 
-                                                    ("object_getClass",
+                                                    ("gdb_object_getClass",
                                                   builtin_type_voidptrfuncptr);
         }
       else
@@ -3081,8 +3095,8 @@ read_objc_object (CORE_ADDR addr, struct objc_object *object)
           if (info_verbose && !already_warned)
             {
               already_warned = 1;
-              warning ("Couldn't find object_getClass, we may not properly "
-                       "handle objective-c tagged pointers.");
+              warning ("Couldn't find gdb_object_getClass, we may not properly"
+                       " handle objective-c tagged pointers.");
             }
         }
     }
@@ -4598,7 +4612,10 @@ static void
 do_cleanup_objc_exception_breakpoint (void *unused)
 {
   if (objc_exception_throw_breakpoint != NULL)
-      disable_breakpoint (objc_exception_throw_breakpoint);
+    {
+      delete_breakpoint (objc_exception_throw_breakpoint);
+      objc_exception_throw_breakpoint = NULL;
+    }
 }
 
 struct cleanup *

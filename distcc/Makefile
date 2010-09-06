@@ -30,11 +30,11 @@ CPPFLAGS =  -DHAVE_CONFIG_H -D_GNU_SOURCE ${DIR_DEFS} \
 	   -Isrc -I"$(srcdir)/src" -I"$(srcdir)/lzo" $(POPT_INCLUDES)
 PYTHON_SETUP_CFLAGS = -g -O2  -W -Wall -Wimplicit -Wshadow -Wpointer-arith -Wcast-align -Wwrite-strings -Waggregate-return -Wstrict-prototypes -Wmissing-prototypes -Wnested-externs -Wmissing-declarations -Wuninitialized -D_THREAD_SAFE 
 
-srcdir = /private/tmp/submission/9835/distcc/distcc_dist
-top_srcdir = /private/tmp/submission/9835/distcc/distcc_dist
+srcdir = /private/tmp/submission/49729/distcc/distcc_dist
+top_srcdir = /private/tmp/submission/49729/distcc/distcc_dist
 builddir = .
 top_builddir = .
-VPATH = /private/tmp/submission/9835/distcc/distcc_dist
+VPATH = /private/tmp/submission/49729/distcc/distcc_dist
 prefix = /usr
 exec_prefix = ${prefix}
 

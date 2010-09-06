@@ -1,4 +1,4 @@
-# Developer Tools 3.2.3 YellowGarnet10M2262
+# Developer Tools 3.2.4 OrangeGarnet10M2309
 adv_cmds	138.1	Other
 amavisd	114	Other
 apache	746	Other
@@ -71,7 +71,7 @@ DirectoryService	621	Other
 DiskArbitration	213	Other
 diskdev_cmds	491	Other
 disklabel	2	Other
-distcc	1686	Other
+distcc	1702	Other
 doc_cmds	47	Other
 DSPasswordServerPlugin	281	Other
 DSTools	134	Other
@@ -91,7 +91,7 @@ flex	24.1	Other
 freeradius	25	Other
 gcc	5664	Other
 gcc_select	70	Other
-gdb	1469	Other
+gdb	1472	Other
 glibtool	14	Other
 gm4	13	Other
 gnudiff	13	Other

@@ -24,7 +24,7 @@ struct gdb_arm_thread_vfpv1_state
 {
   uint32_t r[32]; // S0 - S31 (and D0 - D15)
   uint32_t pad[32];
-  uint32_t        fpscr;
+  uint32_t fpscr;
 };
 
 struct gdb_arm_thread_vfpv3_state
