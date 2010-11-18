@@ -1,3 +1,9 @@
+2010-05-11  Jason Molenda  (jmolenda@apple.com)
+
+	* elf/dwarf2.h (DW_AT_APPLE_omit_frame_ptr): Add new attribute which
+	indicates that a section of code was built -fomit-frame-pointer on
+	i386/x86_64.
+
 2009-08-13  Caroline Tice  <ctice@apple.com>
 
 	* elf/dwarf2.h (DW_AT_APPLE_optimized): Add new attribute.

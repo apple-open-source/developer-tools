@@ -1358,6 +1358,9 @@ x86_cxx_virtual_override_thunk_trampline (CORE_ADDR pc)
   int is_thunk = 0;
 
   msym = lookup_minimal_symbol_by_pc (pc);
+  if (msym == NULL)
+    return 0;
+
   if (strncmp (SYMBOL_LINKAGE_NAME (msym), "_ZThn", 5) == 0)
     {
       if (isdigit ((SYMBOL_LINKAGE_NAME (msym))[5]))

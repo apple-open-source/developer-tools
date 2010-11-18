@@ -687,10 +687,14 @@ struct partial_die_info
        if any.  */
     struct partial_die_info *die_parent, *die_child, *die_sibling;
 
-   /* APPLE LOCAL begin psym equivalences  */
-   /* The psym equivalence name this die contains, if any.  */
+    /* APPLE LOCAL begin psym equivalences  */
+    /* The psym equivalence name this die contains, if any.  */
     char *equiv_name;		     
-  /* APPLE LOCAL end psym equivalences  */
+    /* APPLE LOCAL end psym equivalences  */
+  
+    /* APPLE LOCAL begin differentiate between Arm & Thumb */
+    short int isa_value;
+    /* APPLE LOCAL end differentiate between Arm & Thumb */
   };
 
 /* This data structure holds the information of an abbrev. */
@@ -2912,6 +2916,10 @@ add_partial_symbol (struct partial_die_info *pdi, struct dwarf2_cu *cu)
 				      0, pdi->lowpc + baseaddr,
 				      cu->language, objfile);
 	}
+      /* APPLE LOCAL begin - Differentiate between arm & thumb  */
+      if (pdi->isa_value == DW_ISA_ARM_thumb)
+        objfile_add_special_psym (objfile, psym, pdi->isa_value);
+      /* APPLE LOCAL end - Differentiate between arm & thumb  */
       break;
     case DW_TAG_variable:
       if (pdi->is_external)
@@ -4241,8 +4249,8 @@ dwarf2_kext_psymtab_to_symtab (struct partial_symtab *pst)
                                  sizeof (struct dwarf2_per_cu_data));
 
   if (kext_dsym_comp_unit_start < dwarf2_per_objfile->info_buffer)
-    error ("Unable to find compilation unit offset in DWARF debug info for %s",
-           pst->filename);
+    error ("Unable to find compilation unit offset in DWARF debug info for compilation unit %s in module %s",
+           pst->filename, pst->objfile->name);
   this_cu->offset = kext_dsym_comp_unit_start - dwarf2_per_objfile->info_buffer;
   this_cu->length = read_initial_length (oso_bfd, 
                                          kext_dsym_comp_unit_start, 
@@ -8233,6 +8241,11 @@ read_partial_die (struct partial_die_info *part_die,
           part_die->has_stmt_list = 1;
           part_die->line_offset = DW_UNSND (&attr);
           break;
+        /* APPLE LOCAL begin differentiate between Arm & Thumb */
+        case DW_AT_APPLE_isa:
+          part_die->isa_value = DW_SND (&attr);
+          break;
+        /* APPLE LOCAL end differentiate between Arm & Thumb */
 	default:
 	  break;
 	}

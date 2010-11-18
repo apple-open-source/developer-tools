@@ -1524,7 +1524,7 @@ file_grouplist(si_mod_t *si, const char *name)
 }
 
 __private_extern__ si_item_t *
-file_host_byname(si_mod_t *si, const char *name, int af, uint32_t *err)
+file_host_byname(si_mod_t *si, const char *name, int af, const char *ignored, uint32_t *err)
 {
 	si_item_t *item;
 
@@ -1537,7 +1537,7 @@ file_host_byname(si_mod_t *si, const char *name, int af, uint32_t *err)
 }
 
 __private_extern__ si_item_t *
-file_host_byaddr(si_mod_t *si, const void *addr, int af, uint32_t *err)
+file_host_byaddr(si_mod_t *si, const void *addr, int af, const char *ignored, uint32_t *err)
 {
 	si_item_t *item;
 
@@ -1678,6 +1678,13 @@ file_mac_all(si_mod_t *si)
 	return _fsi_get_ether(si, NULL, SEL_ALL);
 }
 
+static si_list_t *
+file_addrinfo(si_mod_t *si, const void *node, const void *serv, uint32_t family, uint32_t socktype, uint32_t proto, uint32_t flags, const char *interface, uint32_t *err)
+{
+	if (err != NULL) *err = SI_STATUS_NO_ERROR;
+	return _gai_simple(si, node, serv, family, socktype, proto, flags, interface, err);
+}
+
 __private_extern__  si_mod_t *
 si_module_static_file()
 {
@@ -1747,9 +1754,8 @@ si_module_static_file()
 	out->sim_mac_bymac = file_mac_bymac;
 	out->sim_mac_all = file_mac_all;
 
-	/* no addrinfo support */
 	out->sim_wants_addrinfo = NULL;
-	out->sim_addrinfo = NULL;
+	out->sim_addrinfo = file_addrinfo;
 
 	/* no nameinfo support */
 	out->sim_nameinfo = NULL;

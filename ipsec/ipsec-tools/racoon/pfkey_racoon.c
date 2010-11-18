@@ -998,6 +998,13 @@ pk_recvgetspi(mhp)
 		return -1;
 	}
 
+	if (iph2->is_dying) {
+		plog(LLV_ERROR, LOCATION, NULL,
+			 "status mismatch phase2 dying (db:%d msg:%d)\n",
+			 iph2->status, PHASE2ST_GETSPISENT);
+		return -1;
+	}
+
 	if (iph2->status != PHASE2ST_GETSPISENT) {
 		plog(LLV_ERROR, LOCATION, NULL,
 			"status mismatch (db:%d msg:%d)\n",
@@ -1340,6 +1347,13 @@ pk_recvupdate(mhp)
 		return -1;
 	}
 
+	if (iph2->is_dying) {
+		plog(LLV_ERROR, LOCATION, NULL,
+			 "status mismatch phase2 dying (db:%d msg:%d)\n",
+			 iph2->status, PHASE2ST_ADDSA);
+		return -1;
+	}
+
 	if (iph2->status != PHASE2ST_ADDSA) {
 		plog(LLV_ERROR, LOCATION, NULL,
 			"status mismatch (db:%d msg:%d)\n",
@@ -1413,7 +1427,8 @@ pk_recvupdate(mhp)
 #endif
 
 	/* count up */
-	iph2->ph1->ph2cnt++;
+	if (iph2->ph1)
+		iph2->ph1->ph2cnt++;
 
 	/* turn off schedule */
 	if (iph2->scr)
@@ -1808,7 +1823,7 @@ pk_recvexpire(mhp)
 			    sa_mode));
 		return 0;
 	}
-	if (iph2->status != PHASE2ST_ESTABLISHED) {
+	if (iph2->is_dying || iph2->status != PHASE2ST_ESTABLISHED) {
 		/*
 		 * If the status is not equal to PHASE2ST_ESTABLISHED,
 		 * racoon ignores this expire message.  There are two reason.
@@ -1819,7 +1834,7 @@ pk_recvexpire(mhp)
 		 */
 		plog(LLV_WARNING, LOCATION, NULL,
 			"the expire message is received "
-			"but the handler has not been established.\n");
+			"but the handler is dying or has not been established.\n");
 		return 0;
 	}
 
@@ -1831,7 +1846,8 @@ pk_recvexpire(mhp)
 	/* INITIATOR, begin phase 2 exchange only if there's no other established ph2. */
 	/* allocate buffer for status management of pfkey message */
 	if (iph2->side == INITIATOR &&
-		!ike_session_has_other_established_ph2(iph2->parent_session, iph2)) {
+		!ike_session_has_other_established_ph2(iph2->parent_session, iph2) &&
+		!ike_session_drop_rekey(iph2->parent_session)) {
 
 		initph2(iph2);
 

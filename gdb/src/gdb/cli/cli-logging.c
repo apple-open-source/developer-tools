@@ -46,6 +46,26 @@ show_logging_filename (struct ui_file *file, int from_tty,
 		    value);
 }
 
+int logging_commands;
+static void
+show_logging_commands (struct ui_file *file, int from_tty,
+			struct cmd_list_element *c, const char *value)
+{
+  fprintf_filtered (file, _("\
+Whether logging writes commands to the log file is %s.\n"),
+		    value);
+}
+
+
+void
+log_command (char *command)
+{
+  if (!logging_commands)
+    return;
+  else
+    printf_unfiltered ("(gdb) %s\n", command);
+}
+
 int logging_overwrite;
 static void
 show_logging_overwrite (struct ui_file *file, int from_tty,
@@ -230,5 +250,12 @@ The logfile is used when directing GDB's output."),
   add_cmd ("off", class_support, set_logging_off,
 	   _("Disable logging."), &set_logging_cmdlist);
 
+  add_setshow_boolean_cmd ("commands", class_support, &logging_commands, _("\
+Set whether logging also logs commands to the log file."), _("\
+Show whether logging also logs commands to the log file."), _("\
+If set, commands are also logged in the log file."),
+                           NULL,
+                           show_logging_commands,
+                           &set_logging_cmdlist, &show_logging_cmdlist);
   logging_filename = xstrdup ("gdb.txt");
 }

@@ -105,7 +105,7 @@ IOUSBControllerV3::init(OSDictionary * propTable)
     if (!_v3ExpansionData)
     {
 		_v3ExpansionData = (V3ExpansionData *)IOMalloc(sizeof(V3ExpansionData));
-		if (!_v2ExpansionData)
+		if (!_v3ExpansionData)
 			return false;
 		bzero(_v3ExpansionData, sizeof(V3ExpansionData));
     }
@@ -120,6 +120,12 @@ IOUSBControllerV3::start( IOService * provider )
 {
 	IOReturn	err;
 	
+	_device = OSDynamicCast(IOPCIDevice, provider);
+	if (_device == NULL)
+	{
+		return false;
+	}
+	
 	// the controller speed is set in the ::init methods of the controller subclasses
 	if (_controllerSpeed == kUSBDeviceSpeedFull)
 	{
@@ -131,11 +137,19 @@ IOUSBControllerV3::start( IOService * provider )
 			return false;
 		}
 	}
-    
-    if( !super::start(provider))
+    	
+	if ( !super::start(provider))
+	{
+		if (_ehciController)
+		{
+			_ehciController->release();
+			_ehciController = NULL;
+		}
         return  false;
+	}
 	
-	if (_watchdogUSBTimer && _watchdogTimerActive)
+	
+	if (_expansionData && _watchdogUSBTimer && _watchdogTimerActive)
 	{
 		_watchdogUSBTimer->cancelTimeout();									// cancel the timer
 		_watchdogTimerActive = false;
@@ -324,7 +338,7 @@ IOUSBControllerV3::setPowerState( unsigned long powerStateOrdinal, IOService* wh
 	{
 		// if we are currently running or dozing, and we are going to sleep or lower, then we need to cancel
 		// the watchdog timer
-		if (_watchdogUSBTimer && _watchdogTimerActive)
+		if (_expansionData && _watchdogUSBTimer && _watchdogTimerActive)
 		{
 			_watchdogUSBTimer->cancelTimeout();									// cancel the timer
 			_watchdogTimerActive = false;
@@ -487,8 +501,8 @@ IOUSBControllerV3::free()
     //
     if (_v3ExpansionData)
     {
-        bzero(_v3ExpansionData, sizeof(ExpansionData));
 		IOFree(_v3ExpansionData, sizeof(ExpansionData));
+		_v3ExpansionData = NULL;
     }
 
 	super::free();
@@ -506,31 +520,31 @@ IOUSBControllerV3::CheckForEHCIController(IOService *provider)
     IOService				*service;
     IORegistryEntry			*entry;
     bool					ehciPresent = false;
-	const char *			myProviderLocation;
-	const char *			ehciProviderLocation;
-	int						myDeviceNum = 0, myFnNum = 0;
-	int						ehciDeviceNum = 0, ehciFnNum = 0;
+	int						myDeviceNum = 0;
+	int						ehciDeviceNum = 0;
 	IOUSBControllerV3 *		testEHCI;
 	int						checkListCount = 0;
     
-    // Check my provide (_device) parent (a PCI bridge) children (sibling PCI functions)
+	USBLog(6, "+%s[%p]::CheckForEHCIController", getName(), this);
+	
+	// Check my provide (_device) parent (a PCI bridge) children (sibling PCI functions)
     // to see if any of them is an EHCI controller - if so, wait for it..
-    
+    if ( _device )
+	{
+		myDeviceNum = _device->getDeviceNumber();
+	}
+	
 	if (provider)
 	{
 		siblings = provider->getParentEntry(gIOServicePlane)->getChildIterator(gIOServicePlane);
-		myProviderLocation = provider->getLocation();
-		if (myProviderLocation)
-		{
-			super::ParsePCILocation(myProviderLocation, &myDeviceNum, &myFnNum);
-		}
+
 	}
 	else
 	{
 		USBLog(2, "%s[%p]::CheckForEHCIController - NULL provider", getName(), this);
 	}
 	
-	if( siblings ) 
+	if ( siblings ) 
 	{
 		while( (entry = OSDynamicCast(IORegistryEntry, siblings->getNextObject())))
 		{
@@ -553,7 +567,8 @@ IOUSBControllerV3::CheckForEHCIController(IOService *provider)
 		USBLog(2, "%s[%p]::CheckForEHCIController - NULL siblings", getName(), this);
 	}
 	
-	
+	// Look for our "companion" EHCI controller.  If it's not the first one we find, then keep looking
+	// until it appears, timing out after 5 seconds (but loop every 10ms).
     if (ehciPresent) 
 	{
         t.tv_sec = 5;
@@ -563,11 +578,9 @@ IOUSBControllerV3::CheckForEHCIController(IOService *provider)
 		testEHCI = (IOUSBControllerV3*)service;
 		while (testEHCI)
 		{
-			ehciProviderLocation = testEHCI->getParentEntry(gIOServicePlane)->getLocation();
-			if (ehciProviderLocation)
-			{
-				super::ParsePCILocation(ehciProviderLocation, &ehciDeviceNum, &ehciFnNum);
-			}
+			IOPCIDevice *	testPCI = (IOPCIDevice*)testEHCI->getParentEntry(gIOServicePlane);
+			ehciDeviceNum = testPCI->getDeviceNumber();
+			
 			if (myDeviceNum == ehciDeviceNum)
 			{
 				USBLog(5, "%s[%p]::CheckForEHCIController - ehciDeviceNum and myDeviceNum match (%d)", getName(), this, myDeviceNum);
@@ -587,7 +600,7 @@ IOUSBControllerV3::CheckForEHCIController(IOService *provider)
 					testEHCI = (IOUSBControllerV3*)(ehciList->getNextObject());
 					if (testEHCI)
 					{
-						USBLog(5, "%s[%p]::CheckForEHCIController - got AppleUSBEHCI[%p] from the list", getName(), this, testEHCI);
+						USBLog(3, "%s[%p]::CheckForEHCIController - found AppleUSBEHCI after %d ms", getName(), this, checkListCount * 10);
 					}
 				}
 				else
@@ -595,16 +608,12 @@ IOUSBControllerV3::CheckForEHCIController(IOService *provider)
 					testEHCI = NULL;
 				}
 				
-				if (!testEHCI && (checkListCount++ < 2))
+				if (!testEHCI && (checkListCount++ < 500))
 				{
 					if (ehciList)
 						ehciList->release();
-					
-					if (checkListCount == 2)
-					{
-						USBLog(5, "%s[%p]::CheckForEHCIController - waiting for 5 seconds", getName(), this);
-						IOSleep(5000);				// wait 5 seconds the second time around
-					}
+										
+					IOSleep(10);
 					
 					USBLog(5, "%s[%p]::CheckForEHCIController - getting an AppleUSBEHCI list", getName(), this);
 					ehciList = getMatchingServices(serviceMatching("AppleUSBEHCI"));
@@ -620,12 +629,18 @@ IOUSBControllerV3::CheckForEHCIController(IOService *provider)
 			}
 		}
     }
-	else
+	
+	// We know there has to be a "companion" EHCI controller, so if there isn't, log it out
+	if ( !ehciPresent || checkListCount == 500 )
 	{
-		USBLog(5, "%s[%p]::CheckForEHCIController - EHCI controller not found in siblings", getName(), this);
+		USBError(1, "We could not find a corresponding USB EHCI controller for our OHCI controller at PCI device number%d", myDeviceNum);
 	}
+	
 	if (ehciList)
 		ehciList->release();
+
+	USBLog(6, "-%s[%p]::CheckForEHCIController", getName(), this);
+
 	return kIOReturnSuccess;
 }
 
@@ -834,7 +849,7 @@ IOUSBControllerV3::ControllerOff(void)
 {
 	USBLog(5, "IOUSBControllerV3(%s)[%p]::ControllerOff - calling ResetControllerState", getName(), this);
 	ResetControllerState();
-	if (_watchdogUSBTimer && _watchdogTimerActive)
+	if (_expansionData && _watchdogUSBTimer && _watchdogTimerActive)
 	{
 		_watchdogUSBTimer->cancelTimeout();									// cancel the timer
 		_watchdogTimerActive = false;
@@ -1010,7 +1025,7 @@ IOUSBControllerV3::GatedPowerChange(OSObject *owner, void *arg0, void *arg1, voi
 				me->_rootHubDevice->registerService(kIOServiceRequired | kIOServiceSynchronous);
 			}
 		}
-		if (me->_watchdogUSBTimer && !me->_watchdogTimerActive)
+		if (me->_expansionData && me->_watchdogUSBTimer && !me->_watchdogTimerActive)
 		{
 			me->_watchdogTimerActive = true;
 			me->_watchdogUSBTimer->setTimeoutMS(kUSBWatchdogTimeoutMS);
@@ -1163,13 +1178,21 @@ IOUSBControllerV3::CheckForRootHubChanges(void)
 				wBitmap = HostToUSBWord(_rootHubStatusChangedBitmap);
 				pBytes = (UInt8*)&wBitmap;
 			}
-			USBTrace( kUSBTController, kTPControllerRootHubTimer, (uintptr_t)this, 0, 0, 5 );
-			USBLog(6, "IOUSBControllerV3(%s)[%p]::CheckForRootHubChanges - stopping timer and calling complete", getName(), this);
-			RootHubStopTimer();
-			_rootHubTransactionWasAborted = false;
-			
-			xaction.buf->writeBytes(0, pBytes, bytesToMove);
-			Complete(xaction.completion, kIOReturnSuccess, xaction.bufLen - bytesToMove);
+			if (xaction.completion.action && xaction.buf)
+			{
+				USBTrace( kUSBTController, kTPControllerRootHubTimer, (uintptr_t)this, 0, 0, 5 );
+				USBLog(6, "IOUSBControllerV3(%s)[%p]::CheckForRootHubChanges - stopping timer and calling complete", getName(), this);
+				RootHubStopTimer();
+				_rootHubTransactionWasAborted = false;
+				
+				xaction.buf->writeBytes(0, pBytes, bytesToMove);
+				Complete(xaction.completion, kIOReturnSuccess, xaction.bufLen - bytesToMove);
+			}
+			else
+			{
+				USBError(1, "IOUSBControllerV3(%s)[%p]::CheckForRootHubChanges - NULL action(%p) or buf(%p)", getName(), this, xaction.completion.action, xaction.buf);
+			}
+
 		}
 		else
 		{

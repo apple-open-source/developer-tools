@@ -79,12 +79,11 @@
     //	Vendor-specific device from unknown vendor
     //
     
-    tempString1 = [deviceClass className];
     
     // If our subclass name is different than our class name, then add the sub class to the description
     // following a "/"
     //
-    if( ! [[deviceClass subclassName] isEqualToString:@""] &&
+    if ( ! [[deviceClass subclassName] isEqualToString:@""] &&
         ! [[deviceClass subclassName] isEqualToString:[deviceClass className]] ) {
         tempString1 = [NSString stringWithFormat:@"%@/%@", [deviceClass className], [deviceClass subclassName]]; 
     } else {
@@ -92,7 +91,6 @@
     }
     
     cstr1 = GetStringFromIndex((UInt8)dev->iProduct, deviceIntf);
-    tempString2 = [tempString1 stringByAppendingString:@" device: "];
     cstr2 = GetStringFromNumber(dev->idVendor, sizeof(dev->idVendor), kIntegerOutputStyle);
     
 	if ( wasSuspended )

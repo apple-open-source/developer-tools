@@ -222,6 +222,9 @@ captured_main (void *data)
   pthread_setname_np ("gdb main thread");
 #endif
 
+  /* APPLE LOCAL: raise our file descriptor limit a lot.  */
+  unlimit_file_rlimit ();
+
   /* Set the sysroot path.  */
 #ifdef TARGET_SYSTEM_ROOT_RELOCATABLE
   gdb_sysroot = make_relative_prefix (argv[0], BINDIR, TARGET_SYSTEM_ROOT);

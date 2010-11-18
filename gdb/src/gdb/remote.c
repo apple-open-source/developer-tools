@@ -1225,6 +1225,26 @@ send_remote_max_payload_size ()
   return 1;
 }
 
+
+static int
+send_disable_aslr ()
+{
+  struct remote_state *rs = get_remote_state ();
+  if (rs->remote_packet_size < 4)
+    return 0;
+
+  extern int disable_aslr_flag; /* From macosx-tdep.c  */
+
+  char buf[32];
+  snprintf (buf, sizeof (buf), "QSetDisableASLR:%i", disable_aslr_flag ? 1 : 0);
+  putpkt (buf);
+  getpkt (buf, sizeof (buf) - 1, 0);
+  if (buf[0] != 'O' || buf[1] != 'K')
+    return 0;
+
+  return 1;
+}
+
 /* APPLE LOCAL Expect this to be used like
      set remote debugflags LOG_MEMORY|LOG_RNB_EVENTS|LOG_RNB_REMOTE
    Don't do any sanity checking on the arguments, just send them to
@@ -6323,6 +6343,9 @@ remote_macosx_create_inferior (char *exec_file, char *allargs, char **env, int f
 
   if (pkt_cleanup != NULL)
     do_cleanups (pkt_cleanup);
+
+  /* Disable ASLR if requested.  */
+  send_disable_aslr ();
 
   /* Next send down the arguments.  */
 

@@ -17,6 +17,14 @@
 	Change History (most recent first):
 
 $Log: uds_daemon.c,v $
+Revision 1.463  2009/07/10 22:25:47  cheshire
+Updated syslog messages for debugging unresponsive clients:
+Will now log a warning message about an unresponsive client every ten seconds,
+and then after 60 messagess (10 minutes) will terminate connection to that client.
+
+Revision 1.462  2009/07/09 22:43:31  cheshire
+Improved log messages for debugging unresponsive clients
+
 Revision 1.461  2009/06/19 23:15:07  cheshire
 <rdar://problem/6990066> Library: crash at handle_resolve_response + 183
 Made resolve_result_callback code more defensive and improved LogOperation messages
@@ -989,7 +997,8 @@ struct request_state
 
 	// reply, termination, error, and client context info
 	int no_reply;					// don't send asynchronous replies to client
-	int time_blocked;				// record time of a blocked client
+	mDNSs32 time_blocked;			// record time of a blocked client
+	int unresponsiveness_reports;
 	struct reply_state *replies;	// corresponding (active) reply list
 	req_termination_fn terminate;
 
@@ -1891,8 +1900,7 @@ mDNSlocal mStatus handle_update_request(request_state *request)
 			if (!request->u.servicereg.txtdata) FatalError("ERROR: handle_update_request - malloc");
 			mDNSPlatformMemCopy(request->u.servicereg.txtdata, rdata, rdlen);
 			}
-		else
-			request->u.servicereg.txtdata = NULL;
+		request->u.servicereg.txtlen = rdlen;
 		}
 
 	// update a record from a service record set
@@ -2231,7 +2239,6 @@ mDNSlocal mStatus handle_regservice_request(request_state *request)
 		if (!request->u.servicereg.txtdata) FatalError("ERROR: handle_regservice_request - malloc");
 		mDNSPlatformMemCopy(request->u.servicereg.txtdata, get_rdata(&request->msgptr, request->msgend, request->u.servicereg.txtlen), request->u.servicereg.txtlen);
 		}
-	else request->u.servicereg.txtdata = NULL;
 
 	if (!request->msgptr) { LogMsg("%3d: DNSServiceRegister(unreadable parameters)", request->sd); return(mStatus_BadParamErr); }
 
@@ -4131,7 +4138,7 @@ mDNSlocal void LogAuthRecords(mDNS *const m, const mDNSs32 now, AuthRecord *Reso
 		LogMsgNoIdent("    Int    Next  Expire   State");
 		for (ar = ResourceRecords; ar; ar=ar->next)
 			{
-			NetworkInterfaceInfo *info = (NetworkInterfaceInfo *)ar->resrec.InterfaceID;
+			char *ifname = InterfaceNameForID(m, ar->resrec.InterfaceID);
 			if (ar->WakeUp.HMAC.l[0]) (*proxy)++;
 			if (!mDNSSameEthAddress(&owner, &ar->WakeUp.HMAC))
 				{
@@ -4154,7 +4161,7 @@ mDNSlocal void LogAuthRecords(mDNS *const m, const mDNSs32 now, AuthRecord *Reso
 					ar->ThisAPInterval / mDNSPlatformOneSecond,
 					ar->AnnounceCount ? (ar->LastAPTime + ar->ThisAPInterval - now) / mDNSPlatformOneSecond : 0,
 					ar->TimeExpire    ? (ar->TimeExpire                      - now) / mDNSPlatformOneSecond : 0,
-					info ? info->ifname : "ALL",
+					ifname ? ifname : "ALL",
 					ARDisplayString(m, ar));
 			else
 				LogMsgNoIdent("                             LO %s", ARDisplayString(m, ar));
@@ -4184,14 +4191,14 @@ mDNSexport void udsserver_info(mDNS *const m)
 			for (cr = cg->members; cr; cr=cr->next)
 				{
 				mDNSs32 remain = cr->resrec.rroriginalttl - (now - cr->TimeRcvd) / mDNSPlatformOneSecond;
-				NetworkInterfaceInfo *info = (NetworkInterfaceInfo *)cr->resrec.InterfaceID;
+				char *ifname = InterfaceNameForID(m, cr->resrec.InterfaceID);
 				CacheUsed++;
 				if (cr->CRActiveQuestion) CacheActive++;
 				LogMsgNoIdent("%3d %s%8ld %-7s%s %-6s%s",
 					slot,
 					cr->CRActiveQuestion ? "*" : " ",
 					remain,
-					info ? info->ifname : "-U-",
+					ifname ? ifname : "-U-",
 					(cr->resrec.RecordType == kDNSRecordTypePacketNegative)  ? "-" :
 					(cr->resrec.RecordType & kDNSRecordTypePacketUniqueMask) ? " " : "+",
 					DNSTypeName(cr->resrec.rrtype),
@@ -4237,12 +4244,12 @@ mDNSexport void udsserver_info(mDNS *const m)
 			{
 			mDNSs32 i = q->ThisQInterval / mDNSPlatformOneSecond;
 			mDNSs32 n = (q->LastQTime + q->ThisQInterval - now) / mDNSPlatformOneSecond;
-			NetworkInterfaceInfo *info = (NetworkInterfaceInfo *)q->InterfaceID;
+			char *ifname = InterfaceNameForID(m, q->InterfaceID);
 			CacheUsed++;
 			if (q->ThisQInterval) CacheActive++;
 			LogMsgNoIdent("%6d%6d %-7s%s%s %5d  %-6s%##s%s",
 				i, n,
-				info ? info->ifname : mDNSOpaque16IsZero(q->TargetQID) ? "" : "-U-",
+				ifname ? ifname : mDNSOpaque16IsZero(q->TargetQID) ? "" : "-U-",
 				mDNSOpaque16IsZero(q->TargetQID) ? (q->LongLived ? "l" : " ") : (q->LongLived ? "L" : "O"),
 				q->AuthInfo    ? "P" : " ",
 				q->CurrentAnswers,
@@ -4467,6 +4474,7 @@ mDNSexport mDNSs32 udsserver_idle(mDNSs32 nextevent)
 				r->replies = r->replies->next;
 				freeL("reply_state/udsserver_idle", fptr);
 				r->time_blocked = 0; // reset failure counter after successful send
+				r->unresponsiveness_reports = 0;
 				continue;
 				}
 			else if (result == t_terminated || result == t_error)
@@ -4480,15 +4488,24 @@ mDNSexport mDNSs32 udsserver_idle(mDNSs32 nextevent)
 
 		if (r->replies)		// If we failed to send everything, check our time_blocked timer
 			{
-			if (!r->time_blocked) r->time_blocked = NonZeroTime(now);
-			if (now - r->time_blocked >= 60 * mDNSPlatformOneSecond)
+			if (nextevent - now > mDNSPlatformOneSecond) nextevent = now + mDNSPlatformOneSecond;
+
+			if (mDNSStorage.SleepState != SleepState_Awake) r->time_blocked = 0;
+			else if (!r->time_blocked) r->time_blocked = NonZeroTime(now);
+			else if (now - r->time_blocked >= 10 * mDNSPlatformOneSecond * (r->unresponsiveness_reports+1))
 				{
-				LogMsg("%3d: Could not write data to client after %ld seconds - aborting connection", r->sd,
-					(now - r->time_blocked) / mDNSPlatformOneSecond);
-				LogClientInfo(&mDNSStorage, r);
-				abort_request(r);
+				int num = 0;
+				struct reply_state *x = r->replies;
+				while (x) { num++; x=x->next; }
+				LogMsg("%3d: Could not write data to client after %ld seconds, %d repl%s waiting",
+					r->sd, (now - r->time_blocked) / mDNSPlatformOneSecond, num, num == 1 ? "y" : "ies");
+				if (++r->unresponsiveness_reports >= 60)
+					{
+					LogMsg("%3d: Client unresponsive; aborting connection", r->sd);
+					LogClientInfo(&mDNSStorage, r);
+					abort_request(r);
+					}
 				}
-			else if (nextevent - now > mDNSPlatformOneSecond) nextevent = now + mDNSPlatformOneSecond;
 			}
 
 		if (!dnssd_SocketValid(r->sd)) // If this request is finished, unlink it from the list and free the memory
@@ -4508,7 +4525,7 @@ struct CompileTimeAssertionChecks_uds_daemon
 	// Check our structures are reasonable sizes. Including overly-large buffers, or embedding
 	// other overly-large structures instead of having a pointer to them, can inadvertently
 	// cause structure sizes (and therefore memory usage) to balloon unreasonably.
-	char sizecheck_request_state          [(sizeof(request_state)           <= 1760) ? 1 : -1];
+	char sizecheck_request_state          [(sizeof(request_state)           <= 2000) ? 1 : -1];
 	char sizecheck_registered_record_entry[(sizeof(registered_record_entry) <=   40) ? 1 : -1];
 	char sizecheck_service_instance       [(sizeof(service_instance)        <= 6552) ? 1 : -1];
 	char sizecheck_browser_t              [(sizeof(browser_t)               <=  992) ? 1 : -1];

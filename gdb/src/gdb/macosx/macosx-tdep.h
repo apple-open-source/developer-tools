@@ -31,8 +31,11 @@ int macosx_record_symbols_from_sect_p (bfd *abfd, unsigned char macho_type,
 				       unsigned char macho_sect);
 
 char *macosx_locate_dsym (struct objfile *objfile);
+char *macosx_locate_kext_executable_by_symfile(bfd *abfd);
 struct objfile *macosx_find_objfile_matching_dsym_in_bundle (char *dsym_bundle_path, 
 							     char **out_full_path);
+
+int macosx_get_uuid_for_path(const char *filename, unsigned char uuid[], unsigned long len);
 
 char *macosx_kext_info (const char *filename,
                   const char **bundle_executable_name_from_plist,

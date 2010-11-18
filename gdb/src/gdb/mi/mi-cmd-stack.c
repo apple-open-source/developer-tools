@@ -351,6 +351,7 @@ mi_print_frame_more_info (struct ui_out *uiout,
 				struct symtab_and_line *sal,
 				struct frame_info *fi)
 {
+  struct objfile *ofile = NULL;
   /* I would feel happier if we used ui_out_field_skip for all the fields
      that we don't know how to set (like the file if we don't have symbols)
      but the rest of print_frame just omits the fields if they are not known,
@@ -358,6 +359,27 @@ mi_print_frame_more_info (struct ui_out *uiout,
 
   if (sal && sal->symtab && sal->symtab->dirname)
     ui_out_field_string (uiout, "dir", sal->symtab->dirname);
+
+  /* Print the shared-library containing this pc if we're doing stack-list-frames. */
+
+  /* If we have already got the objfile, don't look it up again, but make sure
+     we use the real objfile, not the debug objfile.  */
+  if (sal->symtab != NULL)
+    {
+      ofile = sal->symtab->objfile;
+      if (ofile && ofile->separate_debug_objfile_backlink)
+        ofile = ofile->separate_debug_objfile_backlink;
+    }
+  else
+    {
+      struct obj_section *osect = find_pc_sect_section (get_frame_pc (fi), NULL);
+      if (osect != NULL)
+        ofile = osect->objfile;
+    }
+  if (ofile != NULL && ofile->name != NULL)
+    ui_out_field_string (uiout, "shlibname", ofile->name);
+  else 
+    ui_out_field_string (uiout, "shlibname", "<UNKNOWN>");
 }
 
 enum mi_cmd_result

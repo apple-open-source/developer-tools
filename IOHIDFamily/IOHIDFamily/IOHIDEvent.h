@@ -105,8 +105,22 @@ public:
                                         IOFixed                 y,
                                         IOFixed                 z,
                                         IOHIDAccelerometerType  type = 0,
+                                        IOHIDAccelerometerSubType  subType = 0,
                                         IOOptionBits            options = 0);
-                                        
+
+    static IOHIDEvent *     gyroEvent (
+												AbsoluteTime            timeStamp,
+												IOFixed                 x,
+												IOFixed                 y,
+												IOFixed                 z,
+												IOHIDGyroType  type = 0,
+												IOHIDGyroSubType  subType = 0,
+												IOFixed                 qx=0,
+												IOFixed                 qy=0,												
+												IOFixed                 qz=0,												
+												IOFixed                 qw=0,												
+												IOOptionBits            options = 0);
+	
     static IOHIDEvent *     buttonEvent (
                                         AbsoluteTime            timeStamp,
                                         UInt32                  buttonMask,
@@ -123,9 +137,16 @@ public:
                                         UInt32                  level,
                                         UInt32                  channel0    = 0,
                                         UInt32                  channel1    = 0,
+										UInt32                  channel2    = 0,
+										UInt32                  channel3    = 0,
                                         IOOptionBits            options     = 0);
                                         
-                                        
+	static IOHIDEvent *     proximityEvent (
+                                        AbsoluteTime				timeStamp,
+                                        IOHIDProximityDetectionMask	mask,
+										UInt32						level,
+                                        IOOptionBits				options     = 0);
+	
     static IOHIDEvent *     temperatureEvent (
                                         AbsoluteTime            timeStamp,
                                         IOFixed                 temperature,

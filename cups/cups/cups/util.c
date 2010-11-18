@@ -1,9 +1,9 @@
 /*
  * "$Id: util.c 7850 2008-08-20 00:07:25Z mike $"
  *
- *   Printing utilities for the Common UNIX Printing System (CUPS).
+ *   Printing utilities for CUPS.
  *
- *   Copyright 2007-2009 by Apple Inc.
+ *   Copyright 2007-2010 by Apple Inc.
  *   Copyright 1997-2006 by Easy Software Products.
  *
  *   These coded instructions, statements, and computer programs are the
@@ -18,7 +18,7 @@
  *
  *   cupsCancelJob()        - Cancel a print job on the default server.
  *   cupsCancelJob2()       - Cancel or purge a print job.
- *   cupsCreateJob()        - Create an empty job.
+ *   cupsCreateJob()        - Create an empty job for streaming.
  *   cupsFinishDocument()   - Finish sending a document.
  *   cupsFreeJobs()         - Free memory used by job data.
  *   cupsGetClasses()       - Get a list of printer classes from the default
@@ -570,17 +570,17 @@ cupsGetJobs2(http_t     *http,		/* I - Connection to server or @code CUPS_HTTP_D
   _cups_globals_t *cg = _cupsGlobals();	/* Pointer to library globals */
   static const char * const attrs[] =	/* Requested attributes */
 		{
+		  "document-format",
 		  "job-id",
-		  "job-priority",
 		  "job-k-octets",
+		  "job-name",
+		  "job-originating-user-name",
+		  "job-printer-uri",
+		  "job-priority",
 		  "job-state",
 		  "time-at-completed",
 		  "time-at-creation",
-		  "time-at-processing",
-		  "job-printer-uri",
-		  "document-format",
-		  "job-name",
-		  "job-originating-user-name"
+		  "time-at-processing"
 		};
 
 
@@ -1456,6 +1456,9 @@ cupsPrintFiles2(
   char		buffer[8192];		/* Copy buffer */
   ssize_t	bytes;			/* Bytes in buffer */
   http_status_t	status;			/* Status of write */
+  _cups_globals_t *cg = _cupsGlobals();	/* Global data */
+  ipp_status_t	cancel_status;		/* Status code to preserve */
+  char		*cancel_message;	/* Error message to preserve */
 
 
   DEBUG_printf(("cupsPrintFiles2(http=%p, name=\"%s\", num_files=%d, "
@@ -1507,15 +1510,15 @@ cupsPrintFiles2(
       * Unable to open print file, cancel the job and return...
       */
 
-      cupsCancelJob2(http, name, job_id, 0);
-      return (0);
+      _cupsSetError(IPP_DOCUMENT_ACCESS_ERROR, NULL, 0);
+      goto cancel_job;
     }
 
     status = cupsStartDocument(http, name, job_id, docname, format,
-                               i == (num_files - 1));
+			       i == (num_files - 1));
 
     while (status == HTTP_CONTINUE &&
-           (bytes = cupsFileRead(fp, buffer, sizeof(buffer))) > 0)
+	   (bytes = cupsFileRead(fp, buffer, sizeof(buffer))) > 0)
       status = cupsWriteRequestData(http, buffer, bytes);
 
     cupsFileClose(fp);
@@ -1526,12 +1529,30 @@ cupsPrintFiles2(
       * Unable to queue, cancel the job and return...
       */
 
-      cupsCancelJob2(http, name, job_id, 0);
-      return (0);
+      goto cancel_job;
     }
   }
 
   return (job_id);
+
+ /*
+  * If we get here, something happened while sending the print job so we need
+  * to cancel the job without setting the last error (since we need to preserve
+  * the current error...
+  */
+
+  cancel_job:
+
+  cancel_status  = cg->last_error;
+  cancel_message = cg->last_status_message ?
+                       _cupsStrRetain(cg->last_status_message) : NULL;
+
+  cupsCancelJob2(http, name, job_id, 0);
+
+  cg->last_error          = cancel_status;
+  cg->last_status_message = cancel_message;
+
+  return (0);
 }
 
 

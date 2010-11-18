@@ -558,6 +558,31 @@ arm_macosx_in_switch_glue (CORE_ADDR pc)
 	      return 1;
 	    }
 	}
+      else
+        {
+          // Check for the linker branch islands named as follows:
+          // <SYMBOL>$island
+          // <SYMBOL>$island$<N>
+          // <SYMBOL>_plus_<OFFSET>$island$<N>
+          // <SYMBOL>.island
+          // <SYMBOL>.island.<N>
+          // <SYMBOL>_plus_<OFFSET>.island.<N>
+          //
+          // Where <SYMBOL> is the symbol name, <OFFSET> is an offset
+          // from that symbol, and <N> is the island number in case more than
+          // one island is needed to branch to the target.
+          // 
+          // So basically below we just check for any symbol that
+          // contains ".island" or "$island".
+
+          const char *island = strstr (name, "island");
+          if (island && island > name)
+            {
+              // NAME contains "island", see if the previous character is '$' or '.'
+              if (island[-1] == '$' || island[-1] == '.')
+                return 1;
+            }
+        }
     }
   return 0;
 }

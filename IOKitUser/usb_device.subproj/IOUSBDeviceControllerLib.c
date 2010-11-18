@@ -399,9 +399,23 @@ void IOUSBDeviceDescriptionSetClass(IOUSBDeviceDescriptionRef devDesc, UInt8 cla
 	CFRelease(aNumber);
 }
 
+void IOUSBDeviceDescriptionSetSubClass(IOUSBDeviceDescriptionRef devDesc, UInt8 subclass)
+{
+	CFNumberRef aNumber = CFNumberCreate(devDesc->allocator, kCFNumberCharType, &subclass);
+	CFDictionarySetValue(devDesc->info, CFSTR("deviceSubClass"), aNumber);
+	CFRelease(aNumber);
+}
+
 uint8_t IOUSBDeviceDescriptionGetSubClass(IOUSBDeviceDescriptionRef ref)
 {
 	return __getDictNumber(ref, CFSTR("deviceSubClass"));	
+}
+
+void IOUSBDeviceDescriptionSetProtocol(IOUSBDeviceDescriptionRef devDesc, UInt8 protocol)
+{
+	CFNumberRef aNumber = CFNumberCreate(devDesc->allocator, kCFNumberCharType, &protocol);
+	CFDictionarySetValue(devDesc->info, CFSTR("deviceProtocol"), aNumber);
+	CFRelease(aNumber);
 }
 
 uint8_t IOUSBDeviceDescriptionGetProtocol(IOUSBDeviceDescriptionRef ref)
@@ -571,6 +585,37 @@ int IOUSBDeviceDescriptionAppendInterfaceToConfiguration(IOUSBDeviceDescriptionR
 	interfaces = (CFMutableArrayRef)CFDictionaryGetValue(theConfig, CFSTR("Interfaces"));
 	CFArrayAppendValue(interfaces, name);
 	return CFArrayGetCount(interfaces) - 1;
+}
+
+CFArrayRef IOUSBDeviceDescriptionCopyInterfaces(IOUSBDeviceDescriptionRef devDesc)
+{
+	CFArrayRef configs = CFDictionaryGetValue(devDesc->info, CFSTR("ConfigurationDescriptors"));
+	CFIndex numConfigs = CFArrayGetCount(configs);
+
+	CFMutableArrayRef allInterfaces = CFArrayCreateMutable(devDesc->allocator, numConfigs, &kCFTypeArrayCallBacks);
+	if (allInterfaces != NULL) {
+		
+		for (CFIndex i = 0; i < numConfigs; i++) {
+			CFDictionaryRef config = CFArrayGetValueAtIndex(configs, i);
+			CFArrayRef interfaces = CFDictionaryGetValue(config, CFSTR("Interfaces"));
+
+			/* 
+			 * Create a copy of the interfaces to return.  If this fails, we're
+			 * in trouble, but try to clean up and get out
+			 */
+			CFArrayRef interfacesCopy = CFArrayCreateCopy(devDesc->allocator, interfaces);
+			if (interfacesCopy == NULL) {
+				CFRelease(allInterfaces);
+				allInterfaces = NULL;
+				break;
+			}
+			
+			CFArrayAppendValue(allInterfaces, interfacesCopy);
+			CFRelease(interfacesCopy);
+		}
+	}
+
+	return allInterfaces;
 }
 
 static IOUSBDeviceDescriptionRef __IOUSBDeviceDescriptionCreateFromFile( CFAllocatorRef allocator, CFStringRef filePath )

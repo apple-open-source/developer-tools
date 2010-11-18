@@ -171,7 +171,7 @@
       bir betik yazıp B’nin CGI veritabanını silebilir. Bu gibi durumların
       ortaya çıkmaması için betiklerin farklı kullanıcıların aidiyetlerinde
       çalışmasını sağlayan ve 1.2 sürümünden beri Apache ile dağıtılan <a href="../suexec.html">suEXEC</a> diye bir program vardır. Başka bir yol
-      da <a href="http://cgiwrap.unixtools.org/">CGIWrap</a> kullanmaktır.</p>
+      da <a href="http://cgiwrap.sourceforge.net/">CGIWrap</a> kullanmaktır.</p>
 
   </div><div class="top"><a href="#page-header"><img alt="top" src="../images/up.gif" /></a></div>
 <div class="section">
@@ -339,6 +339,6 @@
 <a href="../ko/misc/security_tips.html" hreflang="ko" rel="alternate" title="Korean">&nbsp;ko&nbsp;</a> |
 <a href="../tr/misc/security_tips.html" title="Türkçe">&nbsp;tr&nbsp;</a></p>
 </div><div id="footer">
-<p class="apache">Copyright 2008 The Apache Software Foundation.<br /><a href="http://www.apache.org/licenses/LICENSE-2.0">Apache License, Version 2.0</a> altında lisanslıdır.</p>
+<p class="apache">Copyright 2009 The Apache Software Foundation.<br /><a href="http://www.apache.org/licenses/LICENSE-2.0">Apache License, Version 2.0</a> altında lisanslıdır.</p>
 <p class="menu"><a href="../mod/">Modüller</a> | <a href="../mod/directives.html">Yönergeler</a> | <a href="../faq/">SSS</a> | <a href="../glossary.html">Terimler</a> | <a href="../sitemap.html">Site Haritası</a></p></div>
 </body></html>

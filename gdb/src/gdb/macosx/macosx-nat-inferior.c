@@ -2185,7 +2185,7 @@ macosx_kill_inferior_safe ()
 static void
 macosx_ptrace_me ()
 {
-  restore_orig_rlimit ();
+  restore_file_rlimit ();
 
   sem_t *sem;
   char sem_name[64];

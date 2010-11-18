@@ -530,7 +530,7 @@
     specification, which has all the details on the operation of
     CGI programs. You can find the original version at the 
     <a href="http://hoohoo.ncsa.uiuc.edu/cgi/interface.html">NCSA</a> and there is an updated draft at the 
-    <a href="http://web.golux.com/coar/cgi/">Common Gateway
+    <a href="http://www.w3.org/CGI/">Common Gateway
     Interface RFC project</a>.</p>
 
     <p>When you post a question about a CGI problem that you're
@@ -550,6 +550,6 @@
 <a href="../ja/howto/cgi.html" hreflang="ja" rel="alternate" title="Japanese">&nbsp;ja&nbsp;</a> |
 <a href="../ko/howto/cgi.html" hreflang="ko" rel="alternate" title="Korean">&nbsp;ko&nbsp;</a></p>
 </div><div id="footer">
-<p class="apache">Copyright 2008 The Apache Software Foundation.<br />Licensed under the <a href="http://www.apache.org/licenses/LICENSE-2.0">Apache License, Version 2.0</a>.</p>
+<p class="apache">Copyright 2009 The Apache Software Foundation.<br />Licensed under the <a href="http://www.apache.org/licenses/LICENSE-2.0">Apache License, Version 2.0</a>.</p>
 <p class="menu"><a href="../mod/">Modules</a> | <a href="../mod/directives.html">Directives</a> | <a href="../faq/">FAQ</a> | <a href="../glossary.html">Glossary</a> | <a href="../sitemap.html">Sitemap</a></p></div>
 </body></html>

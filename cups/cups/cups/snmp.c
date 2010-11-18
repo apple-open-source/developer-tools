@@ -1,9 +1,9 @@
 /*
- * "$Id: snmp.c 1507 2009-05-14 22:51:09Z msweet $"
+ * "$Id: snmp.c 1821 2010-01-14 23:05:18Z msweet $"
  *
  *   SNMP functions for the Common UNIX Printing System (CUPS).
  *
- *   Copyright 2007-2009 by Apple Inc.
+ *   Copyright 2007-2010 by Apple Inc.
  *   Copyright 2006-2007 by Easy Software Products, all rights reserved.
  *
  *   These coded instructions, statements, and computer programs are the
@@ -89,14 +89,14 @@ static char		*asn1_get_string(unsigned char **buffer,
 			                 unsigned char *bufend,
 			                 int length, char *string,
 			                 int strsize);
-static int		asn1_get_length(unsigned char **buffer,
+static unsigned		asn1_get_length(unsigned char **buffer,
 			                unsigned char *bufend);
 static int		asn1_get_type(unsigned char **buffer,
 			              unsigned char *bufend);
 static void		asn1_set_integer(unsigned char **buffer,
 			                 int integer);
 static void		asn1_set_length(unsigned char **buffer,
-			                int length);
+			                unsigned length);
 static void		asn1_set_oid(unsigned char **buffer,
 			             const int *oid);
 static void		asn1_set_packed(unsigned char **buffer,
@@ -608,6 +608,8 @@ _cupsSNMPWalk(int            fd,	/* I - SNMP socket */
   int		count = 0;		/* Number of OIDs found */
   int		request_id = 0;		/* Current request ID */
   cups_snmp_t	packet;			/* Current response packet */
+  int		lastoid[CUPS_SNMP_MAX_OID];
+					/* Last OID we got */
 
 
  /*
@@ -631,14 +633,15 @@ _cupsSNMPWalk(int            fd,	/* I - SNMP socket */
   */
 
   _cupsSNMPCopyOID(packet.object_name, prefix, CUPS_SNMP_MAX_OID);
+  lastoid[0] = -1;
 
   for (;;)
   {
     request_id ++;
 
     if (!_cupsSNMPWrite(fd, address, version, community,
-                       CUPS_ASN1_GET_NEXT_REQUEST, request_id,
-		       packet.object_name))
+                        CUPS_ASN1_GET_NEXT_REQUEST, request_id,
+		        packet.object_name))
     {
       DEBUG_puts("5_cupsSNMPWalk: Returning -1");
 
@@ -652,7 +655,8 @@ _cupsSNMPWalk(int            fd,	/* I - SNMP socket */
       return (-1);
     }
 
-    if (!_cupsSNMPIsOIDPrefixed(&packet, prefix))
+    if (!_cupsSNMPIsOIDPrefixed(&packet, prefix) ||
+        _cupsSNMPIsOID(&packet, lastoid))
     {
       DEBUG_printf(("5_cupsSNMPWalk: Returning %d", count));
 
@@ -665,6 +669,8 @@ _cupsSNMPWalk(int            fd,	/* I - SNMP socket */
 
       return (count > 0 ? count : -1);
     }
+
+    _cupsSNMPCopyOID(lastoid, packet.object_name, CUPS_SNMP_MAX_OID);
 
     count ++;
 
@@ -1280,7 +1286,13 @@ asn1_get_integer(
   int	value;				/* Integer value */
 
 
-  for (value = 0;
+  if (length > sizeof(int))
+  {
+    (*buffer) += length;
+    return (0);
+  }
+
+  for (value = (**buffer & 0x80) ? -1 : 0;
        length > 0 && *buffer < bufend;
        length --, (*buffer) ++)
     value = (value << 8) | **buffer;
@@ -1293,18 +1305,32 @@ asn1_get_integer(
  * 'asn1_get_length()' - Get a value length.
  */
 
-static int				/* O  - Length */
+static unsigned				/* O  - Length */
 asn1_get_length(unsigned char **buffer,	/* IO - Pointer in buffer */
 		unsigned char *bufend)	/* I  - End of buffer */
 {
-  int	length;				/* Length */
+  unsigned	length;			/* Length */
 
 
   length = **buffer;
   (*buffer) ++;
 
   if (length & 128)
-    length = asn1_get_integer(buffer, bufend, length & 127);
+  {
+    int	count;				/* Number of bytes for length */
+
+
+    if ((count = length & 127) > sizeof(unsigned))
+    {
+      (*buffer) += count;
+      return (0);
+    }
+
+    for (length = 0;
+	 count > 0 && *buffer < bufend;
+	 count --, (*buffer) ++)
+      length = (length << 8) | **buffer;
+  }
 
   return (length);
 }
@@ -1523,7 +1549,7 @@ asn1_set_integer(unsigned char **buffer,/* IO - Pointer in buffer */
 
 static void
 asn1_set_length(unsigned char **buffer,	/* IO - Pointer in buffer */
-		int           length)	/* I  - Length value */
+		unsigned      length)	/* I  - Length value */
 {
   if (length > 255)
   {
@@ -1711,5 +1737,5 @@ snmp_set_error(cups_snmp_t *packet,	/* I - Packet */
 
 
 /*
- * End of "$Id: snmp.c 1507 2009-05-14 22:51:09Z msweet $".
+ * End of "$Id: snmp.c 1821 2010-01-14 23:05:18Z msweet $".
  */

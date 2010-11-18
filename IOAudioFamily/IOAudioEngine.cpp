@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 1998-2009 Apple Computer, Inc. All rights reserved.
+ * Copyright (c) 1998-2010 Apple Computer, Inc. All rights reserved.
  *
  * @APPLE_LICENSE_HEADER_START@
  *
@@ -57,9 +57,9 @@ OSMetaClassDefineReservedUsed(IOAudioEngine, 9);
 OSMetaClassDefineReservedUsed(IOAudioEngine, 10);
 OSMetaClassDefineReservedUsed(IOAudioEngine, 11);
 OSMetaClassDefineReservedUsed(IOAudioEngine, 12);
+OSMetaClassDefineReservedUsed(IOAudioEngine, 13);
+OSMetaClassDefineReservedUsed(IOAudioEngine, 14);
 
-OSMetaClassDefineReservedUnused(IOAudioEngine, 13);
-OSMetaClassDefineReservedUnused(IOAudioEngine, 14);
 OSMetaClassDefineReservedUnused(IOAudioEngine, 15);
 OSMetaClassDefineReservedUnused(IOAudioEngine, 16);
 OSMetaClassDefineReservedUnused(IOAudioEngine, 17);
@@ -93,6 +93,18 @@ OSMetaClassDefineReservedUnused(IOAudioEngine, 44);
 OSMetaClassDefineReservedUnused(IOAudioEngine, 45);
 OSMetaClassDefineReservedUnused(IOAudioEngine, 46);
 OSMetaClassDefineReservedUnused(IOAudioEngine, 47);
+
+// OSMetaClassDefineReservedUsed(IOAudioEngine, 13);
+IOReturn IOAudioEngine::setAttributeForConnection( SInt32 connectIndex, UInt32 attribute, uintptr_t value )
+{
+	return kIOReturnUnsupported;
+}
+
+// OSMetaClassDefineReservedUsed(IOAudioEngine, 14);
+IOReturn IOAudioEngine::getAttributeForConnection( SInt32 connectIndex, UInt32 attribute, uintptr_t * value )
+{
+	return kIOReturnUnsupported;
+}
 
 // New Code:
 // OSMetaClassDefineReservedUsed(IOAudioEngine, 12);
@@ -565,6 +577,18 @@ void IOAudioEngine::stop(IOService *provider)
     detachAudioStreams();
     removeAllDefaultAudioControls();
 
+	// <rdar://7233118>, <rdar://7029696> Remove the event source here as performing heavy workloop operation in free() could lead
+	// to deadlock since the context which free() is called is not known. stop() is called on the workloop, so it is safe to remove 
+	// the event source here.
+    if (commandGate) {
+        if (workLoop) {
+            workLoop->removeEventSource(commandGate);
+        }
+        
+        commandGate->release();
+        commandGate = NULL;
+    }
+
     super::stop(provider);
 }
 
@@ -803,9 +827,9 @@ IOReturn IOAudioEngine::newUserClient(task_t task, void *securityID, UInt32 type
                 client->release();
                 result = kIOReturnError;
             } else {
-                assert(commandGate);
+                assert(workLoop);	// <rdar://7324947>
     
-                result = commandGate->runAction(addUserClientAction, client);
+                result = workLoop->runAction(_addUserClientAction, this, client);	// <rdar://7324947>, <rdar://7529580>
                 
                 if (result == kIOReturnSuccess) {
                     *handler = client;
@@ -845,9 +869,9 @@ IOReturn IOAudioEngine::newUserClient(task_t task, void *securityID, UInt32 type
                 client->release();
                 result = kIOReturnError;
             } else {
-                assert(commandGate);
+                assert(workLoop);	// <rdar://7324947>
     
-                result = commandGate->runAction(addUserClientAction, client);
+                result = workLoop->runAction(_addUserClientAction, this, client);	// <rdar://7324947>, <rdar://7529580>
                 
                 if (result == kIOReturnSuccess) {
                     *handler = client;
@@ -868,10 +892,33 @@ void IOAudioEngine::clientClosed(IOAudioEngineUserClient *client)
     audioDebugIOLog(3, "IOAudioEngine[%p]::clientClosed(%p)", this, client);
 
     if (client) {
-        assert(commandGate);
+        assert(workLoop);												// <rdar://7529580>
 
-        commandGate->runAction(removeUserClientAction, client);
+        workLoop->runAction(_removeUserClientAction, this, client);		//	<rdar://7529580>
     }
+}
+
+// <rdar://7529580>
+IOReturn IOAudioEngine::_addUserClientAction(OSObject *target, void *arg0, void *arg1, void *arg2, void *arg3)
+{
+    IOReturn result = kIOReturnBadArgument;
+    
+    if (target) {
+        IOAudioEngine *audioEngine = OSDynamicCast(IOAudioEngine, target);
+        if (audioEngine) {
+            IOCommandGate *cg;
+            
+            cg = audioEngine->getCommandGate();
+            
+            if (cg) {
+                result = cg->runAction(addUserClientAction, arg0, arg1, arg2, arg3);
+            } else {
+                result = kIOReturnError;
+            }
+        }
+    }
+    
+    return result;
 }
 
 IOReturn IOAudioEngine::addUserClientAction(OSObject *owner, void *arg1, void *arg2, void *arg3, void *arg4)
@@ -884,6 +931,29 @@ IOReturn IOAudioEngine::addUserClientAction(OSObject *owner, void *arg1, void *a
         IOAudioEngine *audioEngine = OSDynamicCast(IOAudioEngine, owner);
         if (audioEngine) {
             result = audioEngine->addUserClient((IOAudioEngineUserClient *)arg1);
+        }
+    }
+    
+    return result;
+}
+
+// <rdar://7529580>
+IOReturn IOAudioEngine::_removeUserClientAction(OSObject *target, void *arg0, void *arg1, void *arg2, void *arg3)
+{
+    IOReturn result = kIOReturnBadArgument;
+    
+    if (target) {
+        IOAudioEngine *audioEngine = OSDynamicCast(IOAudioEngine, target);
+        if (audioEngine) {
+            IOCommandGate *cg;
+            
+            cg = audioEngine->getCommandGate();
+            
+            if (cg) {
+                result = cg->runAction(removeUserClientAction, arg0, arg1, arg2, arg3);
+            } else {
+                result = kIOReturnError;
+            }
         }
     }
     
@@ -1287,8 +1357,39 @@ void IOAudioEngine::updateChannelNumbers()
     UInt32 currentChannelID;
     SInt32 currentChannelNumber;
    
-	audioDebugIOLog(3, "IOAudioEngine[%p]::updateChannelNumbers() - o=%ld i=%ld", this, maxNumOutputChannels, maxNumInputChannels);
+	// BEGIN <rdar://6997438> maxNumOutputChannels may not represent the true number of output channels at this point
+	//					because the the number of formats in the stream may have changed. We recalculate the correct value here.
+	
+	maxNumOutputChannels = 0;
+	maxNumInputChannels = 0;
+    assert(outputStreams);
+    assert(inputStreams);
 
+    if (outputStreams->getCount() > 0) {
+        iterator = OSCollectionIterator::withCollection(outputStreams);
+        if (iterator) {
+            IOAudioStream *audioStream;
+            
+            while (audioStream = (IOAudioStream *)iterator->getNextObject()) {
+				maxNumOutputChannels += audioStream->getMaxNumChannels();
+			}
+		}
+	}
+
+	if (inputStreams->getCount() > 0) {
+        iterator = OSCollectionIterator::withCollection(inputStreams);
+        if (iterator) {
+            IOAudioStream *audioStream;
+            
+            while (audioStream = (IOAudioStream *)iterator->getNextObject()) {
+				maxNumInputChannels += audioStream->getMaxNumChannels();
+			}
+		}
+	}
+	// END <rdar://6997438>
+	
+	audioDebugIOLog(3, "IOAudioEngine[%p]::updateChannelNumbers() - o=%ld i=%ld", this, maxNumOutputChannels, maxNumInputChannels);
+	
     if (maxNumOutputChannels > 0) {
         outputChannelNumbers = (SInt32 *)IOMallocAligned(maxNumOutputChannels * sizeof(SInt32), sizeof (SInt32));
     }
@@ -1299,9 +1400,7 @@ void IOAudioEngine::updateChannelNumbers()
     
     currentChannelID = 1;
     currentChannelNumber = 1;
-    
-    assert(outputStreams);
-    
+
     if (outputStreams->getCount() > 0) {
         iterator = OSCollectionIterator::withCollection(outputStreams);
         if (iterator) {
@@ -1346,8 +1445,6 @@ void IOAudioEngine::updateChannelNumbers()
     
     currentChannelID = 1;
     currentChannelNumber = 1;
-    
-    assert(inputStreams);
     
     if (inputStreams->getCount() > 0) {
         iterator = OSCollectionIterator::withCollection(inputStreams);

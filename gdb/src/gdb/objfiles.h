@@ -511,6 +511,12 @@ struct objfile
     struct rb_tree_node *inlined_subroutine_data;
     struct rb_tree_node *inlined_call_sites;
     /* APPLE LOCAL end subroutine inlining  */
+
+    /* APPLE LOCAL begin differentiate arm & thumb msymbols */
+    struct partial_symbol **thumb_psyms;
+    int num_thumb_psyms;
+    int max_thumb_psyms;
+    /* APPLE LOCAL end differentiate arm & thumb msymbols */
   };
 
 /* Defines for the objfile flag word. */
@@ -857,4 +863,16 @@ struct objfile_hitlist *objfile_detach_hitlist(void);
 int objfile_on_hitlist_p (struct objfile_hitlist *, struct objfile *);
 struct cleanup *make_cleanup_objfile_init_clear_hitlist ();
 void objfile_add_to_hitlist (struct objfile *);
+
+
+/* APPLE LOCAL begin differentiate arm & thumb msymbols */
+extern char *partial_symbol_special_info (struct objfile *objfile, 
+                                          struct partial_symbol *psym);
+
+extern void objfile_add_special_psym (struct objfile *objfile,
+                                      struct partial_symbol *psym,
+                                      int short isa_value);
+/* APPLE LOCAL begin differentiate arm & thumb msymbols */
+
+
 #endif /* !defined (OBJFILES_H) */

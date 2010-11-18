@@ -5,7 +5,7 @@
  *
  *   This file is included from "usb.c" when compiled on UNIX/Linux.
  *
- *   Copyright 2007-2008 by Apple Inc.
+ *   Copyright 2007-2009 by Apple Inc.
  *   Copyright 1997-2007 by Easy Software Products, all rights reserved.
  *
  *   These coded instructions, statements, and computer programs are the
@@ -36,7 +36,7 @@
  */
 
 static int	open_device(const char *uri, int *use_bc);
-static void	side_cb(int print_fd, int device_fd, int snmp_fd,
+static int	side_cb(int print_fd, int device_fd, int snmp_fd,
 		        http_addr_t *addr, int use_bc);
 
 
@@ -187,10 +187,10 @@ print_device(const char *uri,		/* I - Device URI */
     * select() or poll(), so we can't support the sidechannel either...
     */
 
-    tbytes = backendRunLoop(print_fd, device_fd, -1, NULL, use_bc, NULL);
+    tbytes = backendRunLoop(print_fd, device_fd, -1, NULL, use_bc, 1, NULL);
 
 #else
-    tbytes = backendRunLoop(print_fd, device_fd, -1, NULL, use_bc, side_cb);
+    tbytes = backendRunLoop(print_fd, device_fd, -1, NULL, use_bc, 1, side_cb);
 #endif /* __sun */
 
     if (print_fd != 0 && tbytes >= 0)
@@ -560,7 +560,7 @@ open_device(const char *uri,		/* I - Device URI */
  * 'side_cb()' - Handle side-channel requests...
  */
 
-static void
+static int				/* O - 0 on success, -1 on error */
 side_cb(int         print_fd,		/* I - Print file */
         int         device_fd,		/* I - Device file */
         int         snmp_fd,		/* I - SNMP socket (unused) */
@@ -579,10 +579,7 @@ side_cb(int         print_fd,		/* I - Print file */
   datalen = sizeof(data);
 
   if (cupsSideChannelRead(&command, &status, data, &datalen, 1.0))
-  {
-    _cupsLangPuts(stderr, _("WARNING: Failed to read side-channel request!\n"));
-    return;
-  }
+    return (-1);
 
   switch (command)
   {
@@ -625,7 +622,7 @@ side_cb(int         print_fd,		/* I - Print file */
 	break;
   }
 
-  cupsSideChannelWrite(command, status, data, datalen, 1.0);
+  return (cupsSideChannelWrite(command, status, data, datalen, 1.0));
 }
 
 

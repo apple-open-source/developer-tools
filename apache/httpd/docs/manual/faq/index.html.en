@@ -79,7 +79,7 @@
       <p><a href="http://httpd.apache.org/userslist.html">Users
       mailing list</a></p>
 
-      <p><a href="irc://irc.freenode.net/#apache">#apache</a> on 
+      <p><a href="irc://irc.freenode.net/#httpd">#httpd</a> on 
       <a href="http://freenode.net">Freenode IRC</a> is also available for 
       user support issues.</p>
       </dd>
@@ -109,6 +109,6 @@
 <p><span>Available Languages: </span><a href="../en/faq/" title="English">&nbsp;en&nbsp;</a> |
 <a href="../tr/faq/" hreflang="tr" rel="alternate" title="Türkçe">&nbsp;tr&nbsp;</a></p>
 </div><div id="footer">
-<p class="apache">Copyright 2008 The Apache Software Foundation.<br />Licensed under the <a href="http://www.apache.org/licenses/LICENSE-2.0">Apache License, Version 2.0</a>.</p>
+<p class="apache">Copyright 2009 The Apache Software Foundation.<br />Licensed under the <a href="http://www.apache.org/licenses/LICENSE-2.0">Apache License, Version 2.0</a>.</p>
 <p class="menu"><a href="../mod/">Modules</a> | <a href="../mod/directives.html">Directives</a> | <a href="../faq/">FAQ</a> | <a href="../glossary.html">Glossary</a> | <a href="../sitemap.html">Sitemap</a></p></div>
 </body></html>

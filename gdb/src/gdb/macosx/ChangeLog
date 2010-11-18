@@ -1,3 +1,110 @@
+2010-09-17  Greg Clayton  <gclayton@apple.com>
+
+	* macosx-nat-dyld.c (macosx_lookup_dyld_file_load_address): Changed this
+	function to take the structure that contained all the values it used to
+	take as parameters so we could use more members of the structure. Modified
+	this function to work with remote targets since the remote-macosx target 
+	currently fills in the dyld_image_infos member of the 
+	macosx_dyld_thread_status. 
+	(macosx_dyld_init): call above function with struct instead of separate
+	parameters.
+	(dyld_info_process_raw): Added a logging call so we can track when we are
+	loading shared libraries from scratch.
+
+2010-09-16  Greg Clayton  <gclayton@apple.com>
+
+        * macosx-nat-dyld.c (target_read_minimal_segment_32): New function.
+        (target_read_minimal_segment_64): New function.
+        (get_sectoffs_for_shared_cache_dylib): Modified this to not use a 
+        memory bfd just to get the segment offsets as this was causing a lot 
+        of memory to be read for remote targets. 
+
+2010-09-08  Greg Clayton  <gclayton@apple.com>
+
+	* macosx-tdep.c (_initialize_macosx_tdep): Relocated the set/show
+	variable code for "disable-aslr" here so we can use it in remote 
+	targets.
+
+2010-08-30  Greg Clayton  <gclayton@apple.com>
+
+	* arm-macosx-tdep.c (arm_macosx_in_switch_glue): Add support for the
+	darwin linker long branch islands.
+
+2010-08-05  Jason Molenda  (jmolenda@apple.com)
+
+	* macosx-nat-dyld.c (find_text_segment_load_address): New function
+	to examine an in-memory mach-o file header and determine its intended
+	load address (__TEXT segment addr).
+	(macosx_locate_dyld_via_taskinfo): Call find_text_segment_load_address
+	to provide a slide value to the caller.
+	(macosx_dyld_init): Update call to dyld_resolve_filename_image().
+	Once we have the correct in-memory dyld address and we will get the
+	correct on-disk dyld address from the bfd, don't do any additional
+	slide computations on dyld symbol addresses.  The dyld_slide
+	and dyld_minsyms_have_been_relocated variables could probably be
+	yanked out at this point but that would require more testing and
+	patching so I'm leaving them as-is.
+	(dyld_info_process_raw): Update to use MH_KEXT_BUNDLE contsant.
+
+	* macosx-nat-dyld-process.c (dyld_resolve_filename_image): Add 
+	parameter of cpu_type_t of binary being examined, fix to work correctly
+	for 64-bit macho binaries.
+	(dyld_resolve_filename_image): Update to use MH_KEXT_BUNDLE constant.
+	Update call to dyld_find_dylib_name.
+	* macosx-nat-dyld-process.h: Prototype updated.
+
+2010-07-28  Greg Clayton  <gclayton@apple.com>
+
+	* machoread.c (macho_build_psymtabs): Read in a single copy of the
+	string table for mach files in the shared cache for ARM.
+	* macosx-nat-dyld-io.c (inferior_read_mach_o): Adjust addresses for
+	when dyld shared cache is slid.
+	* macosx-nat-dyld.c (dyld_info_process_raw): Generate correct bfd
+	offsets for memory objects that are in the dyld shared cache.
+                           
+2010-07-19  Jason Molenda  (jmolenda@apple.com)
+
+	* macosx-nat-dyld.c (get_sectoffs_for_shared_cache_dylib): Add in the
+	per-process slide of the shared cache dylibs to the address adjustment.
+
+2010-07-19  Jim Ingham  <jingham@apple.com>
+
+	* macosx-nat-mutils.c (mach_xfer_memory): Check for errors in the
+	call to macosx_get_region_info.  Return 0 if we get an error.
+	
+2010-07-07  Greg Clayton  (gclayton@apple.com)
+
+	* macosx-tdep.c (macosx_locate_kext_executable_by_symfile): Make
+	sure USE_DEBUG_SYMBOLS_FRAMEWORK is enabled before making any
+    DebugSymbols.framework calls.
+
+2010-06-28  Jason Molenda  (jmolenda@apple.com)
+
+        Check in patch written by Andrew Myrick.
+
+	* macosx-nat-inferior.c (macosx_ptrace_me): Call restore_file_rlimit
+	now.
+	* macosx-nat.c (restore_orig_rlimit, _initialize_macosx_nat): Code
+	to raise and re-limit file des limit moved up to utils.c
+	* macosx-tdep.c (macosx_locate_kext_executable_by_symfile): New 
+	function.
+	(macosx_get_uuid_for_path): New function.
+	(locate_kext_executable_by_dsym_plist): New function.
+	(locate_kext_executable_by_dsym_url): New function.
+
+2010-05-06  Jason Molenda  (jmolenda@apple.com)
+
+	* macosx-nat-dyld-process.c (dyld_load_library_from_file): 
+	When printing an error that we couldn't stat() a file on the
+	local filesystem, print the filename that failed to stat,
+	not a potentially different filename.
+
+2010-05-06  Jason Molenda  (jmolenda@apple.com)
+
+	* macosx-tdep.c (macosx_record_symbols_from_sect_p): Log the file
+	with the bad N_SECT to aid in log-file-based debugging from bug 
+	reports.
+
 2010-04-30  Greg Clayton  (gclayton@apple.com)
 
 	* arm-macosx-nat-exec.c (fetch_inferior_registers): Fixed an issue

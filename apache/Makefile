@@ -2,7 +2,7 @@ Project    = httpd
 
 include $(MAKEFILEPATH)/CoreOS/ReleaseControl/Common.make
 
-Version    = 2.2.11
+Version    = 2.2.14
 Sources    = $(SRCROOT)/$(Project)
 
 Patch_List = patch-config.layout \
@@ -17,7 +17,7 @@ Patch_List = patch-config.layout \
              apachectl.diff \
              PR-5432464.diff \
              PR-4764662.diff \
-             CVE-2008-0456.diff
+             CVE-2009-3555-2.2.patch
 
 Configure_Flags = --prefix=/usr \
                   --enable-layout=Darwin \
@@ -41,7 +41,7 @@ install_source::
 	$(RMDIR) $(Sources)
 	$(MV) $(SRCROOT)/$(Project)-$(Version) $(Sources)
 	for patch in $(Patch_List); do \
-		(cd $(Sources) && patch -p0 < $(SRCROOT)/patches/$${patch}) || exit 1; \
+		(cd $(Sources) && patch -p0 -i $(SRCROOT)/patches/$${patch}) || exit 1; \
 	done
 
 build::

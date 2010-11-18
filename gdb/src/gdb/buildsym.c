@@ -576,6 +576,10 @@ compare_blocks (const void *v1, const void *v2)
     return 1;
   else if ((*b1)->endaddr > (*b2)->endaddr)
     return -1;
+  else if (BLOCK_SUPERBLOCK(*b1) == (*b2))
+    return 1;
+  else if (BLOCK_SUPERBLOCK(*b2) == (*b1))
+    return -1;
   else
     return 0;
 }

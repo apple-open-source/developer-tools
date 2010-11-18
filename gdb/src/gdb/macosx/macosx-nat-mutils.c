@@ -704,7 +704,12 @@ mach_xfer_memory (CORE_ADDR memaddr, gdb_byte *myaddr,
       kret = macosx_get_region_info (macosx_status->task, cur_memaddr,
 				     &r_start, &r_size, &orig_protection,
 				     &max_orig_protection);
-      
+      if (kret != KERN_SUCCESS)
+        {
+          mutils_debug ("Could not get region info for address 0x%s", paddr_nz (cur_memaddr));
+          return 0;
+        }
+
       if (r_start > cur_memaddr)
         {
           mutils_debug

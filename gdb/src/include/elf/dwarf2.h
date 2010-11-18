@@ -387,6 +387,10 @@ enum dwarf_attribute
     /* Apple Extensions for ObjC Runtime Info */
     DW_AT_APPLE_major_runtime_vers         = 0x3fe5,
     DW_AT_APPLE_runtime_class              = 0x3fe6,
+    /* Indicates that the tag (subprogram/compile unit) containing this attrib
+       was built -fomit-frame-pointer.  */
+    DW_AT_APPLE_omit_frame_ptr             = 0x3fe7,
+
     /* UPC extension.  */
     DW_AT_upc_threads_scaled = 0x3210,
     /* PGI (STMicroelectronics) extensions.  */

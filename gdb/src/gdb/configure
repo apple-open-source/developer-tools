@@ -33195,7 +33195,7 @@ fi
     { echo "$as_me:$LINENO: checking for DebugSymbols framework" >&5
 echo $ECHO_N "checking for DebugSymbols framework... $ECHO_C" >&6; }
     if test x"$enable_debug_symbols_framework" = xyes; then
-      if test -d "$SDKROOT/System/Library/PrivateFrameworks/DebugSymbols.framework"
+      if test -d "/System/Library/PrivateFrameworks/DebugSymbols.framework"
       then
 
 cat >>confdefs.h <<\_ACEOF

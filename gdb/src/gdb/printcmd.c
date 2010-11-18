@@ -1472,8 +1472,19 @@ x_command (char *exp, int from_tty)
   do_examine (fmt, next_address);
 
   /* If the examine succeeds, we remember its size and format for next time.  */
-  last_size = fmt.size;
-  last_format = fmt.format;
+  /* APPLE LOCAL begin, Added 2010-05-17: If the format is 'i', it
+     automatically resets the size to 1 byte, which is different from
+     past behavior, and is generating regression radars. So we'll try
+     NOT saving the new size and format if the format is 'i' and the
+     new size is 'b'.  */
+
+  if (fmt.format != 'i'
+      || fmt.size != 'b')
+  {
+      last_size = fmt.size;
+      last_format = fmt.format;
+   }
+  /* APPLE LOCAL end */
 
   /* Set a couple of internal variables if appropriate. */
   if (last_examine_value)

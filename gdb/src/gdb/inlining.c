@@ -2829,7 +2829,9 @@ inlined_subroutine_adjust_position_for_breakpoint (struct breakpoint *b)
 
 
       while (i > 0
+             && filename != NULL
 	     && ((!global_inlined_call_stack.records[i].s)
+                 || (global_inlined_call_stack.records[i].s->filename == NULL)
 		 || ((strstr (global_inlined_call_stack.records[i].s->filename, 
 			      filename) ==  0)
 		     && (strstr (filename, 
@@ -3041,8 +3043,22 @@ rest_of_line_contains_inlined_subroutine (CORE_ADDR *end_of_line)
 
   while (sal.line == current_line)
     {
+      struct symtab_and_line old_sal;
+      old_sal.line = sal.line;
+      old_sal.pc = sal.pc;
+      old_sal.end = sal.end;
+      
       sal = find_pc_line (current_end, 0);
-      if (sal.line == current_line)
+      
+      if (sal.line == old_sal.line
+          && sal.pc == old_sal.pc
+          && sal.end == old_sal.end)
+        {
+          /* We aren't making any progress; exit the loop  */
+          break;
+        }
+ 
+      if ((sal.line == current_line) && (sal.end > current_end))
 	current_end = sal.end;
       cur = &sal;
       while (cur)
@@ -3053,7 +3069,8 @@ rest_of_line_contains_inlined_subroutine (CORE_ADDR *end_of_line)
 	    {
 	      inlined_subroutine_found = 1;
 	      inline_start_pc = cur->pc;
-	      current_end = cur->end;
+              if (cur->end > current_end)
+                current_end = cur->end;
 	      break;
 	    }
 	  cur = cur->next;

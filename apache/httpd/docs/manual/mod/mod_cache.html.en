@@ -70,6 +70,7 @@
 <li><img alt="" src="../images/down.gif" /> <a href="#cacheignoreheaders">CacheIgnoreHeaders</a></li>
 <li><img alt="" src="../images/down.gif" /> <a href="#cacheignorenolastmod">CacheIgnoreNoLastMod</a></li>
 <li><img alt="" src="../images/down.gif" /> <a href="#cacheignorequerystring">CacheIgnoreQueryString</a></li>
+<li><img alt="" src="../images/down.gif" /> <a href="#cacheignoreurlsessionidentifiers">CacheIgnoreURLSessionIdentifiers</a></li>
 <li><img alt="" src="../images/down.gif" /> <a href="#cachelastmodifiedfactor">CacheLastModifiedFactor</a></li>
 <li><img alt="" src="../images/down.gif" /> <a href="#cachemaxexpire">CacheMaxExpire</a></li>
 <li><img alt="" src="../images/down.gif" /> <a href="#cachestorenostore">CacheStoreNoStore</a></li>
@@ -164,6 +165,15 @@
       CacheDisable /local_files
     </code></p></div>
 
+    <p> The <code>no-cache</code> environment variable can be set to 
+    disable caching on a finer grained set of resources in versions
+    2.2.12 and later.</p>
+
+
+<h3>See also</h3>
+<ul>
+<li><a href="../env.html">Environment Variables in Apache</a></li>
+</ul>
 </div>
 <div class="top"><a href="#page-header"><img alt="top" src="../images/up.gif" /></a></div>
 <div class="directive-section"><h2><a name="CacheEnable" id="CacheEnable">CacheEnable</a> <a name="cacheenable" id="cacheenable">Directive</a></h2>
@@ -213,7 +223,15 @@ manager</td></tr>
       CacheEnable  disk  http://www.apache.org/<br />
     </code></p></div>
 
+    <p> The <code>no-cache</code> environment variable can be set to 
+    disable caching on a finer grained set of resources in versions
+    2.2.12 and later.</p>
 
+
+<h3>See also</h3>
+<ul>
+<li><a href="../env.html">Environment Variables in Apache</a></li>
+</ul>
 </div>
 <div class="top"><a href="#page-header"><img alt="top" src="../images/up.gif" /></a></div>
 <div class="directive-section"><h2><a name="CacheIgnoreCacheControl" id="CacheIgnoreCacheControl">CacheIgnoreCacheControl</a> <a name="cacheignorecachecontrol" id="cacheignorecachecontrol">Directive</a></h2>
@@ -356,6 +374,43 @@ header.</td></tr>
 
 </div>
 <div class="top"><a href="#page-header"><img alt="top" src="../images/up.gif" /></a></div>
+<div class="directive-section"><h2><a name="CacheIgnoreURLSessionIdentifiers" id="CacheIgnoreURLSessionIdentifiers">CacheIgnoreURLSessionIdentifiers</a> <a name="cacheignoreurlsessionidentifiers" id="cacheignoreurlsessionidentifiers">Directive</a></h2>
+<table class="directive">
+<tr><th><a href="directive-dict.html#Description">Description:</a></th><td>Ignore defined session identifiers encoded in the URL when caching
+</td></tr>
+<tr><th><a href="directive-dict.html#Syntax">Syntax:</a></th><td><code>CacheIgnoreURLSessionIdentifiers <var>identifier</var> [<var>identifier</var>] ...</code></td></tr>
+<tr><th><a href="directive-dict.html#Default">Default:</a></th><td><code>CacheIgnoreURLSessionIdentifiers None</code></td></tr>
+<tr><th><a href="directive-dict.html#Context">Context:</a></th><td>server config, virtual host</td></tr>
+<tr><th><a href="directive-dict.html#Status">Status:</a></th><td>Extension</td></tr>
+<tr><th><a href="directive-dict.html#Module">Module:</a></th><td>mod_cache</td></tr>
+</table>
+    <p>Sometimes applications encode the session identifier into the URL like in the following
+    Examples:
+    </p>
+    <ul>
+      <li><code>/someapplication/image.gif;jsessionid=123456789</code></li>
+      <li><code>/someapplication/image.gif?PHPSESSIONID=12345678</code></li>
+    </ul>
+    <p>This causes cachable resources to be stored separately for each session, which
+    is often not desired. <code class="directive">CacheIgnoreURLSessionIdentifiers</code> lets
+    define a list of identifiers that are removed from the key that is used to identify
+    an entity in the cache, such that cachable resources are not stored separately for
+    each session.
+    </p>
+    <p><code>CacheIgnoreURLSessionIdentifiers None</code> clears the list of ignored
+    identifiers. Otherwise, each identifier is added to the list.</p>
+
+    <div class="example"><h3>Example 1</h3><p><code>
+      CacheIgnoreURLSessionIdentifiers jsessionid
+    </code></p></div>
+
+    <div class="example"><h3>Example 2</h3><p><code>
+      CacheIgnoreURLSessionIdentifiers None
+    </code></p></div>
+
+
+</div>
+<div class="top"><a href="#page-header"><img alt="top" src="../images/up.gif" /></a></div>
 <div class="directive-section"><h2><a name="CacheLastModifiedFactor" id="CacheLastModifiedFactor">CacheLastModifiedFactor</a> <a name="cachelastmodifiedfactor" id="cachelastmodifiedfactor">Directive</a></h2>
 <table class="directive">
 <tr><th><a href="directive-dict.html#Description">Description:</a></th><td>The factor used to compute an expiry date based on the
@@ -485,6 +540,6 @@ LastModified date.</td></tr>
 <a href="../ja/mod/mod_cache.html" hreflang="ja" rel="alternate" title="Japanese">&nbsp;ja&nbsp;</a> |
 <a href="../ko/mod/mod_cache.html" hreflang="ko" rel="alternate" title="Korean">&nbsp;ko&nbsp;</a></p>
 </div><div id="footer">
-<p class="apache">Copyright 2008 The Apache Software Foundation.<br />Licensed under the <a href="http://www.apache.org/licenses/LICENSE-2.0">Apache License, Version 2.0</a>.</p>
+<p class="apache">Copyright 2009 The Apache Software Foundation.<br />Licensed under the <a href="http://www.apache.org/licenses/LICENSE-2.0">Apache License, Version 2.0</a>.</p>
 <p class="menu"><a href="../mod/">Modules</a> | <a href="../mod/directives.html">Directives</a> | <a href="../faq/">FAQ</a> | <a href="../glossary.html">Glossary</a> | <a href="../sitemap.html">Sitemap</a></p></div>
 </body></html>

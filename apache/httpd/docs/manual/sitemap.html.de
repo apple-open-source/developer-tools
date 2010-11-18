@@ -226,6 +226,7 @@ HPUX betreiben</a></li>
 <li><a href="mod/mod_proxy_connect.html">Apache-Modul mod_proxy_connect</a></li>
 <li><a href="mod/mod_proxy_ftp.html">Apache-Modul mod_proxy_ftp</a></li>
 <li><a href="mod/mod_proxy_http.html">Apache-Modul mod_proxy_http</a></li>
+<li><a href="mod/mod_proxy_scgi.html">Apache-Modul mod_proxy_scgi</a></li>
 <li><a href="mod/mod_rewrite.html">Apache-Modul mod_rewrite</a></li>
 <li><a href="mod/mod_setenvif.html">Apache-Modul mod_setenvif</a></li>
 <li><a href="mod/mod_so.html">Apache-Modul mod_so</a></li>
@@ -267,6 +268,6 @@ HPUX betreiben</a></li>
 <a href="./ko/sitemap.html" hreflang="ko" rel="alternate" title="Korean">&nbsp;ko&nbsp;</a> |
 <a href="./tr/sitemap.html" hreflang="tr" rel="alternate" title="Türkçe">&nbsp;tr&nbsp;</a></p>
 </div><div id="footer">
-<p class="apache">Copyright 2008 The Apache Software Foundation.<br />Lizenziert unter der <a href="http://www.apache.org/licenses/LICENSE-2.0">Apache License, Version 2.0</a>.</p>
+<p class="apache">Copyright 2009 The Apache Software Foundation.<br />Lizenziert unter der <a href="http://www.apache.org/licenses/LICENSE-2.0">Apache License, Version 2.0</a>.</p>
 <p class="menu"><a href="./mod/">Module</a> | <a href="./mod/directives.html">Direktiven</a> | <a href="./faq/">FAQ</a> | <a href="./glossary.html">Glossar</a> | <a href="./sitemap.html">Seitenindex</a></p></div>
 </body></html>

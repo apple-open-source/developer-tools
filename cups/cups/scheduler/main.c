@@ -1,9 +1,9 @@
 /*
  * "$Id: main.c 7925 2008-09-10 17:47:26Z mike $"
  *
- *   Scheduler main loop for the Common UNIX Printing System (CUPS).
+ *   Main loop for the CUPS scheduler.
  *
- *   Copyright 2007-2009 by Apple Inc.
+ *   Copyright 2007-2010 by Apple Inc.
  *   Copyright 1997-2007 by Easy Software Products, all rights reserved.
  *
  *   These coded instructions, statements, and computer programs are the
@@ -14,25 +14,27 @@
  *
  * Contents:
  *
- *   main()                    - Main entry for the CUPS scheduler.
- *   cupsdClosePipe()          - Close a pipe as necessary.
- *   cupsdOpenPipe()           - Create a pipe which is closed on exec.
- *   cupsdHoldSignals()        - Hold child and termination signals.
- *   cupsdReleaseSignals()     - Release signals for delivery.
- *   cupsdSetString()          - Set a string value.
- *   cupsdSetStringf()         - Set a formatted string value.
- *   launchd_checkin()         - Check-in with launchd and collect the
- *                               listening fds.
- *   launchd_checkout()        - Check-out with launchd.
- *   parent_handler()          - Catch USR1/CHLD signals...
- *   process_children()        - Process all dead children...
- *   select_timeout()          - Calculate the select timeout value.
- *   sigchld_handler()         - Handle 'child' signals from old processes.
- *   sighup_handler()          - Handle 'hangup' signals to reconfigure the
- *                               scheduler.
- *   sigterm_handler()         - Handle 'terminate' signals that stop the
- *                               scheduler.
- *   usage()                   - Show scheduler usage.
+ *   main()                - Main entry for the CUPS scheduler.
+ *   cupsdCheckProcess()   - Tell the main loop to check for dead children.
+ *   cupsdClosePipe()      - Close a pipe as necessary.
+ *   cupsdOpenPipe()       - Create a pipe which is closed on exec.
+ *   cupsdClearString()    - Clear a string.
+ *   cupsdHoldSignals()    - Hold child and termination signals.
+ *   cupsdReleaseSignals() - Release signals for delivery.
+ *   cupsdSetString()      - Set a string value.
+ *   cupsdSetStringf()     - Set a formatted string value.
+ *   cupsd_clean_files()   - Clean out old files.
+ *   launchd_checkin()     - Check-in with launchd and collect the listening
+ *                           fds.
+ *   launchd_checkout()    - Update the launchd KeepAlive file as needed.
+ *   parent_handler()      - Catch USR1/CHLD signals...
+ *   process_children()    - Process all dead children...
+ *   select_timeout()      - Calculate the select timeout value.
+ *   sigchld_handler()     - Handle 'child' signals from old processes.
+ *   sighup_handler()      - Handle 'hangup' signals to reconfigure the
+ *                           scheduler.
+ *   sigterm_handler()     - Handle 'terminate' signals that stop the scheduler.
+ *   usage()               - Show scheduler usage.
  */
 
 /*
@@ -45,11 +47,12 @@
 #include <syslog.h>
 #include <grp.h>
 #include <cups/dir.h>
+#include <fnmatch.h>
 
 #ifdef HAVE_LAUNCH_H
 #  include <launch.h>
 #  include <libgen.h>
-#  define CUPS_KEEPALIVE	CUPS_CACHEDIR "/org.cups.cupsd"
+#  define CUPS_KEEPALIVE CUPS_CACHEDIR "/org.cups.cupsd"
 					/* Name of the launchd KeepAlive file */
 #  ifndef LAUNCH_JOBKEY_KEEPALIVE
 #    define LAUNCH_JOBKEY_KEEPALIVE "KeepAlive"
@@ -78,6 +81,8 @@
  * Local functions...
  */
 
+static void		cupsd_clean_files(const char *path,
+			                  const char *pattern);
 #ifdef HAVE_LAUNCHD
 static void		launchd_checkin(void);
 static void		launchd_checkout(void);
@@ -134,7 +139,7 @@ main(int  argc,				/* I - Number of command-line args */
 			senddoc_time,	/* Send-Document time */
 			expire_time,	/* Subscription expire time */
 			report_time,	/* Malloc/client/job report time */
-			event_time;	/* Last time an event notification was done */
+			event_time;	/* Last event notification time */
   long			timeout;	/* Timeout for cupsdDoSelect() */
   struct rlimit		limit;		/* Runtime limit */
 #if defined(HAVE_SIGACTION) && !defined(HAVE_SIGSET)
@@ -270,19 +275,22 @@ main(int  argc,				/* I - Number of command-line args */
 	      break;
 
           case 'p' : /* Stop immediately for profiling */
-              puts("Warning: -p (startup profiling) is for internal testing use only!");
+              fputs("cupsd: -p (startup profiling) is for internal testing "
+                    "use only!\n", stderr);
 	      stop_scheduler = 1;
 	      fg             = 1;
 	      break;
 
           case 'P' : /* Disable security profiles */
-              puts("Warning: -P (disable security profiles) is for internal testing use only!");
+              fputs("cupsd: -P (disable security profiles) is for internal "
+                    "testing use only!\n", stderr);
 	      UseProfiles = 0;
 	      break;
 
 #ifdef __APPLE__
           case 'S' : /* Disable system management functions */
-              puts("Warning: -S (disable system management) for internal testing use only!");
+              fputs("cupsd: -S (disable system management) for internal "
+                    "testing use only!\n", stderr);
 	      use_sysman = 0;
 	      break;
 #endif /* __APPLE__ */
@@ -379,7 +387,7 @@ main(int  argc,				/* I - Number of command-line args */
     * parent's file descriptors to be blocking.  This is a workaround for a
     * limitation of userland libpthread on OpenBSD.
     */
-   
+
     _thread_sys_closefrom(0);
 #endif /* __OpenBSD__ */
 
@@ -505,42 +513,14 @@ main(int  argc,				/* I - Number of command-line args */
     return (0);
   }
 
+ /*
+  * Clean out old temp files and printer cache data.
+  */
+
   if (!strncmp(TempDir, RequestRoot, strlen(RequestRoot)))
-  {
-   /*
-    * Clean out the temporary directory...
-    */
+    cupsd_clean_files(TempDir, NULL);
 
-    cups_dir_t		*dir;		/* Temporary directory */
-    cups_dentry_t	*dent;		/* Directory entry */
-    char		tempfile[1024];	/* Temporary filename */
-
-
-    if ((dir = cupsDirOpen(TempDir)) != NULL)
-    {
-      cupsdLogMessage(CUPSD_LOG_INFO,
-                      "Cleaning out old temporary files in \"%s\"...", TempDir);
-
-      while ((dent = cupsDirRead(dir)) != NULL)
-      {
-        snprintf(tempfile, sizeof(tempfile), "%s/%s", TempDir, dent->filename);
-
-	if (unlink(tempfile))
-	  cupsdLogMessage(CUPSD_LOG_ERROR,
-	                  "Unable to remove temporary file \"%s\" - %s",
-	                  tempfile, strerror(errno));
-        else
-	  cupsdLogMessage(CUPSD_LOG_DEBUG, "Removed temporary file \"%s\"...",
-	                  tempfile);
-      }
-
-      cupsDirClose(dir);
-    }
-    else
-      cupsdLogMessage(CUPSD_LOG_ERROR,
-                      "Unable to open temporary directory \"%s\" - %s",
-                      TempDir, strerror(errno));
-  }
+  cupsd_clean_files(CacheDir, "*.ipp");
 
 #if HAVE_LAUNCHD
   if (Launchd)
@@ -568,6 +548,8 @@ main(int  argc,				/* I - Number of command-line args */
  /*
   * Startup the server...
   */
+
+  httpInitialize();
 
   cupsdStartServer();
 
@@ -763,7 +745,8 @@ main(int  argc,				/* I - Number of command-line args */
 	if (Launchd)
 	{
 	 /*
-	  * If we were started by launchd get the listen sockets file descriptors...
+	  * If we were started by launchd, get the listen socket file
+	  * descriptors...
 	  */
 
 	  launchd_checkin();
@@ -807,8 +790,8 @@ main(int  argc,				/* I - Number of command-line args */
 
     if (timeout == 86400 && Launchd && LaunchdTimeout && !NumPolled &&
         !cupsArrayCount(ActiveJobs) &&
-	(!Browsing || 
-	 (!BrowseRemoteProtocols && 
+	(!Browsing ||
+	 (!BrowseRemoteProtocols &&
 	  (!NumBrowsers || !BrowseLocalProtocols ||
 	   cupsArrayCount(Printers) == 0))))
     {
@@ -1036,6 +1019,7 @@ main(int  argc,				/* I - Number of command-line args */
     if ((current_time - senddoc_time) >= 10)
     {
       cupsdCheckJobs();
+      cupsdCleanJobs();
       senddoc_time = current_time;
     }
 
@@ -1194,8 +1178,8 @@ main(int  argc,				/* I - Number of command-line args */
 #endif /* HAVE_GSSAPI */
 
 #if defined(__APPLE__) && defined(HAVE_DLFCN_H)
- /* 
-  * Unload Print Service quota enforcement library (X Server only) 
+ /*
+  * Unload Print Service quota enforcement library (X Server only)
   */
 
   PSQUpdateQuotaProc = NULL;
@@ -1436,6 +1420,60 @@ cupsdSetStringf(char       **s,		/* O - New string */
 }
 
 
+/*
+ * 'cupsd_clean_files()' - Clean out old files.
+ */
+ 
+static void
+cupsd_clean_files(const char *path,	/* I - Directory to clean */
+                  const char *pattern)	/* I - Filename pattern or NULL */
+{
+  cups_dir_t	*dir;			/* Directory */
+  cups_dentry_t	*dent;			/* Directory entry */
+  char		filename[1024];		/* Filename */
+  int		status;			/* Status from unlink/rmdir */
+
+
+  cupsdLogMessage(CUPSD_LOG_DEBUG,
+                  "cupsd_clean_files(path=\"%s\", pattern=\"%s\")", path,
+		  pattern ? pattern : "(null)");
+
+  if ((dir = cupsDirOpen(path)) == NULL)
+  {
+    cupsdLogMessage(CUPSD_LOG_ERROR, "Unable to open directory \"%s\" - %s",
+		    path, strerror(errno));
+    return;
+  }
+
+  cupsdLogMessage(CUPSD_LOG_INFO, "Cleaning out old files in \"%s\"...", path);
+
+  while ((dent = cupsDirRead(dir)) != NULL)
+  {
+    if (pattern && fnmatch(pattern, dent->filename, 0))
+      continue;
+
+    snprintf(filename, sizeof(filename), "%s/%s", path, dent->filename);
+
+    if (S_ISDIR(dent->fileinfo.st_mode))
+    {
+      cupsd_clean_files(filename, pattern);
+
+      status = rmdir(filename);
+    }
+    else
+      status = unlink(filename);
+
+    if (status)
+      cupsdLogMessage(CUPSD_LOG_ERROR, "Unable to remove \"%s\" - %s", filename,
+		      strerror(errno));
+    else
+      cupsdLogMessage(CUPSD_LOG_DEBUG, "Removed \"%s\"...", filename);
+  }
+
+  cupsDirClose(dir);
+}
+
+
 #ifdef HAVE_LAUNCHD
 /*
  * 'launchd_checkin()' - Check-in with launchd and collect the listening fds.
@@ -1445,8 +1483,10 @@ static void
 launchd_checkin(void)
 {
   size_t		i,		/* Looping var */
-			count;		/* Numebr of listeners */
+			count;		/* Number of listeners */
+#  ifdef HAVE_SSL
   int			portnum;	/* Port number */
+#  endif /* HAVE_SSL */
   launch_data_t		ld_msg,		/* Launch data message */
 			ld_resp,	/* Launch data response */
 			ld_array,	/* Launch data array */
@@ -1552,21 +1592,21 @@ launchd_checkin(void)
 
 	if (lis)
 	{
-	  cupsdLogMessage(CUPSD_LOG_DEBUG, 
+	  cupsdLogMessage(CUPSD_LOG_DEBUG,
 		  "launchd_checkin: Matched existing listener %s with fd %d...",
 		  httpAddrString(&(lis->address), s, sizeof(s)), fd);
 	}
 	else
 	{
-	  cupsdLogMessage(CUPSD_LOG_DEBUG, 
+	  cupsdLogMessage(CUPSD_LOG_DEBUG,
 		  "launchd_checkin: Adding new listener %s with fd %d...",
 		  httpAddrString(&addr, s, sizeof(s)), fd);
 
 	  if ((lis = calloc(1, sizeof(cupsd_listener_t))) == NULL)
 	  {
 	    cupsdLogMessage(CUPSD_LOG_ERROR,
-			    "launchd_checkin: Unable to allocate listener - %s.",
-			    strerror(errno));
+			    "launchd_checkin: Unable to allocate listener - "
+			    "%s.", strerror(errno));
 	    exit(EXIT_FAILURE);
 	  }
 
@@ -1612,17 +1652,18 @@ launchd_checkout(void)
 
  /*
   * Create or remove the launchd KeepAlive file based on whether
-  * there are active jobs, polling, browsing for remote printers or 
+  * there are active jobs, polling, browsing for remote printers or
   * shared printers to advertise...
   */
 
-  if ((cupsArrayCount(ActiveJobs) || NumPolled || 
-       (Browsing && 
+  if ((cupsArrayCount(ActiveJobs) || NumPolled ||
+       (Browsing &&
 	(BrowseRemoteProtocols ||
         (BrowseLocalProtocols && NumBrowsers && cupsArrayCount(Printers))))))
   {
     cupsdLogMessage(CUPSD_LOG_DEBUG,
-                    "Creating launchd keepalive file \"" CUPS_KEEPALIVE "\"...");
+                    "Creating launchd keepalive file \"" CUPS_KEEPALIVE
+                    "\"...");
 
     if ((fd = open(CUPS_KEEPALIVE, O_RDONLY | O_CREAT | O_EXCL, S_IRUSR)) >= 0)
       close(fd);
@@ -1630,7 +1671,8 @@ launchd_checkout(void)
   else
   {
     cupsdLogMessage(CUPSD_LOG_DEBUG,
-                    "Removing launchd keepalive file \"" CUPS_KEEPALIVE "\"...");
+                    "Removing launchd keepalive file \"" CUPS_KEEPALIVE
+                    "\"...");
 
     unlink(CUPS_KEEPALIVE);
   }
@@ -1723,7 +1765,7 @@ process_children(void)
 	  job->backend = -pid;
 
 	if (status && status != SIGTERM && status != SIGKILL &&
-	    job->status >= 0)
+	    status != SIGPIPE && job->status >= 0)
 	{
 	 /*
 	  * An error occurred; save the exit status so we know to stop
@@ -1766,7 +1808,7 @@ process_children(void)
 		job->printer_message = ippAddString(job->attrs, IPP_TAG_JOB,
 		                                    IPP_TAG_TEXT,
 						    "job-printer-state-message",
-						    NULL, "");
+						    NULL, NULL);
 	    }
 
 	    if (job->printer_message)
@@ -1780,7 +1822,7 @@ process_children(void)
 	* filters are done, and if so move to the next file.
 	*/
 
-	if (job->current_file < job->num_files)
+	if (job->current_file < job->num_files && job->printer)
 	{
 	  for (i = 0; job->filters[i] < 0; i ++);
 
@@ -1792,6 +1834,18 @@ process_children(void)
 
 	    cupsdContinueJob(job);
 	  }
+	}
+	else if (job->state_value >= IPP_JOB_CANCELED)
+	{
+	 /*
+	  * Remove the job from the active list if there are no processes still
+	  * running for it...
+	  */
+
+	  for (i = 0; job->filters[i] < 0; i++);
+
+	  if (!job->filters[i] && job->backend <= 0)
+	    cupsArrayRemove(ActiveJobs, job);
 	}
       }
     }
@@ -1805,6 +1859,12 @@ process_children(void)
     {
       cupsdLogMessage(CUPSD_LOG_DEBUG,
                       "PID %d (%s) was terminated normally with signal %d.",
+                      pid, name, status);
+    }
+    else if (status == SIGPIPE)
+    {
+      cupsdLogMessage(CUPSD_LOG_DEBUG,
+                      "PID %d (%s) did not catch or ignore signal %d.",
                       pid, name, status);
     }
     else if (status)

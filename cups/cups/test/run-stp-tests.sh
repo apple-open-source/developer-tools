@@ -5,7 +5,7 @@
 #   Perform the complete set of IPP compliance tests specified in the
 #   CUPS Software Test Plan.
 #
-#   Copyright 2007-2009 by Apple Inc.
+#   Copyright 2007-2010 by Apple Inc.
 #   Copyright 1997-2007 by Easy Software Products, all rights reserved.
 #
 #   These coded instructions, statements, and computer programs are the
@@ -251,6 +251,7 @@ ln -s $root/notifier /tmp/cups-$user/bin
 ln -s $root/scheduler /tmp/cups-$user/bin/daemon
 ln -s $root/filter/bannertops /tmp/cups-$user/bin/filter
 ln -s $root/filter/commandtops /tmp/cups-$user/bin/filter
+ln -s $root/filter/gziptoany /tmp/cups-$user/bin/filter
 ln -s $root/filter/hpgltops /tmp/cups-$user/bin/filter
 ln -s $root/filter/pstops /tmp/cups-$user/bin/filter
 ln -s $root/filter/rastertoepson /tmp/cups-$user/bin/filter
@@ -273,11 +274,6 @@ ln -s $root/conf/mime.convs /tmp/cups-$user/share/mime
 ln -s $root/data/*.h /tmp/cups-$user/share/ppdc
 ln -s $root/data/*.defs /tmp/cups-$user/share/ppdc
 ln -s $root/templates /tmp/cups-$user/share
-
-if test $ssltype != 0; then
-	mkdir $root/ssl
-	cp server.* $root/ssl
-fi
 
 #
 # Mac OS X filters and configuration files...
@@ -436,6 +432,7 @@ fi
 
 export SHLIB_PATH
 
+CUPS_DISABLE_APPLE_DEFAULT=yes; export CUPS_DISABLE_APPLE_DEFAULT
 CUPS_SERVER=localhost:8631; export CUPS_SERVER
 CUPS_SERVERROOT=/tmp/cups-$user; export CUPS_SERVERROOT
 CUPS_STATEDIR=/tmp/cups-$user; export CUPS_STATEDIR
@@ -614,6 +611,18 @@ echo "<H1>3 - Log Files</H1>" >>$strfile
 echo "Test Summary"
 echo ""
 echo "<H2>Summary</H2>" >>$strfile
+
+# Job control files
+count=`ls -1 /tmp/cups-$user/spool | wc -l`
+count=`expr $count - 1`
+if test $count != 0; then
+	echo "FAIL: $count job control files were not purged."
+	echo "<P>FAIL: $count job control files were not purged.</P>" >>$strfile
+	fail=`expr $fail + 1`
+else
+	echo "PASS: All job control files purged."
+	echo "<P>PASS: All job control files purged.</P>" >>$strfile
+fi
 
 # Pages printed on Test1 (within 1 page for timing-dependent cancel issues)
 count=`grep '^Test1 ' /tmp/cups-$user/log/page_log | awk 'BEGIN{count=0}{count=count+$7}END{print count}'`
@@ -806,7 +815,7 @@ echo "</PRE>" >>$strfile
 
 echo "<H2>error_log</H2>" >>$strfile
 echo "<PRE>" >>$strfile
-grep -v '^[dD]' /tmp/cups-$user/log/error_log | sed -e '1,$s/&/&amp;/g' -e '1,$s/</&lt;/g' >>$strfile
+grep -v '^d' /tmp/cups-$user/log/error_log | sed -e '1,$s/&/&amp;/g' -e '1,$s/</&lt;/g' >>$strfile
 echo "</PRE>" >>$strfile
 
 echo "<H2>page_log</H2>" >>$strfile

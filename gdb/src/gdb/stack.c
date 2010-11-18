@@ -658,7 +658,8 @@ print_frame (struct frame_info *fi,
       || get_frame_type (get_current_frame ()) == INLINED_FRAME)
     {
       inside_inlined = at_inlined_call_site_p (&filename, &line_num, &column);
-      if (!inside_inlined)
+      if (!inside_inlined
+          && frame_relative_level (fi) == 0)
 	inside_inlined = in_inlined_function_call_p (&inline_end_pc);
     }
 

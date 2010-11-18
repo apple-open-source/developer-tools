@@ -1,25 +1,128 @@
+2010-09-16  Greg Clayton  <gclayton@apple.com>
+
+	* dbxread.c (fill_symbuf): Allow the symbol reader to switch nlist 
+	symbol sizes if needed.
+
+2010-09-13  Jason Molenda  (jmolenda@apple.com)
+
+	* dwarf2read.c (dwarf2_kext_psymtab_to_symtab): Make the error message
+	a little more specific.
+
+2010-09-13  Jim Ingham  <jingham@apple.com>
+
+	* x86-shared-tdep.c (x86_cxx_virtual_override_thunk_trampline):
+	Check the we have a non-null msym before accessing it.
+	
+2010-09-11  Caroline Tice  <ctice@apple.com>
+
+	* inlining.c (rest_of_line_contains_inlined_subroutine):  Add
+        code to break out of while loop if no progress is being made; add
+        checks to only change current_end if new value is greater than old.
+        * stack.c (print_frame):  Only call in_inlined_function_call_p for
+        stack frame 0 (it makes no sense for higher frames).
+        
+2010-09-10  Jim Ingham  <jingham@apple.com>
+
+	* objc-lang.c (new_objc_runtime_internals): Fix a thinko - return 
+	objc_rutime_version == 2, not objc_runtime_version.
+	
+2010-09-09  Greg Clayton  <gclayton@apple.com>
+
+        * objc-lang.c (read_objc_object): When the object address points to
+        a class object, gdb_class_getClass returns the class, and if the class
+        is the class object don't modify the object isa.
+
+2010-09-08  Greg Clayton  <gclayton@apple.com>
+
+	* fork-child.c (fork_inferior): Only do the posix spawn flags to disable
+	ASLR on macosx builds.
+	(_initialize_fork_child): Moved set/show variable for disabling ASLR to
+	macosx-tdep.c so it is available for remote debugging.
+	* remote.c (send_disable_aslr): New function that sends the 
+	"QSetDisableASLR:" packet for remote-macosx targets.
+	(remote_macosx_create_inferior): Send the "QSetDisableASLR:" packet before
+	we send our args.
+
+2010-08-26  Jim Ingham  <jingham@apple.com>
+
+	* objc-lang.c (print_object_command): re-enable use of read_objc_object.
+	(read_objc_object): If gdb_object_getClass is not available, try 
+	gdb_class_getClass on the ISA pointer.
+
+2010-08-24  Jim Ingham  <jingham@apple.com>
+
+	* objc-lang.c (read_objc_object): When the object address points to
+	a class object, gdb_object_getClass returns the class, not the meta
+	class.  The latter is what we actually want.
+
+	* gdbtypes.c (check_typedef): Check that the SYMBOL_TYPE and the input
+	type come from the same objfile before calling make_cvr_type.
+	
+2010-08-19  Jim Ingham  <jingham@apple.com>
+
+	* buildsym.c (compare_blocks): If two blocks are coterminous, put
+	the superblock first.
+	
+2010-08-18  Jason Molenda  (jmolenda@apple.com)
+
+	* objc-lang.c (new_objc_runtime_find_impl): Allow calling _cache_getImp
+	even if there is a spinlock on some other thread - that should be safe.
+
+2010-08-16  Jim Ingham  <jingham@apple.com>
+
+	* top.c (execute_command): Potentially log command.
+	* cli/cli-logging.c (show_logging_commands, log_command): New functions.
+	(_initialize_cli_logging): Add "set logging commands".
+	
 2010-07-08  Jim Ingham  <jingham@apple.com>
 
-        * dcache.c: These changes make the LINE_SIZE dynamically adjustable.
-        (dcache_read_line, dcache_write_line, dcache_alloc): 
-	LINE_SIZE->g_line_size.
-        (dcache_set_data, dcache_resize): New functions.
-        (dcache_init): Have to set the data & state with dcache_set_data, and 
-        remember the cache in g_cache_array.
-        (dcache_free): Remove the cache from the g_cache_array, and free the 
-        dynamic data & state.
-        (dcache_info): Use g_cache_array not last_cache.
-        (set_cache_line_power): New function.
-        (_initialize_dcache): Add set command for dcache_linesize_power.
+	* dcache.c: These changes make the LINE_SIZE dynamically adjustable.
+	(dcache_read_line, dcache_write_line, dcache_alloc): LINE_SIZE->g_line_size.
+	(dcache_set_data, dcache_resize): New functions.
+	(dcache_init): Have to set the data & state with dcache_set_data, and 
+	remember the cache in g_cache_array.
+	(dcache_free): Remove the cache from the g_cache_array, and free the 
+	dynamic data & state.
+	(dcache_info): Use g_cache_array not last_cache.
+	(set_cache_line_power): New function.
+	(_initialize_dcache): Add set command for dcache_linesize_power.
 
-        * objc-lang.c (do_cleanup_objc_exception_breakpoint): Delete the
-        objc exception breakpoint rather than just disabling it.  Shouldn't
-        really be holding onto a pointer to this long-term or it could get
-        deleted out from under us.
+	* objc-lang.c (do_cleanup_objc_exception_breakpoint): Delete the
+	objc exception breakpoint rather than just disabling it.  Shouldn't
+	really be holding onto a pointer to this long-term or it could get
+	deleted out from under us.
+
+2010-07-07  Greg Clayton  (gclayton@apple.com)
+
+	* configure.ac: Defined USE_DEBUG_SYMBOLS_FRAMEWORK for all non
+	ARM builds if it exists.
+	* configure: Regenerated.
+
+2010-06-28  Jason Molenda  (jmolenda@apple.com)
+
+	* gdbtypes.h (TYPE_IS_OPAQUE): A struct with a non-zero length is
+	not opaque, even if it has no child elements.
+
+2010-06-28  Jason Molenda  (jmolenda@apple.com)
+
+	Check in patch written by Andrew Myrick.
+
+	* symfile.c (find_kext_files_by_bundle): New function to find
+	the .kext bundle executable and .sym file given a kext bundle pathname.
+	(find_kext_files_by_symfile): New function to find a kext bundle
+	(via locating a dSYM) given a .sym file pathname.
+	(add_kext_command):  Accept either a .kext bundle pathname or a .sym
+	filename; try to locate all the necessary parts based on what we are
+	given.
+	* utils.c (unlimit_file_rlimit, restore_file_rlimit): New functions
+	hoisted up from macosx-nat.c to raise the limit on file descriptors,
+	and restore it once we've forked.
+	* defs.h: Add prototypes for unlimit_file_rlimit, restore_file_rlimit.
+	* main.c (captured_main): Call unlimit_file_rlimit.
 
 2010-05-26  Caroline Tice  <ctice@apple.com>
 
-	* objc-lang.c (print_object_command):  Comment out recent new code
+        * objc-lang.c (print_object_command):  Comment out recent new code
         that calls read_objc_object; restore the old code that was replaced
         by the code that called read_objc_object.
         (read_objc_object):  Modify to remove calls to object_getClass, which
@@ -27,6 +130,22 @@
         gdb_object_getClass, which currently doesn't exist, so really it will
         fall back on default old behavior, until gdb_object_getClass is
         written.
+
+2010-05-18  Caroline Tice  <ctice@apple.com>
+
+        * printcmd.c (x_command):  If the format is 'i' (instruction) and
+        the size is 'b' (byte), do not save the format and size.
+
+2010-05-11  Caroline Tice  <ctice@apple.com>
+
+        * inlining.c (inlined_subroutine_adjust_position_for_breakpoint):  Make
+        sure filename strings are non-NULL before attempting to call strstr.
+
+2010-05-06  Jason Molenda  (jmolenda@apple.com)
+
+	* symfile.c (symbol_file_add_with_addrs_or_offsets_using_objfile):
+	Check that we could open the dSYM binary returned to us; don't just
+	assume it opened correctly.
 
 2010-04-29  Greg Clayton  (gclayton@apple.com)
 

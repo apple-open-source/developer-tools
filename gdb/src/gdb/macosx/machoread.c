@@ -380,19 +380,35 @@ macho_build_psymtabs (struct objfile *objfile, int mainline,
 	 of our available memory.   */
       if (bfd_mach_o_in_shared_cached_memory (sym_bfd))
 	{
-	  /* If the bfd is in the shared cache, all images will share the
-	     same string table, so we need to make one copy of the shared
-	     string table and keep it around.  */
-	  asection *linkedit_sect = NULL;
-	  CORE_ADDR strtab_addr = 0;
-	  linkedit_sect = bfd_get_section_by_name (sym_bfd, 
-						   "LC_SEGMENT.__LINKEDIT");
-	  if (linkedit_sect == NULL)
-	    error ("error parsing symbol file: no __LINKEDIT section was found");
+          static char *g_shared_cache_stringtab = NULL;
 
-	  strtab_addr = bfd_section_vma (sym_bfd, linkedit_sect) + 
-			(stabstrsect->filepos - linkedit_sect->filepos);
-     	  DBX_STRINGTAB (objfile) = (char *)strtab_addr;
+	  /* Map a single copy of the string table and cache the result.  */
+	  if (g_shared_cache_stringtab == NULL)
+	    {
+              g_shared_cache_stringtab = xmalloc (DBX_STRINGTAB_SIZE (objfile) + 1);
+	      OBJSTAT (objfile, sz_strtab += DBX_STRINGTAB_SIZE (objfile) + 1);
+
+	      /* Now read in the string table in one big gulp.  */
+	      val = bfd_get_section_contents (sym_bfd, stabstrsect, 
+					      g_shared_cache_stringtab, 0,
+	         			      DBX_STRINGTAB_SIZE (objfile));
+	      if (!val)
+	        perror_with_name (name);
+	    }
+	  DBX_STRINGTAB (objfile) = g_shared_cache_stringtab;
+	  // /* If the bfd is in the shared cache, all images will share the
+	  //    same string table, so we need to make one copy of the shared
+	  //    string table and keep it around.  */
+	  // asection *linkedit_sect = NULL;
+	  // CORE_ADDR strtab_addr = 0;
+	  // linkedit_sect = bfd_get_section_by_name (sym_bfd, 
+	  // 						   "LC_SEGMENT.__LINKEDIT");
+	  // if (linkedit_sect == NULL)
+	  //   error ("error parsing symbol file: no __LINKEDIT section was found");
+	  // 
+	  // strtab_addr = bfd_section_vma (sym_bfd, linkedit_sect) + 
+	  // 			(stabstrsect->filepos - linkedit_sect->filepos);
+     	  //DBX_STRINGTAB (objfile) = (char *)strtab_addr;
 	}
       else
 	{	

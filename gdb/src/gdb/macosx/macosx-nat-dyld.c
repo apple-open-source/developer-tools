@@ -231,7 +231,9 @@ static void macosx_set_auto_start_dyld (char *args, int from_tty,
 
 static int target_read_dylib_command (CORE_ADDR addr, 
 				      struct dylib_command *dcmd);
-				      
+
+static CORE_ADDR find_text_segment_load_address (CORE_ADDR mem_addr);
+
 void
 dyld_debug (const char *fmt, ...)
 {
@@ -384,7 +386,7 @@ macosx_init_addresses (macosx_dyld_thread_status *s)
       macosx_set_malloc_inited (s->libsystem_initialized);
     }
 
-  if (s->dyld_slide != INVALID_ADDRESS)
+  if (s->dyld_slide != INVALID_ADDRESS && s->dyld_minsyms_have_been_relocated == 0)
     s->dyld_notify = infos.dyld_notify + s->dyld_slide;
   else if (infos.dyld_notify_address_slide != 0)
     s->dyld_notify = infos.dyld_notify + infos.dyld_notify_address_slide;
@@ -431,10 +433,50 @@ target_read_mach_header (CORE_ADDR addr, struct mach_header *s)
       EXTRACT_INT_MEMBER (struct mach_header, s, magic);
       EXTRACT_INT_MEMBER (struct mach_header, s, cputype);
       EXTRACT_INT_MEMBER (struct mach_header, s, cpusubtype);
-      EXTRACT_INT_MEMBER ( struct mach_header, s, filetype);
+      EXTRACT_INT_MEMBER (struct mach_header, s, filetype);
       EXTRACT_INT_MEMBER (struct mach_header, s, ncmds);
       EXTRACT_INT_MEMBER (struct mach_header, s, sizeofcmds);
       EXTRACT_INT_MEMBER (struct mach_header, s, flags);
+    }
+  return error;
+}
+
+int 
+target_read_minimal_segment_32 (CORE_ADDR addr, struct segment_command *s)
+{
+  int error;
+  gdb_assert (addr != INVALID_ADDRESS);
+  /* Read only up to the file offset as we only need the info up to the vmaddr
+     and vmsize.  */
+  bzero (s, sizeof(*s));
+  error = target_read_memory (addr, (gdb_byte *)s, offsetof (struct segment_command, fileoff));
+  
+  if (error == 0)
+    {
+      EXTRACT_INT_MEMBER (struct segment_command, s, cmd);
+      EXTRACT_INT_MEMBER (struct segment_command, s, cmdsize);
+      EXTRACT_INT_MEMBER (struct segment_command, s, vmaddr);
+      EXTRACT_INT_MEMBER (struct segment_command, s, vmsize);
+    }
+  return error;
+}
+
+int 
+target_read_minimal_segment_64 (CORE_ADDR addr, struct segment_command_64 *s)
+{
+  int error;
+  gdb_assert (addr != INVALID_ADDRESS);
+  /* Read only up to the file offset as we only need the info up to the vmaddr
+     and vmsize.  */
+  bzero (s, sizeof(*s));
+  error = target_read_memory (addr, (gdb_byte *)s, offsetof (struct segment_command_64, fileoff));
+  
+  if (error == 0)
+    {
+      EXTRACT_INT_MEMBER (struct segment_command_64, s, cmd);
+      EXTRACT_INT_MEMBER (struct segment_command_64, s, cmdsize);
+      EXTRACT_INT_MEMBER (struct segment_command_64, s, vmaddr);
+      EXTRACT_INT_MEMBER (struct segment_command_64, s, vmsize);
     }
   return error;
 }
@@ -723,39 +765,49 @@ macosx_lookup_dyld_file_load_address (const char *name, CORE_ADDR *loadaddr)
    VALUE is set to the load address of dyld if we can find it.
    SLIDE is set to the amount dyld was slid from its on-disk addr.
    1 is returned if we found a dyld.  
-   If 0 is returned, VALUE and SLIDE are not set to anything.  */
+   If 0 is returned, S->DYLD_ADDR and S->DYLD_SLIDE are not set to anything.  */
 
 static int
-macosx_locate_dyld_via_taskinfo (const char *name, CORE_ADDR *value, 
-                                 CORE_ADDR *slide)
+macosx_locate_dyld_via_taskinfo (macosx_dyld_thread_status *s)
 {
-#if !defined (TASK_DYLD_INFO) || !defined (NM_NEXTSTEP)
-  return 0;
-#endif
-
-  if (target_is_remote () || value == NULL)
+  if (s == NULL)
     return 0;
-
+    
 #if defined (NM_NEXTSTEP)
-  struct task_dyld_info task_dyld_info;
-  mach_msg_type_number_t count = TASK_DYLD_INFO_COUNT;
-  kern_return_t kret;
 
-  kret = task_info (macosx_status->task, TASK_DYLD_INFO,
-                    (task_info_t) &task_dyld_info, &count);
+  if (s->dyld_image_infos == INVALID_ADDRESS)
+    {
+#if !defined (TASK_DYLD_INFO)
+      return 0;
+#endif
+      if (macosx_status->task == TASK_NULL)
+        return 0;
 
-  /* Sometimes task_info returns success, but the addr & size are still 0.
-     Presumably when a task is just starting?  Anyway, protect against that
-     case here.  */
-  if (kret == KERN_SUCCESS
-      && task_dyld_info.all_image_info_addr != 0
-      && task_dyld_info.all_image_info_size != 0)
+      struct task_dyld_info task_dyld_info;
+      mach_msg_type_number_t count = TASK_DYLD_INFO_COUNT;
+      kern_return_t kret;
+
+      kret = task_info (macosx_status->task, TASK_DYLD_INFO,
+                        (task_info_t) &task_dyld_info, &count);
+
+      /* Sometimes task_info returns success, but the addr & size are still 0.
+         Presumably when a task is just starting?  Anyway, protect against that
+         case here.  */
+      if (kret != KERN_SUCCESS || 
+          task_dyld_info.all_image_info_addr == 0 || 
+          task_dyld_info.all_image_info_size == 0)
+          return 0;
+      s->dyld_image_infos = task_dyld_info.all_image_info_addr;
+    }
+#endif /* NM_NEXTSTEP */
+
+  if (s->dyld_image_infos != INVALID_ADDRESS)
     {
       struct dyld_raw_infos raw_infos;
       struct gdb_exception e;
       TRY_CATCH (e, RETURN_MASK_ERROR)
         {
-          dyld_read_raw_infos (task_dyld_info.all_image_info_addr, &raw_infos);
+          dyld_read_raw_infos (s->dyld_image_infos, &raw_infos);
         }
       if (e.reason != NO_ERROR)
         return 0;
@@ -764,32 +816,39 @@ macosx_locate_dyld_via_taskinfo (const char *name, CORE_ADDR *value,
           && raw_infos.dyld_image_load_address != 0
           && dyld_starts_here_p (raw_infos.dyld_image_load_address))
         {
-          *value = raw_infos.dyld_image_load_address;
-          if (slide)
-            *slide = 0;
-          return 1;
+          CORE_ADDR load_command_vma;
+
+          // Get the intended load addr of dyld by looking at the 
+          // Mach-O load commands in memory, return that if found.
+
+          load_command_vma = find_text_segment_load_address 
+                                      (raw_infos.dyld_image_load_address);
+          if (load_command_vma != INVALID_ADDRESS)
+            {
+              s->dyld_slide = raw_infos.dyld_image_load_address - load_command_vma;
+              s->dyld_addr = raw_infos.dyld_image_load_address;
+              return 1;
+            }
         }
 
       if (raw_infos.dyld_image_load_address == 0
           && raw_infos.version >= 9
-          && name != NULL
-          && name[0] != '\0')
+          && s->dyld_name != NULL
+          && s->dyld_name[0] != '\0')
         {
           CORE_ADDR dyld_file_vma;
           CORE_ADDR dyld_here;
-          if (macosx_lookup_dyld_file_load_address (name, &dyld_file_vma) == 0)
+          if (macosx_lookup_dyld_file_load_address (s->dyld_name, &dyld_file_vma) == 0)
             return 0;
           dyld_here = dyld_file_vma + raw_infos.dyld_notify_address_slide;
           if (dyld_starts_here_p (dyld_here))
             {
-              *value = dyld_here;
-              if (slide)
-                *slide = raw_infos.dyld_notify_address_slide;
+              s->dyld_addr = dyld_here;
+              s->dyld_slide = raw_infos.dyld_notify_address_slide;
               return 1;
             }
         }
     }
-#endif /* NM_NEXTSTEP */
   return 0;
 }
 
@@ -919,6 +978,46 @@ macosx_cfm_init (macosx_cfm_thread_status *s)
 }
 #endif
 
+/* Step through the load commands of an in-memory MachO file
+   at MEM_ADDR, find the __TEXT segment load command and return
+   the __TEXT segment load address.
+   If the MachO file was slid when loaded into memory (by dyld
+   or whatever), MEM_ADDR and the return address will differ.
+   If no __TEXT segment is found, INVALID_ADDRESS is returned.  */
+
+static CORE_ADDR
+find_text_segment_load_address (CORE_ADDR mem_addr)
+{
+  struct bfd_section *mem_sect;
+  struct cleanup *bfd_cleanups = NULL;
+  bfd *mem_bfd = NULL;
+  struct mach_header h;
+  target_read_mach_header (mem_addr, &h);
+  int header_size = target_get_mach_header_size (&h);
+  gdb_byte *buf = (gdb_byte *) xmalloc (h.sizeofcmds + header_size);
+  bfd_cleanups = make_cleanup (xfree, buf);
+  if (target_read_memory (mem_addr, buf, h.sizeofcmds + header_size) == 0)
+    {
+      mem_bfd = bfd_memopenr ("tempbfd", NULL, buf, h.sizeofcmds + header_size);
+      if (mem_bfd && bfd_check_format (mem_bfd, bfd_object))
+        {
+          make_cleanup_bfd_close (mem_bfd);
+          for (mem_sect = mem_bfd->sections; 
+               mem_sect != NULL; 
+               mem_sect = mem_sect->next)
+            {
+              if (mem_sect->name && strcmp (mem_sect->name, "LC_SEGMENT.__TEXT") == 0)
+                {
+                  do_cleanups (bfd_cleanups);
+                  return mem_sect->vma;
+                }
+            }
+        }
+    }
+  if (bfd_cleanups)
+    do_cleanups (bfd_cleanups);
+  return INVALID_ADDRESS;
+}
 
 void
 macosx_dyld_create_inferior_hook (CORE_ADDR all_image_info_addr)
@@ -971,8 +1070,7 @@ macosx_dyld_init (macosx_dyld_thread_status *s, bfd *exec_bfd)
   prev_dyld_address = s->dyld_addr;
 
   /* Ask the kernel, if possible. */
-  ret = macosx_locate_dyld_via_taskinfo (s->dyld_name, &s->dyld_addr, 
-                                         &s->dyld_slide);
+  ret = macosx_locate_dyld_via_taskinfo (s);
   /* If dyld loaded someplace other than where it normally would, slide
      the minsyms in the objfile right away - we won't get any dyld notification
      about it sliding as we do with other images.  */
@@ -998,7 +1096,7 @@ macosx_dyld_init (macosx_dyld_thread_status *s, bfd *exec_bfd)
 
   if (ret != 1)
     {
-        macosx_locate_dyld_static (s, &static_dyld_address);
+      macosx_locate_dyld_static (s, &static_dyld_address);
       if (s->dyld_addr != INVALID_ADDRESS)
         ret = macosx_locate_dyld (&dyld_address, s->dyld_addr);
       else if (static_dyld_address != INVALID_ADDRESS)
@@ -1075,6 +1173,7 @@ macosx_dyld_init (macosx_dyld_thread_status *s, bfd *exec_bfd)
       
       if (s->dyld_name == NULL)
         s->dyld_name = dyld_find_dylib_name (dyld_address, 
+                                             s->dyld_mem_header.cputype,
 					     s->dyld_mem_header.ncmds);
 
       /* Store the osabi of the found-dyld in these global variables because
@@ -1112,12 +1211,14 @@ macosx_dyld_init (macosx_dyld_thread_status *s, bfd *exec_bfd)
   if (static_dyld_address == INVALID_ADDRESS)
     return 0;
 
-  /* If we were able to find the slide, finish the dyld
-     initialization, by setting up the data structures and inserting
-     the dyld_gdb_state_changed breakpoint. */
+  /* At this point we have the actual load address of dyld
+     and the intended load address (the 'static_address' gotten
+     out of the dyld objfile), so don't do any additional slide
+     adjustments on dyld symbols - they will have the correct addrs
+     when the objfile/minsyms is adjusted to the actual load addr.  */
 
   s->dyld_addr = dyld_address;
-  s->dyld_slide = dyld_address - static_dyld_address;
+  s->dyld_minsyms_have_been_relocated = 1;
 
   macosx_init_addresses (s);
   macosx_set_start_breakpoint (s, exec_bfd);
@@ -1795,132 +1896,150 @@ dyld_cache_purge_command (char *exp, int from_tty)
 
 struct section_offsets *
 get_sectoffs_for_shared_cache_dylib (struct dyld_objfile_entry *entry,
-                                     CORE_ADDR header_addr)
+                                    CORE_ADDR header_addr)
 {
-  struct bfd_section *mem_sect;
-  gdb_byte *buf;
-  struct cleanup *bfd_cleanups;
   int cur_section;
-  int section_mismatch = 0;
   bfd *this_bfd = entry->abfd;
   struct section_offsets *sect_offsets;
   struct bfd_section *this_sect;
-  bfd *mem_bfd = NULL;
   unsigned int header_size;
+  int i;
+  CORE_ADDR curpos;
+  struct load_command cmd;
 
   if (entry->mem_header.magic == 0)
     target_read_mach_header (header_addr, &entry->mem_header);
   header_size = target_get_mach_header_size (&entry->mem_header);
-
-  buf = (gdb_byte *) xmalloc 
-                      (entry->mem_header.sizeofcmds + header_size);
-  bfd_cleanups = make_cleanup (xfree, buf);
-  if (target_read_memory (header_addr, buf, 
-      entry->mem_header.sizeofcmds + header_size) != 0)
-    {
-      error ("Couldn't read load commands in memory for %s\n", 
-             entry->dyld_name);
-    }
-  mem_bfd = bfd_memopenr (entry->dyld_name, NULL, buf, 
-                          entry->mem_header.sizeofcmds + header_size);
-  if (mem_bfd == NULL)
-    {
-       internal_error (__FILE__, __LINE__, 
-                       "Unable to bfd_memopenr on '%s' at 0x%s", 
-                       entry->dyld_name, paddr_nz (header_addr));
-    }
-  make_cleanup_bfd_close (mem_bfd);
-  if (!bfd_check_format (mem_bfd, bfd_object)) 
-    {
-      /* If for some reason we misparse the memory version of the
-	 bfd, set mem_bfd to this_bfd, then we'll fall through and
-	 compute an 0 set of section offsets.  This library will not
-	 get properly slid, but before we would error out, and then
-	 that would stop reading in the loaded dylibs.  */
-      mem_bfd = this_bfd;
-      warning ("Wrong format for in memory dylib %s\n", 
-	       entry->dyld_name);
-     }
-
-  if (this_bfd->section_count != mem_bfd->section_count)
-    {
-      /* See note where section_mismatch is processed below.  */
-      if (this_bfd->section_count > mem_bfd->section_count)
-        section_mismatch = 1;
-      else
-        section_mismatch = -1;
-    }
   
   sect_offsets = (struct section_offsets *)
     xmalloc (SIZEOF_N_SECTION_OFFSETS (this_bfd->section_count));
   memset (sect_offsets, 0,
           SIZEOF_N_SECTION_OFFSETS (this_bfd->section_count));
-  
-  cur_section = 0;
-  for (this_sect = this_bfd->sections, mem_sect = mem_bfd->sections; 
-       this_sect != NULL && mem_sect != NULL;
-       this_sect = this_sect->next, mem_sect = mem_sect->next)
-    {
-      /* The offsets map to the sections that get added to the
-         bfd, so don't add bfd sections that aren't going to get
-         added to the objfile later on.  */
 
-      if (!objfile_keeps_section (this_bfd, this_sect))
-          continue;
-      if (section_mismatch != 0)
+  /* dyld may have slid this dylib within the shared cache region
+     a little bit extra for this one process.  The Mach-O header
+     addresses we get from the MEM_BFD will be the system-wide generic 
+     shared cache addresses, not this process' specific slid values.  
+     Both of these differ from the on-disk addresses in the load 
+     commands of the actual library file (which typically show the
+     library loading at 0x0).  
+     The same slide value will be applied to all sections of the dylib
+     so we determine it outside the section loop below.  */
+  CORE_ADDR process_shared_cache_slide = 0;
+
+  curpos = header_addr + header_size;
+  const char seg_prefix[] = "LC_SEGMENT.";
+  const int seg_prefix_len = strlen ("LC_SEGMENT.");
+  for (i = 0; i < entry->mem_header.ncmds; i++)
+    {
+      if (target_read_load_command (curpos, &cmd))
+        break;
+
+      switch (cmd.cmd)
         {
-          int got_to_end = 0;
-          while (strcmp (this_sect->name, mem_sect->name) != 0)
+          case LC_SEGMENT:
             {
-              /* This is the case where we have some extra sections
-                 in the on disk version.  The instances I know about 
-                 are the localstabs & nonlocalstabs, which are
-                 synthetic sections that the bfd macho reader makes,
-                 but which in newer versions of the shared cache it
-                 doesn't make.  
-                 In this case, we increment the cur_section, and 
-                 set the offset for this section to 0.  
-                 FIXME: Is it worthwhile validating that the
-                 sections we are skipping really are the LC_DYSYMTAB
-                 ones I am expecting, or should we let this float
-                 so if we don't have to change it later?  */
-              if (section_mismatch == 1)
+              struct segment_command seg32;
+              if (target_read_minimal_segment_32 (curpos, &seg32))
+                break;
+              int seg32_name_len = strlen (seg32.segname);
+              if (seg32_name_len > 16)
+                seg32_name_len = 16;
+
+              if (seg32_name_len == 6 && strcmp (seg32.segname, "__TEXT") == 0)
+                  process_shared_cache_slide = header_addr - seg32.vmaddr;
+
+              
+              CORE_ADDR seg_slide = INVALID_ADDRESS;
+              for (this_sect = this_bfd->sections, cur_section = 0; 
+                   this_sect != NULL;
+                   this_sect = this_sect->next, ++cur_section)
                 {
-                  this_sect = this_sect->next;
-                  sect_offsets->offsets[cur_section++] = 0;
-                  if (this_sect == NULL)
+
+                  if (strstr (this_sect->name, seg_prefix) == this_sect->name)
                     {
-                      got_to_end = 1;
-                      break;
-                    }
-                }
-              else
-                {
-                  /* We have some extra sections in the memory
-                     version. This can happen for in memory mach 
-                     images that are in the shared cache since
-                     we may create localstabs & nonlocalstabs 
-                     sections from the LC_DYSYMTAB load command
-                     so we can properly read the symbol table
-                     for the image since all entries in the shared
-                     cache share one large symbol and string 
-                     table. */
-                  mem_sect = mem_sect->next;
-                  if (mem_sect == NULL)
-                    {
-                      got_to_end = 1;
-                      break;
+                      const char *this_sect_name = this_sect->name + 
+                                                   seg_prefix_len;
+                      if (strnstr (this_sect_name, seg32.segname, seg32_name_len)
+                          == this_sect_name)
+                        {
+                          if (this_sect_name[seg32_name_len] == '\0')
+                            {
+                              /* We have the segment itself, this is where we will
+                                 calculate the slide for the segment and all 
+                                 sections within it.  */
+                              if (seg32.vmaddr != 0)
+                                  seg_slide = seg32.vmaddr - this_sect->vma;
+                              else
+                                  seg_slide = 0;
+                            }
+                          gdb_assert (seg_slide != INVALID_ADDRESS);
+                          sect_offsets->offsets[cur_section] = seg_slide;
+                        }
                     }
                 }
             }
-          if (got_to_end)
+            break;
+            
+          case LC_SEGMENT_64:
+            {
+              struct segment_command_64 seg64;
+              if (target_read_minimal_segment_64 (curpos, &seg64))
+                break;
+              int seg64_name_len = strlen (seg64.segname);
+              if (seg64_name_len > 16)
+                seg64_name_len = 16;
+
+              if (seg64_name_len == 6 && strcmp (seg64.segname, "__TEXT") == 0)
+                  process_shared_cache_slide = header_addr - seg64.vmaddr;
+
+              
+              CORE_ADDR seg_slide = INVALID_ADDRESS;
+              for (this_sect = this_bfd->sections, cur_section = 0; 
+                   this_sect != NULL;
+                   this_sect = this_sect->next, ++cur_section)
+                {
+
+                  if (strstr (this_sect->name, seg_prefix) == this_sect->name)
+                    {
+                      const char *this_sect_name = this_sect->name + 
+                                                   seg_prefix_len;
+                      if (strnstr (this_sect_name, seg64.segname, seg64_name_len) 
+                          == this_sect_name)
+                        {
+                          if (this_sect_name[seg64_name_len] == '\0')
+                            {
+                              /* We have the segment itself, this is where we will
+                                 calculate the slide for the segment and all 
+                                 sections within it.  */
+                              if (seg64.vmaddr != 0)
+                                  seg_slide = seg64.vmaddr - this_sect->vma;
+                              else
+                                  seg_slide = 0;
+                            }
+                          gdb_assert (seg_slide != INVALID_ADDRESS);
+                          sect_offsets->offsets[cur_section] = seg_slide;
+                        }
+                    }
+                }
+            }
+          
+          default:
             break;
         }
-      sect_offsets->offsets[cur_section++] = mem_sect->vma - this_sect->vma;
+      curpos += cmd.cmdsize;
     }
-  do_cleanups (bfd_cleanups);
+
+  if (process_shared_cache_slide != 0)
+    {
+        for (this_sect = this_bfd->sections, cur_section = 0; 
+             this_sect != NULL;
+             this_sect = this_sect->next, ++cur_section)
+          sect_offsets->offsets[cur_section] += process_shared_cache_slide;
+    }
   return sect_offsets;
 }
+
 
 /* Process the information about a just-discovered file image from dyld
    and fill in a dyld_objfile_entry with the preliminary information.  */
@@ -1960,7 +2079,7 @@ dyld_info_process_raw (struct macosx_dyld_thread_status *s,
     case MH_DYLIB:
     case MH_DYLINKER:
     case MH_BUNDLE:
-    case BFD_MACH_O_MH_BUNDLE_KEXT: /* Use until MH_BUNDLE_KEXT in headers */
+    case MH_KEXT_BUNDLE:
       break;
     case MH_FVMLIB:
     case MH_PRELOAD:
@@ -2032,7 +2151,12 @@ dyld_info_process_raw (struct macosx_dyld_thread_status *s,
       entry->dyld_name = xstrdup (resolved);
       entry->dyld_name_valid = 1;
     }
-
+    /* Now that the name has been resolved print it out if dyld logging is 
+       enabled so we can see we are loading this shlib. This is handy to track
+       when we are loading libraries again as on remote targets we just fixed
+       a slow down issue related to reloading all libraries every time a shlid
+       got loaded.  */
+    dyld_debug ("dyld_info_process_raw () called for '%s'\n", entry->dyld_name);
     /* Set the loaded image address since we know where the mach header is.  */
     entry->dyld_addr = header_addr;
     if (core_bfd)
@@ -2102,33 +2226,46 @@ dyld_info_process_raw (struct macosx_dyld_thread_status *s,
 		error ("Could not read in on disk or the memory version of library \"%s\".", entry->dyld_name);
 	    }
 
-	  if (macosx_bfd_is_in_memory (this_bfd))
-	    {
-	      int cur_section;
-	      sect_offsets = (struct section_offsets *)
-		xmalloc (SIZEOF_N_SECTION_OFFSETS (this_bfd->section_count));
-	      memset (sect_offsets, 0,
-		      SIZEOF_N_SECTION_OFFSETS (this_bfd->section_count));
-	     
-	      intended_loadaddr = header_addr;
-	      cur_section = 0;
-	      for (this_sect = this_bfd->sections; this_sect != NULL; 
-		   this_sect = this_sect->next)
-		{
-		  /* The offsets map to the sections that get added to the
-		     bfd, so don't add bfd sections that aren't going to get
-		     added to the objfile later on.  */
+  	  if (macosx_bfd_is_in_memory (this_bfd))
+  	    {
+  	      int cur_section;
+  	      sect_offsets = (struct section_offsets *)
+  		xmalloc (SIZEOF_N_SECTION_OFFSETS (this_bfd->section_count));
+  	      memset (sect_offsets, 0,
+  		      SIZEOF_N_SECTION_OFFSETS (this_bfd->section_count));
 
-		  if (!objfile_keeps_section (this_bfd, this_sect))
-		      continue;
-		  sect_offsets->offsets[cur_section++] = 0;
-		}
-	      entry->dyld_section_offsets = sect_offsets;
-	    }
+                CORE_ADDR process_shared_cache_slide = 0;
+  	      intended_loadaddr = header_addr;
+  	      for (this_sect = this_bfd->sections; 
+                     this_sect != NULL; 
+                     this_sect = this_sect->next)
+                  {
+                    if (this_sect->name && strcmp (this_sect->name, "LC_SEGMENT.__TEXT") == 0)
+                      {
+                        process_shared_cache_slide = header_addr - this_sect->vma;
+                        intended_loadaddr = this_sect->vma;
+                        break;
+                      }
+                  }
+
+  	      cur_section = 0;
+  	      for (this_sect = this_bfd->sections; this_sect != NULL; 
+  		   this_sect = this_sect->next)
+  		{
+  		  /* The offsets map to the sections that get added to the
+  		     bfd, so don't add bfd sections that aren't going to get
+  		     added to the objfile later on.  */
+
+  		  if (!objfile_keeps_section (this_bfd, this_sect))
+  		      continue;
+  		  sect_offsets->offsets[cur_section++] = process_shared_cache_slide;
+  		}
+  	      entry->dyld_section_offsets = sect_offsets;
+  	    }
 	  else
 	    {
-               entry->dyld_section_offsets = 
-                      get_sectoffs_for_shared_cache_dylib (entry, header_addr);
+              entry->dyld_section_offsets = 
+                  get_sectoffs_for_shared_cache_dylib (entry, header_addr);
 	    }
  
 
@@ -2271,7 +2408,7 @@ dyld_info_process_raw (struct macosx_dyld_thread_status *s,
       break;
     case MH_DYLINKER:
     case MH_BUNDLE:
-    case BFD_MACH_O_MH_BUNDLE_KEXT:  /* Use until MH_BUNDLE_KEXT in headers */
+    case MH_KEXT_BUNDLE:
       entry->reason = dyld_reason_dyld;
       break;
     default:

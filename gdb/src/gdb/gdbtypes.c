@@ -1729,7 +1729,12 @@ check_typedef (struct type *type)
 	}
       sym = lookup_symbol (name, 0, STRUCT_DOMAIN, 0, (struct symtab **) NULL);
       if (sym)
-	make_cvr_type (is_const, is_volatile, is_restrict, SYMBOL_TYPE (sym), &type);
+        {
+          if (TYPE_OBJFILE (type) == TYPE_OBJFILE (SYMBOL_TYPE (sym)))
+            make_cvr_type (is_const, is_volatile, is_restrict, SYMBOL_TYPE (sym), &type);
+          else
+            type = SYMBOL_TYPE (sym);
+        }
     }
 
   if (TYPE_TARGET_STUB (type))

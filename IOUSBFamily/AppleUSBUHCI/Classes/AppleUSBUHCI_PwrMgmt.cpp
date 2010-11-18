@@ -30,11 +30,13 @@
 #include <IOKit/usb/USB.h>
 #include <IOKit/usb/IOUSBLog.h>
 #include <IOKit/usb/IOUSBRootHubDevice.h>
+#include <IOKit/usb/IOUSBHubPolicyMaker.h>
 #include <IOKit/pwr_mgt/RootDomain.h>
 #include <IOKit/IORegistryEntry.h>
 #include <IOKit/IOHibernatePrivate.h>
 #include <IOKit/acpi/IOACPIPlatformDevice.h>
 #include <libkern/libkern.h>
+#include <libkern/version.h>
 
 #include "AppleUSBUHCI.h"
 #include "USBTracepoints.h"
@@ -52,7 +54,6 @@
 #ifndef kACPIDevicePathKey
 #define kACPIDevicePathKey			"acpi-path"
 #endif
-
 
 //================================================================================================
 //
@@ -134,7 +135,7 @@ AppleUSBUHCI::callPlatformFunction(const OSSymbol *functionName,
                                    void *param1, void *param2,
                                    void *param3, void *param4)
 {
-    USBLog(3, "%s[%p]::callPlatformFunction(%s)", getName(), this, functionName->getCStringNoCopy());
+    USBLog(3, "AppleUSBUHCI[%p]::callPlatformFunction(%s)",  this, functionName->getCStringNoCopy());
     
 
 	if (!strncmp(functionName->getCStringNoCopy(), "SetDebugDriverPowerState", 24))
@@ -253,8 +254,8 @@ AppleUSBUHCI::SuspendController(void)
 	int					i;
     
 	USBTrace( kUSBTUHCI, kTPUHCISuspendController, (uintptr_t)this, 0, 0, 1 );
-	USBLog(5, "%s[%p]::SuspendController", getName(), this);
-    USBLog(5, "%s[%p]: cmd state %x, status %x", getName(), this, ioRead16(kUHCI_CMD), ioRead16(kUHCI_STS));
+	USBLog(5, "AppleUSBUHCI[%p]::SuspendController",  this);
+    USBLog(5, "AppleUSBUHCI[%p]: cmd state %x, status %x",  this, ioRead16(kUHCI_CMD), ioRead16(kUHCI_STS));
 
     // Stop the controller
     Run(false);
@@ -293,7 +294,7 @@ AppleUSBUHCI::SuspendController(void)
     ioWrite16(kUHCI_CMD, cmd);
 	_myBusState = kUSBBusStateSuspended;   
     IOSleep(3);
-    USBLog(5, "%s[%p]: suspend done, cmd %x, status %x", getName(), this, ioRead16(kUHCI_CMD), ioRead16(kUHCI_STS));
+    USBLog(5, "AppleUSBUHCI[%p]: suspend done, cmd %x, status %x",  this, ioRead16(kUHCI_CMD), ioRead16(kUHCI_STS));
 }
 
 
@@ -336,12 +337,26 @@ AppleUSBUHCI::RestoreControllerStateFromSleep(void)
 		value = ReadPortStatus(i);
 		if (value & kUHCI_PORTSC_CSC)
 		{
-			IOLog("USB (UHCI):Port %d on bus 0x%x connected or disconnected\n", (int)i+1, (uint32_t)_busNumber);
+			USBLog(5, "AppleUSBUHCI[%p]::RestoreControllerStateFromSleep  Port %d on bus 0x%x connected or disconnected", this, (int)i+1, (uint32_t)_busNumber);
+			// IOLog("USB (UHCI):Port %d on bus 0x%x connected or disconnected\n", (int)i+1, (uint32_t)_busNumber);
 		}
 		else if (value & kUHCI_PORTSC_RD)
 		{
-			IOLog("USB (UHCI):Port %d on bus 0x%x has remote wakeup from some device\n", (int)i+1, (uint32_t)_busNumber);
-		}
+			USBLog(5, "AppleUSBUHCI[%p]::RestoreControllerStateFromSleep  Port %d on bus 0x%x has remote wakeup from some device", this, (int)i+1, (uint32_t)_busNumber);
+
+            // because of how UHCI works, the root hub driver might not be able to detect that there was a remote wakeup 
+			// on a port if the upper level driver issues a Resume before the root hub interrupt timer runs
+			// Let the hub driver know that from here to make sure we get the log
+
+            if (_rootHubDevice && _rootHubDevice->GetPolicyMaker())
+            {
+                _rootHubDevice->GetPolicyMaker()->message(kIOUSBMessageRootHubWakeEvent, this, (void *)(uintptr_t) i);
+            }
+			else
+			{
+				IOLog("USB (UHCI):Port %d on bus 0x%x has remote wakeup from some device\n", (int)i+1, (uint32_t)_busNumber);
+			}
+        }
 	}		
 	ResumeController();
 
@@ -457,25 +472,41 @@ IOReturn
 AppleUSBUHCI::DozeController(void)
 {
     UInt16				cmd;
+	int				i;
+	bool			portsBeingResumed = false;
 
 	USBTrace( kUSBTUHCI, KTPUHCIDozeController, (uintptr_t)this, 0, 0, 0);
 	
 	USBLog(6, "AppleUSBUHCI[%p]::DozeController", this);
-	showRegisters(7, "+DozeController -  stopping controller");
-	Run(false);
+	
+    for (i=0; i<kUHCI_NUM_PORTS; i++) 
+	{
+		if (_rhPortBeingResumed[i])
+		{
+			USBLog(1, "AppleUSBUHCI[%p]::DozeController - port (%d) is being resumed. not stopping the controller", this, i+1);
+			portsBeingResumed = true;
+		}
+	}
+	
+	if (!portsBeingResumed)
+	{
+		showRegisters(7, "+DozeController -  stopping controller");
+		Run(false);
+		
+		// In order to get a Resume Detected interrupt, the controller needs to be in Global suspend mode, so we will do that even when "dozing".
+		
+		USBLog(6, "AppleUSBUHCI[%p]::DozeController  Globally suspending", this);
+		// Put the controller in Global Suspend
+		cmd = ioRead16(kUHCI_CMD) & ~kUHCI_CMD_FGR;
+		cmd |= kUHCI_CMD_EGSM;
+		ioWrite16(kUHCI_CMD, cmd);
+		
+		_myBusState = kUSBBusStateSuspended;
+		
+		IOSleep(3);
+		
+	}
 
-	// In order to get a Resume Detected interrupt, the controller needs to be in Global suspend mode, so we will do that even when "dozing".
-	
-	USBLog(6, "AppleUSBUHCI[%p]::DozeController  Globally suspending", this);
-   // Put the controller in Global Suspend
-    cmd = ioRead16(kUHCI_CMD) & ~kUHCI_CMD_FGR;
-    cmd |= kUHCI_CMD_EGSM;
-    ioWrite16(kUHCI_CMD, cmd);
-
-	_myBusState = kUSBBusStateSuspended;
-	
-	IOSleep(3);
-	
 	return kIOReturnSuccess;
 }
 

@@ -440,7 +440,28 @@ static int cache_save_filter(ap_filter_t *f, apr_bucket_brigade *in)
          * We include 304 Not Modified here too as this is the origin server
          * telling us to serve the cached copy.
          */
-        reason = apr_psprintf(p, "Response status %d", r->status);
+        if (exps != NULL || cc_out != NULL) {
+            /* We are also allowed to cache any response given that it has a 
+             * valid Expires or Cache Control header. If we find a either of 
+             * those here,  we pass request through the rest of the tests. From 
+             * the RFC:
+             *
+             * A response received with any other status code (e.g. status 
+             * codes 302 and 307) MUST NOT be returned in a reply to a 
+             * subsequent request unless there are cache-control directives or 
+             * another header(s) that explicitly allow it. For example, these 
+             * include the following: an Expires header (section 14.21); a 
+             * "max-age", "s-maxage",  "must-revalidate", "proxy-revalidate", 
+             * "public" or "private" cache-control directive (section 14.9).
+             */
+        }
+        else {
+            reason = apr_psprintf(p, "Response status %d", r->status);
+        }
+    }
+
+    if (reason) {
+        /* noop */
     }
     else if (exps != NULL && exp == APR_DATE_BAD) {
         /* if a broken Expires header is present, don't cache it */
@@ -518,6 +539,9 @@ static int cache_save_filter(ap_filter_t *f, apr_bucket_brigade *in)
                               apr_table_get(r->headers_out, "Vary"),
                               "*", NULL)) {
         reason = "Vary header contains '*'";
+    }
+    else if (apr_table_get(r->subprocess_env, "no-cache") != NULL) { 
+        reason = "environment variable 'no-cache' is set";
     }
     else if (r->no_cache) {
         /* or we've been asked not to cache it above */
@@ -926,6 +950,9 @@ static void * create_cache_config(apr_pool_t *p, server_rec *s)
     /* flag indicating that query-string should be ignored when caching */
     ps->ignorequerystring = 0;
     ps->ignorequerystring_set = 0;
+    /* array of identifiers that should not be used for key calculation */
+    ps->ignore_session_id = apr_array_make(p, 10, sizeof(char *));
+    ps->ignore_session_id_set = CACHE_IGNORE_SESSION_ID_UNSET;
     return ps;
 }
 
@@ -975,6 +1002,10 @@ static void * merge_cache_config(apr_pool_t *p, void *basev, void *overridesv)
         (overrides->ignorequerystring_set == 0)
         ? base->ignorequerystring
         : overrides->ignorequerystring;
+    ps->ignore_session_id =
+        (overrides->ignore_session_id_set == CACHE_IGNORE_SESSION_ID_UNSET)
+        ? base->ignore_session_id
+        : overrides->ignore_session_id;
     return ps;
 }
 static const char *set_cache_ignore_no_last_mod(cmd_parms *parms, void *dummy,
@@ -1055,6 +1086,34 @@ static const char *add_ignore_header(cmd_parms *parms, void *dummy,
         }
     }
     conf->ignore_headers_set = CACHE_IGNORE_HEADERS_SET;
+    return NULL;
+}
+
+static const char *add_ignore_session_id(cmd_parms *parms, void *dummy,
+                                         const char *identifier)
+{
+    cache_server_conf *conf;
+    char **new;
+
+    conf =
+        (cache_server_conf *)ap_get_module_config(parms->server->module_config,
+                                                  &cache_module);
+    if (!strncasecmp(identifier, "None", 4)) {
+        /* if identifier None is listed clear array */
+        conf->ignore_session_id->nelts = 0;
+    }
+    else {
+        if ((conf->ignore_session_id_set == CACHE_IGNORE_SESSION_ID_UNSET) ||
+            (conf->ignore_session_id->nelts)) {
+            /*
+             * Only add identifier if no "None" has been found in identifier
+             * list so far.
+             */
+            new = (char **)apr_array_push(conf->ignore_session_id);
+            (*new) = (char *)identifier;
+        }
+    }
+    conf->ignore_session_id_set = CACHE_IGNORE_SESSION_ID_SET;
     return NULL;
 }
 
@@ -1218,6 +1277,10 @@ static const command_rec cache_cmds[] =
     AP_INIT_FLAG("CacheIgnoreQueryString", set_cache_ignore_querystring,
                  NULL, RSRC_CONF,
                  "Ignore query-string when caching"),
+    AP_INIT_ITERATE("CacheIgnoreURLSessionIdentifiers", add_ignore_session_id,
+                    NULL, RSRC_CONF, "A space separated list of session "
+                    "identifiers that should be ignored for creating the key "
+                    "of the cached entity."),
     AP_INIT_TAKE1("CacheLastModifiedFactor", set_cache_factor, NULL, RSRC_CONF,
                   "The factor used to estimate Expires date from "
                   "LastModified date"),

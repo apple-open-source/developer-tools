@@ -3,7 +3,7 @@
  *
  *   AppSocket backend for the Common UNIX Printing System (CUPS).
  *
- *   Copyright 2007-2009 by Apple Inc.
+ *   Copyright 2007-2010 by Apple Inc.
  *   Copyright 1997-2007 by Easy Software Products, all rights reserved.
  *
  *   These coded instructions, statements, and computer programs are the
@@ -393,7 +393,7 @@ main(int  argc,				/* I - Number of command-line arguments (6 or 7) */
       lseek(print_fd, 0, SEEK_SET);
     }
 
-    tbytes = backendRunLoop(print_fd, device_fd, snmp_fd, &(addr->addr), 1,
+    tbytes = backendRunLoop(print_fd, device_fd, snmp_fd, &(addr->addr), 1, 0, 
                             backendNetworkSideCB);
 
     if (print_fd != 0 && tbytes >= 0)
@@ -406,6 +406,7 @@ main(int  argc,				/* I - Number of command-line arguments (6 or 7) */
 		      CUPS_LLCAST tbytes);
   }
 
+#ifdef __APPLE__
  /*
   * Wait up to 5 seconds to get any pending back-channel data...
   */
@@ -414,6 +415,7 @@ main(int  argc,				/* I - Number of command-line arguments (6 or 7) */
   while (wait_time >= time(&current_time))
     if (wait_bc(device_fd, wait_time - current_time) <= 0)
       break;
+#endif /* __APPLE__ */
 
   if (waiteof)
   {

@@ -1,6 +1,6 @@
-// ***************************************************************************
+﻿// ***************************************************************************
 // *
-// * Copyright (C) 2009 International Business Machines
+// * Copyright (C) 2010 International Business Machines
 // * Corporation and others.  All Rights Reserved.
 // * Tool: com.ibm.icu.dev.tool.cldr.LDML2ICUConverter.java
 // * Source File:<path>/metazoneInfo.xml
@@ -541,11 +541,6 @@ metazoneInfo:table(nofallback){
                 "1991-03-03 02:00",
             }
             mz1{
-                "Argentina_Western",
-                "1991-03-03 02:00",
-                "1991-10-20 04:00",
-            }
-            mz2{
                 "Argentina",
                 "1991-10-20 04:00",
                 "9999-12-31 23:59",
@@ -612,7 +607,12 @@ metazoneInfo:table(nofallback){
             mz6{
                 "Argentina",
                 "2004-07-25 04:00",
-                "2009-03-15 03:00",
+                "2008-01-21 02:00",
+            }
+            mz7{
+                "Argentina_Western",
+                "2008-01-21 02:00",
+                "9999-12-31 23:59",
             }
         }
         "America:Argentina:Tucuman"{
@@ -622,21 +622,16 @@ metazoneInfo:table(nofallback){
                 "1991-03-03 02:00",
             }
             mz1{
-                "Argentina_Western",
-                "1991-03-03 02:00",
-                "1991-10-20 04:00",
-            }
-            mz2{
                 "Argentina",
                 "1991-10-20 04:00",
                 "2004-06-01 03:00",
             }
-            mz3{
+            mz2{
                 "Argentina_Western",
                 "2004-06-01 03:00",
                 "2004-06-13 04:00",
             }
-            mz4{
+            mz3{
                 "Argentina",
                 "2004-06-13 04:00",
                 "9999-12-31 23:59",
@@ -649,11 +644,6 @@ metazoneInfo:table(nofallback){
                 "2004-05-30 03:00",
             }
             mz1{
-                "Argentina_Western",
-                "2004-05-30 03:00",
-                "2004-06-20 04:00",
-            }
-            mz2{
                 "Argentina",
                 "2004-06-20 04:00",
                 "9999-12-31 23:59",
@@ -801,21 +791,16 @@ metazoneInfo:table(nofallback){
                 "1991-03-03 02:00",
             }
             mz1{
-                "Argentina_Western",
-                "1991-03-03 02:00",
-                "1991-10-20 04:00",
-            }
-            mz2{
                 "Argentina",
                 "1991-10-20 04:00",
                 "2004-06-01 03:00",
             }
-            mz3{
+            mz2{
                 "Argentina_Western",
                 "2004-06-01 03:00",
                 "2004-06-20 04:00",
             }
-            mz4{
+            mz3{
                 "Argentina",
                 "2004-06-20 04:00",
                 "9999-12-31 23:59",
@@ -868,11 +853,6 @@ metazoneInfo:table(nofallback){
                 "1991-03-03 02:00",
             }
             mz1{
-                "Argentina_Western",
-                "1991-03-03 02:00",
-                "1991-10-20 04:00",
-            }
-            mz2{
                 "Argentina",
                 "1991-10-20 04:00",
                 "9999-12-31 23:59",
@@ -1247,11 +1227,6 @@ metazoneInfo:table(nofallback){
                 "1990-03-04 02:00",
             }
             mz1{
-                "Argentina_Western",
-                "1990-03-04 02:00",
-                "1991-10-06 04:00",
-            }
-            mz2{
                 "Argentina",
                 "1991-10-06 04:00",
                 "9999-12-31 23:59",
@@ -1384,6 +1359,13 @@ metazoneInfo:table(nofallback){
                 "9999-12-31 23:59",
             }
         }
+        "America:Matamoros"{
+            mz0{
+                "America_Central",
+                "1970-01-01 00:00",
+                "9999-12-31 23:59",
+            }
+        }
         "America:Mazatlan"{
             mz0{
                 "America_Pacific",
@@ -1403,21 +1385,11 @@ metazoneInfo:table(nofallback){
                 "1990-03-04 02:00",
             }
             mz1{
-                "Argentina_Western",
-                "1990-03-04 02:00",
-                "1992-10-18 04:00",
-            }
-            mz2{
                 "Argentina",
                 "1992-10-18 04:00",
                 "2004-05-23 03:00",
             }
-            mz3{
-                "Argentina_Western",
-                "2004-05-23 03:00",
-                "2004-09-26 04:00",
-            }
-            mz4{
+            mz2{
                 "Argentina",
                 "2004-09-26 04:00",
                 "9999-12-31 23:59",
@@ -1570,6 +1542,18 @@ metazoneInfo:table(nofallback){
                 "9999-12-31 23:59",
             }
         }
+        "America:Ojinaga"{
+            mz0{
+                "America_Central",
+                "1970-01-01 00:00",
+                "1998-04-05 09:00",
+            }
+            mz1{
+                "America_Mountain",
+                "1998-04-05 09:00",
+                "9999-12-31 23:59",
+            }
+        }
         "America:Panama"{
             mz0{
                 "America_Eastern",
@@ -1715,6 +1699,13 @@ metazoneInfo:table(nofallback){
             mz1{
                 "Amazon",
                 "2008-06-24 05:00",
+                "9999-12-31 23:59",
+            }
+        }
+        "America:Santa_Isabel"{
+            mz0{
+                "America_Pacific",
+                "1970-01-01 00:00",
                 "9999-12-31 23:59",
             }
         }
@@ -1925,6 +1916,11 @@ metazoneInfo:table(nofallback){
             mz0{
                 "Australia_Western",
                 "1970-01-01 00:00",
+                "2009-10-17 18:00",
+            }
+            mz1 {
+                "Australia_Western",
+                "2010-03-04 15:00",
                 "9999-12-31 23:59",
             }
         }
@@ -1940,6 +1936,13 @@ metazoneInfo:table(nofallback){
                 "DumontDUrville",
                 "1970-01-01 00:00",
                 "9999-12-31 23:59",
+            }
+        }
+        "Antarctica:Macquarie"{
+            mz0{
+                "Australia_Eastern",
+                "1970-01-01 00:00",
+                "2010-04-03 16:00",
             }
         }
         "Antarctica:Mawson"{
@@ -2438,6 +2441,18 @@ metazoneInfo:table(nofallback){
                 "9999-12-31 23:59",
             }
         }
+        "Asia:Novokuznetsk"{
+            mz0{
+                "Krasnoyarsk",
+                "1970-01-01 00:00",
+                "2010-03-27 19:00",
+            }
+            mz1{
+                "Novosibirsk",
+                "2010-03-27 19:00",
+                "9999-12-31 23:59",
+            }
+        }
         "Asia:Novosibirsk"{
             mz0{
                 "Novosibirsk",
@@ -2597,7 +2612,7 @@ metazoneInfo:table(nofallback){
         }
         "Asia:Taipei"{
             mz0{
-                "China",
+                "Taipei",
                 "1970-01-01 00:00",
                 "9999-12-31 23:59",
             }

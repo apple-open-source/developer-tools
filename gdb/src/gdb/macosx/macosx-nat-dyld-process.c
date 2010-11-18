@@ -407,12 +407,12 @@ dyld_resolve_filename_image (const struct macosx_dyld_thread_status *s,
     case MH_DYLIB:
       break;
     case MH_BUNDLE:
-    case BFD_MACH_O_MH_BUNDLE_KEXT:  /* Use until MH_BUNDLE_KEXT in headers */
+    case MH_KEXT_BUNDLE:
       break;
     default:
       return;
     }
-  e->image_name = dyld_find_dylib_name (header.ncmds, e->dyld_addr);
+  e->image_name = dyld_find_dylib_name (header.ncmds, header.cputype, e->dyld_addr);
 
   if (e->image_name == NULL)
     {
@@ -427,19 +427,21 @@ dyld_resolve_filename_image (const struct macosx_dyld_thread_status *s,
 }
 
 /* Assuming a Mach header starts at ADDR, and has NCMDS, look for the
-   dylib name, and return a malloc'ed string containing the name */
+   dylib name, and return a malloc'ed string containing the name.
+   CPUTYPE is the cpu_type_t of the binary image.  */
 
 char *
-dyld_find_dylib_name (CORE_ADDR addr, int ncmds)
+dyld_find_dylib_name (CORE_ADDR addr, int cputype, int ncmds)
 {
   CORE_ADDR curpos;
   int i;
   char *image_name = NULL;
 
-  /* FIXME 64 bit:  64 bit MachO files have a differently sized
-     mach_header - the following line is wrong. */
+  if (cputype == CPU_TYPE_X86_64 || cputype == CPU_TYPE_POWERPC64)
+    curpos = addr + sizeof (struct mach_header_64);
+  else
+    curpos = addr + sizeof (struct mach_header);
 
-  curpos = addr + sizeof (struct mach_header);
   for (i = 0; i < ncmds; i++)
     {
 
@@ -1141,9 +1143,7 @@ dyld_load_library_from_file (const struct dyld_path_info *d,
       /* On the phone we read everything from the shared cached and need not
          worry about when we aren't able to read files from disk.  */
 #if !(defined (TARGET_ARM) && defined (NM_NEXTSTEP))
-	  char *s = dyld_entry_string (e, 1);
-	  warning ("Unable to read symbols for %s (file not found).", s);
-	  xfree (s);
+	  warning ("Unable to read symbols for %s (file not found).", name);
 #endif
 	}
       return;

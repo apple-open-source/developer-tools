@@ -527,6 +527,29 @@ static int authz_ldap_check_user_access(request_rec *r)
         return DECLINED;
     }
 
+    /* pre-scan for ldap-* requirements so we can get out of the way early */
+    for(x=0; x < reqs_arr->nelts; x++) {
+        if (! (reqs[x].method_mask & (AP_METHOD_BIT << m))) {
+            continue;
+        }
+
+        t = reqs[x].requirement;
+        w = ap_getword_white(r->pool, &t);
+
+        if (strncmp(w, "ldap-",5) == 0) {
+            required_ldap = 1;
+            break;
+        }
+    }
+
+    if (!required_ldap) {
+        ap_log_rerror(APLOG_MARK, APLOG_DEBUG, 0, r,
+                      "[%" APR_PID_T_FMT "] auth_ldap authorise: declining to authorise (no ldap requirements)", getpid());
+        return DECLINED;
+    }
+
+
+
     if (sec->host) {
         ldc = util_ldap_connection_find(r, sec->host, sec->port,
                                        sec->binddn, sec->bindpw, sec->deref,
@@ -557,12 +580,6 @@ static int authz_ldap_check_user_access(request_rec *r)
 #if APR_HAS_THREADS
         apr_thread_mutex_unlock(sec->lock);
 #endif
-    }
-
-    if (!reqs_arr) {
-        ap_log_rerror(APLOG_MARK, APLOG_DEBUG, 0, r,
-                      "[%" APR_PID_T_FMT "] auth_ldap authorise: no requirements array", getpid());
-        return sec->auth_authoritative? HTTP_UNAUTHORIZED : DECLINED;
     }
 
     /*
@@ -615,7 +632,6 @@ static int authz_ldap_check_user_access(request_rec *r)
         w = ap_getword_white(r->pool, &t);
 
         if (strcmp(w, "ldap-user") == 0) {
-            required_ldap = 1;
             if (req->dn == NULL || strlen(req->dn) == 0) {
                 ap_log_rerror(APLOG_MARK, APLOG_DEBUG, 0, r,
                               "[%" APR_PID_T_FMT "] auth_ldap authorise: "
@@ -665,7 +681,6 @@ static int authz_ldap_check_user_access(request_rec *r)
             }
         }
         else if (strcmp(w, "ldap-dn") == 0) {
-            required_ldap = 1;
             if (req->dn == NULL || strlen(req->dn) == 0) {
                 ap_log_rerror(APLOG_MARK, APLOG_DEBUG, 0, r,
                               "[%" APR_PID_T_FMT "] auth_ldap authorise: "
@@ -693,7 +708,6 @@ static int authz_ldap_check_user_access(request_rec *r)
         else if (strcmp(w, "ldap-group") == 0) {
             struct mod_auth_ldap_groupattr_entry_t *ent = (struct mod_auth_ldap_groupattr_entry_t *) sec->groupattr->elts;
             int i;
-            required_ldap = 1;
 
             if (sec->group_attrib_is_dn) {
                 if (req->dn == NULL || strlen(req->dn) == 0) {
@@ -743,7 +757,6 @@ static int authz_ldap_check_user_access(request_rec *r)
             }
         }
         else if (strcmp(w, "ldap-attribute") == 0) {
-            required_ldap = 1;
             if (req->dn == NULL || strlen(req->dn) == 0) {
                 ap_log_rerror(APLOG_MARK, APLOG_DEBUG, 0, r,
                               "[%" APR_PID_T_FMT "] auth_ldap authorise: "
@@ -779,7 +792,6 @@ static int authz_ldap_check_user_access(request_rec *r)
             }
         }
         else if (strcmp(w, "ldap-filter") == 0) {
-            required_ldap = 1;
             if (req->dn == NULL || strlen(req->dn) == 0) {
                 ap_log_rerror(APLOG_MARK, APLOG_DEBUG, 0, r,
                               "[%" APR_PID_T_FMT "] auth_ldap authorise: "
@@ -843,9 +855,9 @@ static int authz_ldap_check_user_access(request_rec *r)
         return OK;
     }
 
-    if (!required_ldap || !sec->auth_authoritative) {
+    if (!sec->auth_authoritative) {
         ap_log_rerror(APLOG_MARK, APLOG_DEBUG, 0, r,
-                      "[%" APR_PID_T_FMT "] auth_ldap authorise: declining to authorise", getpid());
+                      "[%" APR_PID_T_FMT "] auth_ldap authorise: declining to authorise (not authoritative)", getpid());
         return DECLINED;
     }
 
@@ -872,30 +884,11 @@ static const char *mod_auth_ldap_parse_url(cmd_parms *cmd,
 
     authn_ldap_config_t *sec = config;
 
-    ap_log_error(APLOG_MARK, APLOG_DEBUG, 0,
-                 cmd->server, "[%" APR_PID_T_FMT "] auth_ldap url parse: `%s'", getpid(), url);
-
     rc = apr_ldap_url_parse(cmd->pool, url, &(urld), &(result));
     if (rc != APR_SUCCESS) {
         return result->reason;
     }
     sec->url = apr_pstrdup(cmd->pool, url);
-
-    ap_log_error(APLOG_MARK, APLOG_DEBUG, 0,
-                 cmd->server, "[%" APR_PID_T_FMT "] auth_ldap url parse: Host: %s", getpid(), urld->lud_host);
-    ap_log_error(APLOG_MARK, APLOG_DEBUG, 0,
-                 cmd->server, "[%" APR_PID_T_FMT "] auth_ldap url parse: Port: %d", getpid(), urld->lud_port);
-    ap_log_error(APLOG_MARK, APLOG_DEBUG, 0,
-                 cmd->server, "[%" APR_PID_T_FMT "] auth_ldap url parse: DN: %s", getpid(), urld->lud_dn);
-    ap_log_error(APLOG_MARK, APLOG_DEBUG, 0,
-                 cmd->server, "[%" APR_PID_T_FMT "] auth_ldap url parse: attrib: %s", getpid(), urld->lud_attrs? urld->lud_attrs[0] : "(null)");
-    ap_log_error(APLOG_MARK, APLOG_DEBUG, 0,
-                 cmd->server, "[%" APR_PID_T_FMT "] auth_ldap url parse: scope: %s", getpid(),
-                 (urld->lud_scope == LDAP_SCOPE_SUBTREE? "subtree" :
-                  urld->lud_scope == LDAP_SCOPE_BASE? "base" :
-                  urld->lud_scope == LDAP_SCOPE_ONELEVEL? "onelevel" : "unknown"));
-    ap_log_error(APLOG_MARK, APLOG_DEBUG, 0,
-                 cmd->server, "[%" APR_PID_T_FMT "] auth_ldap url parse: filter: %s", getpid(), urld->lud_filter);
 
     /* Set all the values, or at least some sane defaults */
     if (sec->host) {
@@ -968,17 +961,28 @@ static const char *mod_auth_ldap_parse_url(cmd_parms *cmd,
     {
         sec->secure = APR_LDAP_SSL;
         sec->port = urld->lud_port? urld->lud_port : LDAPS_PORT;
-        ap_log_error(APLOG_MARK, APLOG_DEBUG, 0, cmd->server,
-                     "LDAP: auth_ldap using SSL connections");
     }
     else
     {
         sec->port = urld->lud_port? urld->lud_port : LDAP_PORT;
-        ap_log_error(APLOG_MARK, APLOG_DEBUG, 0, cmd->server,
-                     "LDAP: auth_ldap not using SSL connections");
     }
 
     sec->have_ldap_url = 1;
+
+    ap_log_error(APLOG_MARK, APLOG_DEBUG, 0,
+                 cmd->server, "[%" APR_PID_T_FMT "] auth_ldap url parse: `%s', Host: %s, Port: %d, DN: %s, attrib: %s, scope: %s, filter: %s, connection mode: %s",
+                 getpid(),
+                 url,
+                 urld->lud_host,
+                 urld->lud_port,
+                 urld->lud_dn,
+                 urld->lud_attrs? urld->lud_attrs[0] : "(null)",
+                 (urld->lud_scope == LDAP_SCOPE_SUBTREE? "subtree" :
+                  urld->lud_scope == LDAP_SCOPE_BASE? "base" :
+                  urld->lud_scope == LDAP_SCOPE_ONELEVEL? "onelevel" : "unknown"),
+                 urld->lud_filter,
+                 sec->secure == APR_LDAP_SSL  ? "using SSL": "not using SSL"
+                 );
 
     return NULL;
 }

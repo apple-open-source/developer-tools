@@ -91,6 +91,7 @@ cacheignorecachecontrol	mod/mod_cache.html#cacheignorecachecontrol
 cacheignoreheaders	mod/mod_cache.html#cacheignoreheaders
 cacheignorenolastmod	mod/mod_cache.html#cacheignorenolastmod
 cacheignorequerystring	mod/mod_cache.html#cacheignorequerystring
+cacheignoreurlsessionidentifiers	mod/mod_cache.html#cacheignoreurlsessionidentifiers
 cachelastmodifiedfactor	mod/mod_cache.html#cachelastmodifiedfactor
 cachemaxexpire	mod/mod_cache.html#cachemaxexpire
 cachemaxfilesize	mod/mod_disk_cache.html#cachemaxfilesize
@@ -182,6 +183,7 @@ imapbase	mod/mod_imagemap.html#imapbase
 imapdefault	mod/mod_imagemap.html#imapdefault
 imapmenu	mod/mod_imagemap.html#imapmenu
 include	mod/core.html#include
+indexheadinsert	mod/mod_autoindex.html#indexheadinsert
 indexignore	mod/mod_autoindex.html#indexignore
 indexoptions	mod/mod_autoindex.html#indexoptions
 indexorderdefault	mod/mod_autoindex.html#indexorderdefault
@@ -275,6 +277,8 @@ proxyreceivebuffersize	mod/mod_proxy.html#proxyreceivebuffersize
 proxyremote	mod/mod_proxy.html#proxyremote
 proxyremotematch	mod/mod_proxy.html#proxyremotematch
 proxyrequests	mod/mod_proxy.html#proxyrequests
+proxyscgiinternalredirect	mod/mod_proxy_scgi.html#proxyscgiinternalredirect
+proxyscgisendfile	mod/mod_proxy_scgi.html#proxyscgisendfile
 proxyset	mod/mod_proxy.html#proxyset
 proxystatus	mod/mod_proxy.html#proxystatus
 proxytimeout	mod/mod_proxy.html#proxytimeout
@@ -360,6 +364,8 @@ sslproxycacertificatefile	mod/mod_ssl.html#sslproxycacertificatefile
 sslproxycacertificatepath	mod/mod_ssl.html#sslproxycacertificatepath
 sslproxycarevocationfile	mod/mod_ssl.html#sslproxycarevocationfile
 sslproxycarevocationpath	mod/mod_ssl.html#sslproxycarevocationpath
+sslproxycheckpeercn	mod/mod_ssl.html#sslproxycheckpeercn
+sslproxycheckpeerexpire	mod/mod_ssl.html#sslproxycheckpeerexpire
 sslproxyciphersuite	mod/mod_ssl.html#sslproxyciphersuite
 sslproxyengine	mod/mod_ssl.html#sslproxyengine
 sslproxymachinecertificatefile	mod/mod_ssl.html#sslproxymachinecertificatefile
@@ -368,10 +374,12 @@ sslproxyprotocol	mod/mod_ssl.html#sslproxyprotocol
 sslproxyverify	mod/mod_ssl.html#sslproxyverify
 sslproxyverifydepth	mod/mod_ssl.html#sslproxyverifydepth
 sslrandomseed	mod/mod_ssl.html#sslrandomseed
+sslrenegbuffersize	mod/mod_ssl.html#sslrenegbuffersize
 sslrequire	mod/mod_ssl.html#sslrequire
 sslrequiressl	mod/mod_ssl.html#sslrequiressl
 sslsessioncache	mod/mod_ssl.html#sslsessioncache
 sslsessioncachetimeout	mod/mod_ssl.html#sslsessioncachetimeout
+sslstrictsnivhostcheck	mod/mod_ssl.html#sslstrictsnivhostcheck
 sslusername	mod/mod_ssl.html#sslusername
 sslverifyclient	mod/mod_ssl.html#sslverifyclient
 sslverifydepth	mod/mod_ssl.html#sslverifydepth

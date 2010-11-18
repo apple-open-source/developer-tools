@@ -1054,9 +1054,16 @@ extern void allocate_cplus_struct_type (struct type *);
 #define TYPE_LOCALTYPE_FILE(thistype) (TYPE_CPLUS_SPECIFIC_NONULL(thistype)->localtype_ptr->file)
 #define TYPE_LOCALTYPE_LINE(thistype) (TYPE_CPLUS_SPECIFIC_NONULL(thistype)->localtype_ptr->line)
 
+/* APPLE LOCAL: A struct type is opaque (a declaration only, no definition 
+   available) if it has no subelements (NFIELDS==0) *or* if it has a non-zero
+   length.  This latter part comes in to play if you define a struct with no
+   elements, e.g. 'struct POSITION { };' - that type will have a length of 1
+   (at least by gcc's current behavior) and is a definition, 
+   not just a declaration.  */
+
 #define TYPE_IS_OPAQUE(thistype) (((TYPE_CODE (thistype) == TYPE_CODE_STRUCT) ||        \
                                    (TYPE_CODE (thistype) == TYPE_CODE_UNION))        && \
-                                  (TYPE_NFIELDS (thistype) == 0)                     && \
+                                  (TYPE_NFIELDS (thistype) == 0 && TYPE_LENGTH (thistype) == 0) && \
                                   (TYPE_CPLUS_SPECIFIC_NONULL (thistype) && (TYPE_NFN_FIELDS (thistype) == 0)))
 
 struct builtin_type

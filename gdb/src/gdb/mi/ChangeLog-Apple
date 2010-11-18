@@ -1,3 +1,8 @@
+2010-05-10  Jim Ingham  <jingham@apple.com>
+
+	* mi-cmd-stack.c (mi_print_frame_more_info): Add the shared library containing
+	the stack frame's PC to the regular MI frame info output.
+	
 2010-03-04  Jim Ingham  <jingham@apple.com>
 
 	* mi-main (mi_cmd_target_load_solib): Reverse the order of the checks for

@@ -99,7 +99,7 @@ int dyld_minimal_load_flag (const struct dyld_path_info * d,
 int dyld_default_load_flag (const struct dyld_path_info * d,
                             struct dyld_objfile_entry * e);
 
-char *dyld_find_dylib_name (CORE_ADDR addr, int ncmds);
+char *dyld_find_dylib_name (CORE_ADDR addr, int cpu_type, int ncmds);
 
 void dyld_load_symfile (struct dyld_objfile_entry *e);
 

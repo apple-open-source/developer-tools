@@ -58,6 +58,7 @@
     [ -<strong>S</strong> ]
     [ -<strong>t</strong> <var>timelimit</var> ]
     [ -<strong>T</strong> <var>content-type</var> ]
+    [ -<strong>u</strong> <var>PUT-file</var> ]
     [ -<strong>v</strong> <var>verbosity</var>]
     [ -<strong>V</strong> ]
     [ -<strong>w</strong> ]
@@ -164,9 +165,12 @@
     fixed total amount of time. Per default there is no timelimit.</dd>
 
     <dt><code>-T <var>content-type</var></code></dt>
-    <dd>Content-type header to use for POST data, eg.
+    <dd>Content-type header to use for POST/PUT data, eg.
     <code>application/x-www-form-urlencoded</code>.
     Default: <code>text/plain</code>.</dd>
+
+    <dt><code>-u <var>PUT-file</var></code></dt>
+    <dd>File containing data to PUT.  Remember to also set <code>-T</code>.</dd>
 
     <dt><code>-v <var>verbosity</var></code></dt>
     <dd>Set verbosity level - <code>4</code> and above prints information on
@@ -213,6 +217,6 @@
 <a href="../ko/programs/ab.html" hreflang="ko" rel="alternate" title="Korean">&nbsp;ko&nbsp;</a> |
 <a href="../tr/programs/ab.html" hreflang="tr" rel="alternate" title="Türkçe">&nbsp;tr&nbsp;</a></p>
 </div><div id="footer">
-<p class="apache">Copyright 2008 The Apache Software Foundation.<br />Licensed under the <a href="http://www.apache.org/licenses/LICENSE-2.0">Apache License, Version 2.0</a>.</p>
+<p class="apache">Copyright 2009 The Apache Software Foundation.<br />Licensed under the <a href="http://www.apache.org/licenses/LICENSE-2.0">Apache License, Version 2.0</a>.</p>
 <p class="menu"><a href="../mod/">Modules</a> | <a href="../mod/directives.html">Directives</a> | <a href="../faq/">FAQ</a> | <a href="../glossary.html">Glossary</a> | <a href="../sitemap.html">Sitemap</a></p></div>
 </body></html>

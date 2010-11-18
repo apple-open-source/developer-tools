@@ -439,6 +439,9 @@ extern unsigned long gnu_debuglink_crc32 (unsigned long crc,
 
 const char *bundle_basename (const char *filepath);
 
+void unlimit_file_rlimit ();
+void restore_file_rlimit ();
+
 /* From demangle.c */
 
 extern void set_demangling_style (char *);

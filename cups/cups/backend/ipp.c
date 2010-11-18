@@ -1,9 +1,9 @@
 /*
- * "$Id: ipp.c 7948 2008-09-17 00:04:12Z mike $"
+ * "$Id: ipp.c 8950 2010-01-14 22:40:19Z mike $"
  *
  *   IPP backend for the Common UNIX Printing System (CUPS).
  *
- *   Copyright 2007-2009 by Apple Inc.
+ *   Copyright 2007-2010 by Apple Inc.
  *   Copyright 1997-2007 by Easy Software Products, all rights reserved.
  *
  *   These coded instructions, statements, and computer programs are the
@@ -45,6 +45,8 @@
 
 static char	*password = NULL;	/* Password for device URI */
 static int	password_tries = 0;	/* Password tries */
+static const char *auth_info_required = "none";
+					/* New auth-info-required value */
 #ifdef __APPLE__
 static char	pstmpname[1024] = "";	/* Temporary PostScript file name */
 #endif /* __APPLE__ */
@@ -432,7 +434,7 @@ main(int  argc,				/* I - Number of command-line args */
 
     _cupsLangPuts(stderr, _("INFO: Copying print data...\n"));
 
-    tbytes = backendRunLoop(-1, fd, snmp_fd, &(addrlist->addr), 0,
+    tbytes = backendRunLoop(-1, fd, snmp_fd, &(addrlist->addr), 0, 0,
                             backendNetworkSideCB);
 
     if (snmp_fd >= 0)
@@ -735,6 +737,15 @@ main(int  argc,				/* I - Number of command-line args */
           ippDelete(supported);
 
 	return (CUPS_BACKEND_STOP);
+      }
+      else if (ipp_status == IPP_NOT_AUTHORIZED || ipp_status == IPP_FORBIDDEN)
+      {
+	if (!strncmp(httpGetField(http, HTTP_FIELD_WWW_AUTHENTICATE),
+		     "Negotiate", 9))
+	  auth_info_required = "negotiate";
+
+	fprintf(stderr, "ATTR: auth-info-required=%s\n", auth_info_required);
+	return (CUPS_BACKEND_AUTH_REQUIRED);
       }
       else
       {
@@ -1049,16 +1060,21 @@ main(int  argc,				/* I - Number of command-line args */
         _cupsLangPrintf(stderr, _("ERROR: Print file was not accepted (%s)!\n"),
 			cupsLastErrorString());
 
-	if (ipp_status == IPP_NOT_AUTHORIZED)
+	if (ipp_status == IPP_NOT_AUTHORIZED || ipp_status == IPP_FORBIDDEN)
 	{
 	  fprintf(stderr, "DEBUG: WWW-Authenticate=\"%s\"\n",
 		  httpGetField(http, HTTP_FIELD_WWW_AUTHENTICATE));
 
+         /*
+	  * Normal authentication goes through the password callback, which sets
+	  * auth_info_required to "username,password".  Kerberos goes directly
+	  * through GSSAPI, so look for Negotiate in the WWW-Authenticate header
+	  * here and set auth_info_required as needed...
+	  */
+
 	  if (!strncmp(httpGetField(http, HTTP_FIELD_WWW_AUTHENTICATE),
 		       "Negotiate", 9))
-	    fputs("ATTR: auth-info-required=negotiate\n", stderr);
-	  else
-	    fputs("ATTR: auth-info-required=username,password\n", stderr);
+	    auth_info_required = "negotiate";
 	}
       }
     }
@@ -1239,6 +1255,19 @@ main(int  argc,				/* I - Number of command-line args */
 	    break;
 	  }
 	}
+	else
+	{
+	 /*
+	  * If the printer does not return a job-state attribute, it does not
+	  * conform to the IPP specification - break out immediately and fail
+	  * the job...
+	  */
+
+          fputs("DEBUG: No job-state available from printer - stopping queue.\n",
+	        stderr);
+	  ipp_status = IPP_INTERNAL_ERROR;
+	  break;
+	}
       }
 
       ippDelete(response);
@@ -1283,6 +1312,15 @@ main(int  argc,				/* I - Number of command-line args */
       page_count > start_count)
     fprintf(stderr, "PAGE: total %d\n", page_count - start_count);
 
+#ifdef HAVE_GSSAPI
+ /*
+  * See if we used Kerberos at all...
+  */
+
+  if (http->gssctx)
+    auth_info_required = "negotiate";
+#endif /* HAVE_GSSAPI */
+
  /*
   * Free memory...
   */
@@ -1315,12 +1353,19 @@ main(int  argc,				/* I - Number of command-line args */
   * Return the queue status...
   */
 
-  if (ipp_status == IPP_NOT_AUTHORIZED)
+  fprintf(stderr, "ATTR: auth-info-required=%s\n", auth_info_required);
+
+  if (ipp_status == IPP_NOT_AUTHORIZED || ipp_status == IPP_FORBIDDEN)
     return (CUPS_BACKEND_AUTH_REQUIRED);
+  else if (ipp_status == IPP_INTERNAL_ERROR)
+    return (CUPS_BACKEND_STOP);
   else if (ipp_status > IPP_OK_CONFLICT)
     return (CUPS_BACKEND_FAILED);
   else
+  {
+    _cupsLangPuts(stderr, _("INFO: Ready to print.\n"));
     return (CUPS_BACKEND_OK);
+  }
 }
 
 
@@ -1517,6 +1562,12 @@ password_cb(const char *prompt)		/* I - Prompt (not used) */
 {
   (void)prompt;
 
+ /*
+  * Remember that we need to authenticate...
+  */
+
+  auth_info_required = "username,password";
+
   if (password && *password && password_tries < 3)
   {
     password_tries ++;
@@ -1526,23 +1577,10 @@ password_cb(const char *prompt)		/* I - Prompt (not used) */
   else
   {
    /*
-    * If there is no password set in the device URI, return the
-    * "authentication required" exit code...
+    * Give up after 3 tries or if we don't have a password to begin with...
     */
 
-    if (tmpfilename[0])
-      unlink(tmpfilename);
-
-#ifdef __APPLE__
-    if (pstmpname[0])
-      unlink(pstmpname);
-#endif /* __APPLE__ */
-
-    fputs("ATTR: auth-info-required=username,password\n", stderr);
-
-    exit(CUPS_BACKEND_AUTH_REQUIRED);
-
-    return (NULL);			/* Eliminate compiler warning */
+    return (NULL);
   }
 }
 
@@ -1805,8 +1843,11 @@ run_pictwps_filter(char       **argv,	/* I - Command-line arguments */
       * Change to an unpriviledged user...
       */
 
-      setgid(fileinfo.st_gid);
-      setuid(fileinfo.st_uid);
+      if (setgid(fileinfo.st_gid))
+        return (errno);
+
+      if (setuid(fileinfo.st_uid))
+        return (errno);
     }
 
     execlp("pictwpstops", printer, argv[1], argv[2], argv[3], argv[4], argv[5],
@@ -1908,5 +1949,5 @@ sigterm_handler(int sig)		/* I - Signal */
 
 
 /*
- * End of "$Id: ipp.c 7948 2008-09-17 00:04:12Z mike $".
+ * End of "$Id: ipp.c 8950 2010-01-14 22:40:19Z mike $".
  */

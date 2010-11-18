@@ -112,8 +112,9 @@
 static asl_file_list_t *db_files = NULL;
 static asl_store_t *store = NULL;
 static asl_file_t *legacy = NULL;
-static uint32_t dbselect = DB_SELECT_STORE;
 static asl_file_t *export = NULL;
+
+static uint32_t dbselect = DB_SELECT_STORE;
 
 /* notify SPI */
 uint32_t notify_register_plain(const char *name, int *out_token);
@@ -1410,6 +1411,9 @@ main(int argc, char *argv[])
 	encode = ASL_ENCODE_ASL;
 	cq = NULL;
 	exportname = NULL;
+
+	i = asl_store_location();
+	if (i == ASL_STORE_LOCATION_MEMORY) dbselect = DB_SELECT_SYSLOGD;
 
 	if (getuid() == 0) iamroot = 1;
 

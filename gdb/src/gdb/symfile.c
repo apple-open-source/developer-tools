@@ -1204,6 +1204,9 @@ append_psymbols_as_msymbols (struct objfile *objfile)
 	{
 	  psym = dsym_objfile->global_psymbols.list[psymtab->globals_offset + i];
 	  psym_osect = NULL;
+          /* APPLE LOCAL - Differentiate between arm & thumb  */
+          char *psym_to_msym_info = partial_symbol_special_info (dsym_objfile, 
+                                                                 psym);
 	  if (PSYMBOL_DOMAIN (psym) == VAR_DOMAIN
 	      && PSYMBOL_CLASS (psym) == LOC_BLOCK)
 	    {
@@ -1232,13 +1235,14 @@ append_psymbols_as_msymbols (struct objfile *objfile)
 		  else
 		    psym_linkage_name = SYMBOL_LINKAGE_NAME (psym);
 							  
-		  prim_record_minimal_symbol_and_info (psym_linkage_name,
-						       psym_addr,
-						       mst_text,
-						       NULL,
-						       SECT_OFF_TEXT (objfile),
-						       psym_osect->the_bfd_section,
-						       objfile);
+                  /* APPLE LOCAL - Differentiate between arm & thumb  */
+		  msym = prim_record_minimal_symbol_and_info (psym_linkage_name,
+                                                              psym_addr,
+                                                              mst_text,
+                                                              psym_to_msym_info,
+                                                              SECT_OFF_TEXT (objfile),
+                                                              psym_osect->the_bfd_section,
+                                                              objfile);
 		}
 	    }
 	}
@@ -1247,6 +1251,9 @@ append_psymbols_as_msymbols (struct objfile *objfile)
       for (i = 0; i < psymtab->n_static_syms; i++)
 	{
 	  psym = dsym_objfile->static_psymbols.list[psymtab->statics_offset + i];
+          /* APPLE LOCAL - Differentiate between arm & thumb  */
+          char *psym_to_msym_info = partial_symbol_special_info (dsym_objfile,
+                                                                 psym);
 	  if (PSYMBOL_DOMAIN (psym) == VAR_DOMAIN
 	      && PSYMBOL_CLASS (psym) == LOC_BLOCK)
 	    {
@@ -1276,13 +1283,14 @@ append_psymbols_as_msymbols (struct objfile *objfile)
 		    psym_linkage_name = SYMBOL_LINKAGE_NAME (psym);
 							  
 							  
-		  prim_record_minimal_symbol_and_info (psym_linkage_name,
-						       psym_addr,
-						       mst_file_text,
-						       NULL,
-						       SECT_OFF_TEXT (objfile),
-						       psym_osect->the_bfd_section,
-						       objfile);
+                  /* APPLE LOCAL - Differentiate between arm & thumb  */
+		  msym = prim_record_minimal_symbol_and_info (psym_linkage_name,
+                                                              psym_addr,
+                                                              mst_file_text,
+                                                              psym_to_msym_info,
+                                                              SECT_OFF_TEXT (objfile),
+                                                              psym_osect->the_bfd_section,
+                                                              objfile);
 		}
 	    }
 	}
@@ -1557,60 +1565,65 @@ symbol_file_add_with_addrs_or_offsets_using_objfile (struct objfile *in_objfile,
  	  objfile_osabi = macosx_get_osabi_from_dyld_entry (objfile->obfd);
 #endif
           debug_bfd = symfile_bfd_open_safe (debugfile, mainline, objfile_osabi);
-
-	  /* Don't bother to make the debug_objfile if the UUID's don't
-	     match.  */
-	  if (objfile->not_loaded_kext_filename)
-	    /* FIXME will kextutil -s copy the uuid over to the output
-	       binary?  Drop it?  Modify it?  That will determine what
-	       should be done here.  Right now kextutil drops it.  
-	       NB we have the original unloaded kext over in
-	       objfile->not_loaded_kext_filename and we could try to
-	       match that file's UUID with the dSYM's.  */
-	    uuid_matches = 1;
-	  else
-	    uuid_matches = check_bfd_for_matching_uuid (objfile->obfd, 
-                                                        debug_bfd);
-
-	  if (uuid_matches)
-	    {
+          if (debug_bfd == NULL)
+            {
+              warning ("Unable to open dSYM file '%s'", debugfile);
+            }
+          else
+            {
+              /* Don't bother to make the debug_objfile if the UUID's don't
+                 match.  */
+              if (objfile->not_loaded_kext_filename)
+                /* FIXME will kextutil -s copy the uuid over to the output
+                   binary?  Drop it?  Modify it?  That will determine what
+                   should be done here.  Right now kextutil drops it.  
+                   NB we have the original unloaded kext over in
+                   objfile->not_loaded_kext_filename and we could try to
+                   match that file's UUID with the dSYM's.  */
+                uuid_matches = 1;
+              else
+                uuid_matches = check_bfd_for_matching_uuid (objfile->obfd, 
+                                                            debug_bfd);
+    
+              if (uuid_matches)
+                {
 #ifdef TM_NEXTSTEP
-	      /* This should really be a symbol file reader function to go 
-                 along with sym_offsets, but I don't want to have to push 
-                 all the changes through for that right now.  Note, if we've 
-                 called into here, we're using offsets, not the addrs_to_use, 
-                 so NULL that out.  */
-              /* Don't calculate the offset between the executable and the dSYM
-                 if we're dealing with a kext - we'll fix each symbol's address
-                 individually.  */
-              if (not_loaded_kext_bundle == 0)
-	        macho_calculate_offsets_for_dsym (objfile, debug_bfd, 
-                                             addrs_to_use, offsets, num_offsets,
-					     &sym_offsets, &num_sym_offsets);
-	      addrs_to_use = NULL;
+                  /* This should really be a symbol file reader function to go 
+                     along with sym_offsets, but I don't want to have to push 
+                     all the changes through for that right now.  Note, if we've 
+                     called into here, we're using offsets, not the addrs_to_use, 
+                     so NULL that out.  */
+                  /* Don't calculate the offset between the executable and the dSYM
+                     if we're dealing with a kext - we'll fix each symbol's address
+                     individually.  */
+                  if (not_loaded_kext_bundle == 0)
+                    macho_calculate_offsets_for_dsym (objfile, debug_bfd, 
+                                                 addrs_to_use, offsets, num_offsets,
+                                                 &sym_offsets, &num_sym_offsets);
+                  addrs_to_use = NULL;
 #endif /* TM_NEXTSTEP */
-	      
-	      objfile->separate_debug_objfile
-		= symbol_file_add_with_addrs_or_offsets_using_objfile 
-                                               (objfile->separate_debug_objfile,
-					       debug_bfd, from_tty, 
-					       addrs_to_use, 
-					       sym_offsets, num_sym_offsets, 0, 
-					       flags | OBJF_SEPARATE_DEBUG_FILE,
-					       symflags, mapaddr, prefix,
-					       not_loaded_kext_bundle);
-	      
-	      objfile->separate_debug_objfile->separate_debug_objfile_backlink
-		= objfile;
-	      
-	      /* Put the separate debug object before the normal one, this is so
-		 that usage of the ALL_OBJFILES_SAFE macro will stay safe. */
-	      put_objfile_before (objfile->separate_debug_objfile, objfile);
-	      
-	    }
-	  else
-	    bfd_close (debug_bfd);
-
+                  
+                  objfile->separate_debug_objfile
+                    = symbol_file_add_with_addrs_or_offsets_using_objfile 
+                                                   (objfile->separate_debug_objfile,
+                                                   debug_bfd, from_tty, 
+                                                   addrs_to_use, 
+                                                   sym_offsets, num_sym_offsets, 0, 
+                                                   flags | OBJF_SEPARATE_DEBUG_FILE,
+                                                   symflags, mapaddr, prefix,
+                                                   not_loaded_kext_bundle);
+                  
+                  objfile->separate_debug_objfile->separate_debug_objfile_backlink
+                    = objfile;
+                  
+                  /* Put the separate debug object before the normal one, this is so
+                     that usage of the ALL_OBJFILES_SAFE macro will stay safe. */
+                  put_objfile_before (objfile->separate_debug_objfile, objfile);
+                  
+                }
+              else
+                bfd_close (debug_bfd);
+            }
 	  xfree (debugfile);
 	}
     }
@@ -2228,10 +2241,10 @@ symfile_bfd_open (const char *name, int mainline, enum gdb_osabi osabi)
 
   if (desc < 0)
     {
-      make_cleanup (xfree, name);
+      make_cleanup (xfree, (char *) name);
       perror_with_name (name);
     }
-  xfree (name);			/* Free 1st new malloc'd copy */
+  xfree ((char *) name);			/* Free 1st new malloc'd copy */
   name = absolute_name;		/* Keep 2nd malloc'd copy in bfd */
   /* It'll be freed in free_objfile(). */
 
@@ -2241,7 +2254,7 @@ symfile_bfd_open (const char *name, int mainline, enum gdb_osabi osabi)
   if (!sym_bfd)
     {
       close (desc);
-      make_cleanup (xfree, name);
+      make_cleanup (xfree, (char *) name);
       error (_("\"%s\": can't open to read symbols: %s."), name,
 	     bfd_errmsg (bfd_get_error ()));
     }
@@ -2277,7 +2290,7 @@ symfile_bfd_open (const char *name, int mainline, enum gdb_osabi osabi)
          on error it does not free all the storage associated with the
          bfd).  */
       bfd_close (sym_bfd);	/* This also closes desc */
-      make_cleanup (xfree, name);
+      make_cleanup (xfree, (char *) name);
       error (_("\"%s\": can't read symbols: %s."), name,
 	     bfd_errmsg (bfd_get_error ()));
     }
@@ -2868,29 +2881,33 @@ add_symbol_file_command (char *args, int from_tty)
    that will be used when reading #3.  
  */
 
+static void find_kext_files_by_bundle (const char *filename,
+                                       char **kextload_symbol_filename,
+                                       char **kext_bundle_executable_filename);
+static void find_kext_files_by_symfile (const char *filename,
+                                        char **kext_bundle_executable_filename);
 static void
 add_kext_command (char *args, int from_tty)
 {
   char **argv = NULL;
   char *filename;
+  const char *ext;
   struct objfile *o;
   int flags = OBJF_USERLOADED;
   int symflags = OBJF_SYM_ALL;
 
-  char *kext_bundle_filename;
-  const char *bundle_executable_name_from_plist;
-  const char *bundle_identifier_name_from_plist;
-  char *kextload_symbol_filename, *kextload_symbol_basename;
+  char *kextload_symbol_filename;
   char *kext_bundle_executable_filename;
-  char *t;
 
   const char *const usage_string =
     "Error: %s\n"
     "Usage: add-kext <PATHNAME-OF-KEXT>\n"
-    "PATHNAME-OF-KEXT is the path to the .kext bundle directory which has an\n"
-    "Info.plist file in its Contents subdirectory.  The .sym file (output from\n"
-    "kextutil) should be a sibling of the .kext bundle and the kext bundle's\n"
-    "dSYM bundle should also be in this drectory.";
+    "PATHNAME-OF-KEXT is the path to the .kext bundle directory or the .sym\n"
+    "file output from kextutil/kextcache.  If you provide a .kext bundle\n"
+    "path, the corresponding .dSYM bundle and .sym file must be located in\n"
+    "the same directory.  If you provide a .sym filename, the .dSYM bundle\n"
+    "and .kext file must be siblings of each other, and they must be in a\n"
+    "spotlight indexed location or the same directory as the .sym.\n";
 
   struct cleanup *my_cleanups = make_cleanup (null_cleanup, NULL);
 
@@ -2908,113 +2925,34 @@ add_kext_command (char *args, int from_tty)
   if (filename == NULL)
     error (usage_string, "no kext bundle name supplied");
 
+  ext = strrchr (filename, '.');
+  if (!ext)
+    error (usage_string, "supplied path has no extension");
 
-  kext_bundle_filename = macosx_kext_info (filename, 
-                                           &bundle_executable_name_from_plist,
-                                           &bundle_identifier_name_from_plist);
-  
-  if (kext_bundle_filename == NULL)
-    error (usage_string, "Unable to find kext bundle at pathname provided");
-  if (bundle_executable_name_from_plist == NULL)
-    error (usage_string, "Unable to find CFBundleExecutable in Info.plist");
-  if (bundle_identifier_name_from_plist == NULL)
-    error (usage_string, "Unable to find CFBundleIdentifier in Info.plist");
-  
-  t = dirname (kext_bundle_filename);
-  if (t == NULL)
-    error (usage_string, "dirname on the kext bundle filename failed");
-
-  kextload_symbol_basename = xmalloc 
-             (strlen (bundle_identifier_name_from_plist) + strlen (".sym") + 1);
-  strcpy (kextload_symbol_basename, bundle_identifier_name_from_plist);
-  strcat (kextload_symbol_basename, ".sym");
-
-  /* A string of "." means that KEXT_BUNDLE_FILENAME has no dirname 
-     component. */
-  if (t[0] == '.' && t[1] == '\0')
+  if (!strncmp (ext, ".kext", strlen (".kext")))
     {
-      kextload_symbol_filename = kextload_symbol_basename;
+       find_kext_files_by_bundle (filename, &kextload_symbol_filename,
+                                   &kext_bundle_executable_filename);
     }
-  else if (file_exists_p (kextload_symbol_basename))
+  else if (!strncmp (ext, ".sym", strlen (".sym")))
     {
-      kextload_symbol_filename = kextload_symbol_basename;
+       find_kext_files_by_symfile (filename, &kext_bundle_executable_filename);
+       kextload_symbol_filename = xstrdup (filename);
     }
   else
-    {
-      kextload_symbol_filename = xmalloc (strlen (t) + 1 + 
-                                strlen (kextload_symbol_basename) + 1);
-      strcpy (kextload_symbol_filename, t);
-      strcat (kextload_symbol_filename, "/");
-      strcat (kextload_symbol_filename, kextload_symbol_basename);
-      xfree (kextload_symbol_basename);
-    }
+      error (usage_string, "supplied file must have a .kext or .sym extension");
 
-  /* By default we assume the .sym file is next to the .kext bundle - but
-     if the user has added a kext-symbol-file-path, look there as well.  */
-
-  if (file_exists_p (kextload_symbol_filename) == 0 
-      && kext_symbol_file_path != NULL)
-    {
-      char *possible_new_name;
-      possible_new_name = xmalloc (strlen (kext_symbol_file_path) + 1 +
-                                   strlen (bundle_identifier_name_from_plist) +
-                                   strlen (".sym") + 1);
-      strcpy (possible_new_name, kext_symbol_file_path);
-      strcat (possible_new_name, "/");
-      strcat (possible_new_name, bundle_identifier_name_from_plist);
-      strcat (possible_new_name, ".sym");
-      if (file_exists_p (possible_new_name))
-        {
-          xfree (kextload_symbol_filename);
-          kextload_symbol_filename = possible_new_name;
-        }
-    }
-
-  kext_bundle_executable_filename = xmalloc (strlen (kext_bundle_filename) +
-                                strlen ("/Contents/MacOS/") +
-                                strlen (bundle_executable_name_from_plist) + 1);
-  strcpy (kext_bundle_executable_filename, kext_bundle_filename);
-  strcat (kext_bundle_executable_filename, "/Contents/MacOS/");
-  strcat (kext_bundle_executable_filename, bundle_executable_name_from_plist);
-
-  /* See if we might be loading a shallow bundle here.  */
-  if (!file_exists_p (kext_bundle_executable_filename))
-    {
-       char *shallow_bundle_name = xmalloc (strlen (kext_bundle_filename) + 1 +
-                               strlen (bundle_executable_name_from_plist) + 1);
-       strcpy (shallow_bundle_name, kext_bundle_filename);
-       strcat (shallow_bundle_name, "/");
-       strcat (shallow_bundle_name, bundle_executable_name_from_plist);
-       if (file_exists_p (shallow_bundle_name))
-         {
-           xfree ((char *) kext_bundle_executable_filename);
-           kext_bundle_executable_filename = shallow_bundle_name;
-         }
-       else
-         {
-           xfree ((char *) shallow_bundle_name);
-         }
-    }
-
-  xfree ((char *) bundle_executable_name_from_plist);
-  xfree ((char *) bundle_identifier_name_from_plist);
-
-  printf_filtered ("add symbol table from file \"%s\"? ", 
-                    kextload_symbol_filename);
-  if (from_tty && (!query ("%s", "")))
-    error (_("Not confirmed."));
-  
   o = symbol_file_add_name_with_addrs_or_offsets
-             (kextload_symbol_filename, from_tty, NULL, NULL, 0, 0, 
+             (kextload_symbol_filename, from_tty, NULL, NULL, 0, 0,
               flags, symflags, 0, NULL, kext_bundle_executable_filename);
-  o->syms_only_objfile = 1; 
+  o->syms_only_objfile = 1;
 
-  if (bfd_default_compatible (bfd_get_arch_info (o->obfd), 
+  if (bfd_default_compatible (bfd_get_arch_info (o->obfd),
                               gdbarch_bfd_arch_info (current_gdbarch)) == NULL)
     {
       warning ("This gdb is expecting %s binaries but %s is %s which is not "
                "compatible.  gdb will use the .sym file but this is unlikely "
-               "to be correct.", 
+               "to be correct.",
                gdbarch_bfd_arch_info (current_gdbarch)->printable_name,
                o->name, bfd_get_arch_info (o->obfd)->printable_name);
     }
@@ -3029,6 +2967,138 @@ add_kext_command (char *args, int from_tty)
      frameless.  */
   reinit_frame_cache ();
   do_cleanups (my_cleanups);
+}
+
+static void
+find_kext_files_by_bundle (const char *filename,
+                           char **kextload_symbol_filename,
+                           char **kext_bundle_executable_filename)
+{
+  const char *bundle_executable_name_from_plist;
+  const char *bundle_identifier_name_from_plist;
+  const char *kext_bundle_filename;
+  char *kextload_symbol_basename;
+  char *t;
+
+  kext_bundle_filename = macosx_kext_info (filename, 
+                                           &bundle_executable_name_from_plist,
+                                           &bundle_identifier_name_from_plist);
+  
+  if (kext_bundle_filename == NULL)
+    error ("Unable to find kext bundle at pathname provided");
+  if (bundle_executable_name_from_plist == NULL)
+    error ("Unable to find CFBundleExecutable in Info.plist");
+  if (bundle_identifier_name_from_plist == NULL)
+    error ("Unable to find CFBundleIdentifier in Info.plist");
+  
+  t = dirname ((char *)kext_bundle_filename);
+  if (t == NULL)
+    error ("dirname on the kext bundle filename failed");
+
+  kextload_symbol_basename = xmalloc 
+             (strlen (bundle_identifier_name_from_plist) + strlen (".sym") + 1);
+  strcpy (kextload_symbol_basename, bundle_identifier_name_from_plist);
+  strcat (kextload_symbol_basename, ".sym");
+
+  /* A string of "." means that KEXT_BUNDLE_FILENAME has no dirname 
+     component. */
+  if (t[0] == '.' && t[1] == '\0')
+    {
+      *kextload_symbol_filename = kextload_symbol_basename;
+    }
+  else if (file_exists_p (kextload_symbol_basename))
+    {
+      *kextload_symbol_filename = kextload_symbol_basename;
+    }
+  else
+    {
+      *kextload_symbol_filename = xmalloc (strlen (t) + 1 +
+                                  strlen (kextload_symbol_basename) + 1);
+      strcpy (*kextload_symbol_filename, t);
+      strcat (*kextload_symbol_filename, "/");
+      strcat (*kextload_symbol_filename, kextload_symbol_basename);
+      xfree (kextload_symbol_basename);
+    }
+
+  /* By default we assume the .sym file is next to the .kext bundle - but
+     if the user has added a kext-symbol-file-path, look there as well.  */
+
+  if (file_exists_p (*kextload_symbol_filename) == 0
+      && kext_symbol_file_path != NULL)
+    {
+      char *possible_new_name;
+      possible_new_name = xmalloc (strlen (kext_symbol_file_path) + 1 +
+                                   strlen (bundle_identifier_name_from_plist) +
+                                   strlen (".sym") + 1);
+      strcpy (possible_new_name, kext_symbol_file_path);
+      strcat (possible_new_name, "/");
+      strcat (possible_new_name, bundle_identifier_name_from_plist);
+      strcat (possible_new_name, ".sym");
+      if (file_exists_p (possible_new_name))
+        {
+          xfree (*kextload_symbol_filename);
+          *kextload_symbol_filename = possible_new_name;
+        }
+    }
+
+  *kext_bundle_executable_filename = xmalloc (strlen (kext_bundle_filename) +
+                                strlen ("/Contents/MacOS/") +
+                                strlen (bundle_executable_name_from_plist) + 1);
+  strcpy (*kext_bundle_executable_filename, kext_bundle_filename);
+  strcat (*kext_bundle_executable_filename, "/Contents/MacOS/");
+  strcat (*kext_bundle_executable_filename, bundle_executable_name_from_plist);
+
+  /* See if we might be loading a shallow bundle here.  */
+  if (!file_exists_p (*kext_bundle_executable_filename))
+    {
+       char *shallow_bundle_name = xmalloc (strlen (kext_bundle_filename) + 1 +
+                               strlen (bundle_executable_name_from_plist) + 1);
+       strcpy (shallow_bundle_name, kext_bundle_filename);
+       strcat (shallow_bundle_name, "/");
+       strcat (shallow_bundle_name, bundle_executable_name_from_plist);
+       if (file_exists_p (shallow_bundle_name))
+         {
+           xfree ((char *) *kext_bundle_executable_filename);
+           *kext_bundle_executable_filename = shallow_bundle_name;
+         }
+       else
+         {
+           xfree ((char *) shallow_bundle_name);
+         }
+    }
+
+  xfree ((char *) kext_bundle_filename);
+  xfree ((char *) bundle_executable_name_from_plist);
+  xfree ((char *) bundle_identifier_name_from_plist);
+}
+
+static void
+find_kext_files_by_symfile (const char *filename,
+                            char **kext_bundle_executable_filename)
+{
+  bfd *abfd;
+
+  /* The user only provides us with a path to a .sym file, so we need
+   * to find the kext's symbol-rich executable and .dSYM ourselves.
+   * We do this as follows:
+   *   1) Open the .sym file
+   *   2) Extract the UUID from the .sym file
+   *   3) Use the DebugSymbols framework to find the .dSYM with the UUID
+   *   4) Use the guaranteed relationship* between the executable and the
+   *      .dSYM to find the kext executable.
+   *   *Note: This relationship only applies to embedded kexts.
+   *   5) Proceed as add-kext does.
+   */
+
+  abfd = symfile_bfd_open (filename, 0, GDB_OSABI_UNKNOWN);
+  if (abfd == NULL)
+    error ("Can't open kext sym file");
+
+  *kext_bundle_executable_filename = macosx_locate_kext_executable_by_symfile (abfd);
+  if (*kext_bundle_executable_filename == NULL)
+    warning ("Can't find symbol-rich executable for kext sym file %s", filename);
+
+  bfd_close(abfd);
 }
 
 /* APPLE LOCAL: This command adds the space-separated list of dSYMs

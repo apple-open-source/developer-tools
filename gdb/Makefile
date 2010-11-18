@@ -1,5 +1,5 @@
 GDB_VERSION = 6.3.50-20050815
-GDB_RC_VERSION = 1472
+GDB_RC_VERSION = 1510
 
 BINUTILS_VERSION = 2.13-20021117
 BINUTILS_RC_VERSION = 46
@@ -161,18 +161,9 @@ NATIVE_TARGETS = $(foreach arch1,$(CANONICAL_ARCHS),$(arch1)--$(arch1))
 
 CROSS_TARGETS = $(strip $(foreach hostarch, $(CANONICAL_ARCHS), $(foreach targarch, $(filter-out $(hostarch), $(CANONICAL_ARCHS)), $(hostarch)--$(targarch))))
 
-# If the special TARGET_ONLY_EXTRA_ARCHS variable is set to arm, like
-# someone had done
-#
-#  sudo ~rc/bin/buildit -arch i386 -arch x86_64 `pwd` TARGET_ONLY_EXTRA_ARCHS=arm
-#
-# then build an arm cross-debugger for every native debugger that we 
-# build.  This cross debugger does not require an arm compiler, arm libraries
-# or an arm SDK -- the gdb binary runs exclusively on the native host.
+# Unconditionally add a cross-arm debugger to every native host.
 
-ifneq (,$(findstring arm, $(TARGET_ONLY_EXTRA_ARCHS)))
 CROSS_TARGETS := $(strip $(CROSS_TARGETS) $(foreach hostarch, $(CANONICAL_ARCHS), $(hostarch)--arm-apple-darwin))
-endif
 
 CROSS_TARGETS := $(filter-out x86_64-apple-darwin--i386-apple-darwin, $(CROSS_TARGETS))
 CROSS_TARGETS := $(filter-out i386-apple-darwin--x86_64-apple-darwin, $(CROSS_TARGETS))
@@ -868,14 +859,10 @@ endif
 ifneq (,$(findstring arm-apple-darwin, $(CANONICAL_ARCHS)))
 	$(SUBMAKE) install-gdb-fat HOSTCOMBOS="$(sort $(filter arm-apple-darwin--arm-apple-darwin, $(NATIVE_TARGETS)) $(filter %--arm-apple-darwin, $(CROSS_TARGETS)))" NATIVE=arm-apple-darwin
 else
-ifneq (,$(findstring arm, $(TARGET_ONLY_EXTRA_ARCHS)))
 	$(SUBMAKE) install-gdb-fat HOSTCOMBOS="$(sort $(filter %--arm-apple-darwin, $(CROSS_TARGETS)))" NATIVE=arm-apple-darwin
 endif
-endif
 	$(SUBMAKE) dsym-and-strip-fat-gdbs ARCHS_TO_INSTALL="$(CANONICAL_ARCHS)"
-ifneq (,$(findstring arm, $(TARGET_ONLY_EXTRA_ARCHS)))
 	$(SUBMAKE) dsym-and-strip-fat-gdbs ARCHS_TO_INSTALL="arm-apple-darwin"
-endif
 	$(SUBMAKE) install-chmod-macosx-noprocmod
 
 install-macsbug:

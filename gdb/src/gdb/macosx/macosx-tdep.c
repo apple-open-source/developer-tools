@@ -78,6 +78,9 @@ the Free Software Foundation, 675 Mass Ave, Cambridge, MA 02139, USA.  */
 
 #include "x86-shared-tdep.h"
 
+
+int disable_aslr_flag = 1;
+
 static char *find_info_plist_filename_from_bundle_name (const char *bundle,
                                                      const char *bundle_suffix);
 
@@ -393,7 +396,7 @@ macosx_record_symbols_from_sect_p (bfd *abfd, unsigned char macho_type,
      with a section number of NO_SECT.  */
   if (macho_sect <= 0 || macho_sect > abfd->tdata.mach_o_data->nsects)
     {
-      warning ("Bad symbol - type is N_SECT but section is %d", macho_sect);
+      warning ("Bad symbol - type is N_SECT but section is %d in file '%s'", macho_sect, abfd->filename);
       return 0;
     }
 
@@ -960,7 +963,7 @@ paths_and_uuids_map_func (const void *in_url,
 /* Search a dSYM bundle for a specific UUID. UUID_REF is the UUID object
    to look for, and DSYM_BUNDLE_PATH is a path to the top level dSYM bundle
    directory. We need to look through the bundle and find the correct dSYM 
-   mach file. This allows dSYM bundle directory names and the dsym mach files
+   Mach-O file. This allows dSYM bundle directory names and the dsym Mach-O files
    within them to have names that are different from the name of the
    executable which can be handy when debugging build styles (debug and 
    profile). The returned string has been xmalloc()'ed and it is the 
@@ -1045,7 +1048,7 @@ find_source_path_mappings (CFUUIDRef uuid, CFURLRef dsym)
           if (src_path)
             {
               const char *src_path_tilde_expanded = tilde_expand (src_path);
-              xfree (src_path);
+              xfree ((char *) src_path);
               src_path = src_path_tilde_expanded;
             }
           if (build_src_path && src_path)
@@ -1134,79 +1137,68 @@ find_source_path_mappings_posix (struct objfile *objfile, const char *dsym)
   CFRelease (dsym_ref);
 }
 
-/* Locate a full path to the dSYM mach file within the dSYM bundle using
+/* Locate a full path to the dSYM Mach-O file within the dSYM bundle using
    OJBFILE's uuid and the DebugSymbols.framework. The DebugSymbols.framework 
    will used using the current set of global DebugSymbols.framework defaults 
    from com.apple.DebugSymbols.plist.  If a UUID is available and a path to
    a dSYM is returned from the framework, the dSYM bundle contents will be
    searched to find a matching UUID only if the URL returned by the framework
-   doesn't fully specify the dSYM mach file. The returned string has been 
+   doesn't fully specify the dSYM Mach-O file. The returned string has been 
    xmalloc()'ed and it is the responsibility of the caller to xfree it. */
 static char *
 locate_dsym_using_framework (struct objfile *objfile)
 {
-  unsigned char uuid[16];
   CFURLRef dsym_bundle_url = NULL;
   char* dsym_path = NULL;
-  /* Extract the UUID from the objfile.  */
-  if (bfd_mach_o_get_uuid (objfile->obfd, uuid, sizeof (uuid)))
+  CFUUIDRef uuid_ref = get_uuidref_for_bfd (objfile->obfd);
+  if (uuid_ref == NULL)
+    return NULL;
+
+  /* Use DebugSymbols framework to search for the dSYM.  */
+  dsym_bundle_url = DBGCopyDSYMURLForUUID (uuid_ref);
+  if (dsym_bundle_url)
     {
-      /* Create a CFUUID object for use with DebugSymbols framework.  */
-      CFUUIDRef uuid_ref = CFUUIDCreateWithBytes (kCFAllocatorDefault, uuid[0], 
-						  uuid[1], uuid[2], uuid[3], 
-						  uuid[4], uuid[5], uuid[6], 
-						  uuid[7], uuid[8], uuid[9],
-						  uuid[10], uuid[11], uuid[12], 
-						  uuid[13], uuid[14], uuid[15]);
-      if (uuid_ref == NULL)
-	return NULL;
-      
-      /* Use DebugSymbols framework to search for the dSYM.  */
-      dsym_bundle_url = DBGCopyDSYMURLForUUID (uuid_ref);
-      if (dsym_bundle_url)
-	{
-	  /* Get the path for the URL in 8 bit format.  */
-	  char path[PATH_MAX];
-	  path[PATH_MAX-1] = '\0';
-	  if (CFURLGetFileSystemRepresentation (dsym_bundle_url, 1, 
-						(UInt8 *)path, sizeof (path)))
-	    {
-	      char *dsym_ext = strcasestr (path, dsym_extension);
-	      /* Check the dsym path to see if it is a full path to a dSYM
-		 mach file in the dSYM bundle. We do this by checking:
-		 1 - If there is no dSYM extension in the path
-		 2 - If the path ends with ".dSYM"
-		 3 - If the path ends with ".dSYM/"
-	      */
-	      int search_bundle_dir = ((dsym_ext == NULL) || 
-				       (dsym_ext[dsym_extension_len] == '\0') ||
-					(dsym_ext[dsym_extension_len] == '/' && 
-					dsym_ext[dsym_extension_len+1] == '\0'));
-				       
-	      if (search_bundle_dir)
-		{
-		  dsym_path = locate_dsym_mach_in_bundle (uuid_ref, path);
-		}
-	      else
-		{
-		  /* Don't mess with the path if it was fully specified. PATH 
-		     should be a full path to the dSYM mach file within the 
-		     dSYM bundle directory.  */
-		  dsym_path = xstrdup (path);
-		}
-	    }
-          find_source_path_mappings (uuid_ref, dsym_bundle_url);
-	  CFRelease (dsym_bundle_url);
-	  dsym_bundle_url = NULL;
-	}
-      CFRelease (uuid_ref);
-      uuid_ref = NULL;
+      /* Get the path for the URL in 8 bit format.  */
+      char path[PATH_MAX];
+      path[PATH_MAX-1] = '\0';
+      if (CFURLGetFileSystemRepresentation (dsym_bundle_url, 1,
+            (UInt8 *)path, sizeof (path)))
+        {
+          char *dsym_ext = strcasestr (path, dsym_extension);
+          /* Check the dsym path to see if it is a full path to a dSYM
+             Mach-O file in the dSYM bundle. We do this by checking:
+             1 - If there is no dSYM extension in the path
+             2 - If the path ends with ".dSYM"
+             3 - If the path ends with ".dSYM/"
+           */
+          int search_bundle_dir = ((dsym_ext == NULL) ||
+              (dsym_ext[dsym_extension_len] == '\0') ||
+              (dsym_ext[dsym_extension_len] == '/' &&
+               dsym_ext[dsym_extension_len+1] == '\0'));
+
+          if (search_bundle_dir)
+            {
+              dsym_path = locate_dsym_mach_in_bundle (uuid_ref, path);
+            }
+          else
+            {
+              /* Don't mess with the path if it was fully specified. PATH
+                 should be a full path to the dSYM Mach-O file within the
+                 dSYM bundle directory.  */
+              dsym_path = xstrdup (path);
+            }
+        }
+      find_source_path_mappings (uuid_ref, dsym_bundle_url);
+      CFRelease (dsym_bundle_url);
+      dsym_bundle_url = NULL;
     }
+  CFRelease (uuid_ref);
+  uuid_ref = NULL;
   return dsym_path;
 }
 #endif
 
-/* Locate a full path to the dSYM mach file within the dSYM bundle given
+/* Locate a full path to the dSYM Mach-O file within the dSYM bundle given
    OJBFILE. This function will first search in the same directory as the
    executable for OBJFILE, then it will traverse the directory structure
    upwards looking for any dSYM bundles at the bundle level. If no dSYM
@@ -1247,7 +1239,7 @@ macosx_locate_dsym (struct objfile *objfile)
   if (strcasestr (executable_name, ".dSYM") == NULL)
     {
       /* Check for the existence of a .dSYM file for a given executable.  */
-      basename_str = basename (executable_name);
+      basename_str = basename ((char *) executable_name);
       dsymfile = alloca (strlen (executable_name)
 			       + strlen (APPLE_DSYM_EXT_AND_SUBDIRECTORY)
 			       + strlen (basename_str)
@@ -1276,7 +1268,7 @@ macosx_locate_dsym (struct objfile *objfile)
          MyApp example the dSYM would be at either:
 	 "/some/path/MyApp.app.dSYM/Contents/Resources/DWARF/MyApp" or
 	 "/some/path/MyApp.dSYM/Contents/Resources/DWARF/MyApp".  */
-      strcpy (dsymfile, dirname (executable_name));
+      strcpy (dsymfile, dirname ((char *) executable_name));
       /* Append a directory delimiter so we don't miss shallow bundles that
          have the dSYM appended on like "/some/path/MacApp.app.dSYM" when
 	 we start with "/some/path/MyApp.app/MyApp".  */
@@ -1340,6 +1332,237 @@ macosx_locate_dsym (struct objfile *objfile)
   return NULL;
 }
 
+/* Returns 1 if the directory is found.  0 if error or not found.
+   Files return 0. */
+int
+dir_exists_p (const char *dir)
+{
+  struct stat sb;
+  return (stat (dir, &sb) == 0) && ((sb.st_mode & S_IFDIR) != 0);
+}
+
+/* Searches a string for a substring.  If the substring is found, the
+   string is truncated at the end of the substring, and the string
+   is returned.  If the substring is not found, NULL is retuned. */
+char *
+strtrunc (char *str, const char *substr)
+{
+  char *match;
+  u_long len;
+
+  match = strcasestr (str, substr);
+  if (!match)
+    return NULL;
+
+  len = (match - str) + strlen (substr);
+  str[len] = '\0';
+  return str;
+}
+
+const CFStringRef kSymbolRichExecutable = CFSTR("DBGSymbolRichExecutable");
+
+/* Given a UUID plist from a dSYM and a UUID, returns the full path to the
+   symbol-rich executable described in that plist, or NULL on error. Caller is
+   responsible for freeing the returned xmalloc'd filename. */
+
+char *
+locate_kext_executable_by_dsym_plist (CFDictionaryRef dsym_info, CFUUIDRef uuid_ref)
+{
+  char *result = NULL;
+  CFDictionaryRef uuid_info = NULL;
+  CFStringRef kext_path;
+  CFStringRef uuid_string = NULL;
+  char path[PATH_MAX];
+  char *tmp;
+  u_long len;
+
+  uuid_string = CFUUIDCreateString(kCFAllocatorDefault, uuid_ref);
+  if (!uuid_string)
+    {
+      goto finish;
+    }
+
+  uuid_info = CFDictionaryGetValue(dsym_info, uuid_string);
+  if (!uuid_info)
+    {
+      goto finish;
+    }
+
+  kext_path = CFDictionaryGetValue (uuid_info, kSymbolRichExecutable);
+  if (!kext_path || CFGetTypeID (kext_path) != CFStringGetTypeID())
+    {
+      goto finish;
+    }
+
+  if (!CFStringGetFileSystemRepresentation (kext_path, path, sizeof(path)))
+    {
+      goto finish;
+    }
+
+  if (!file_exists_p (path))
+    {
+      goto finish;
+    }
+
+  result = xstrdup (path);
+finish:
+  if (uuid_string) 
+    CFRelease (uuid_string);
+  return result;
+}
+
+/* Given the path to a dSYM, locates a corresponding kext bundle in the same
+   directory and returns the full path to the contained kext executable, or
+   NULL on error. Caller is responsible for freeing the retuned xmalloc'd
+   filename. */
+
+char *
+locate_kext_executable_by_dsym_url (CFURLRef dsym_url)
+{
+  char * result = NULL;
+  char path[PATH_MAX];
+  const char * identifier_name = NULL;
+  const char * exec_name = NULL;
+  char * bundle_path = NULL;
+  char * tmp;
+  u_long len;
+
+  if (!CFURLGetFileSystemRepresentation (dsym_url, 1, path, sizeof(path)))
+    {
+      goto finish;
+    }
+
+  tmp = strtrunc (path, ".kext");
+  if (!tmp)
+    {
+      goto finish;
+    }
+
+  if (!dir_exists_p (path))
+    {
+      goto finish;
+    }
+
+  bundle_path = macosx_kext_info (path, &exec_name, &identifier_name);
+  if (!bundle_path)
+    {
+      goto finish;
+    }
+
+  strlcat (path, "/Contents/MacOS/", sizeof(path));
+  strlcat (path, exec_name, sizeof(path));
+  if (!file_exists_p (path))
+    {
+      strtrunc (path, ".kext");
+      strlcat (path, "/", sizeof(path));
+      strlcat (path, exec_name, sizeof(path));
+
+      if (!file_exists_p (path))
+        {
+          goto finish;
+        }
+    }
+
+  result = xstrdup (path);
+finish:
+  if (bundle_path) 
+    xfree (bundle_path);
+  if (exec_name) 
+    xfree ((char *) exec_name);
+  if (identifier_name) 
+    xfree ((char *) identifier_name);
+
+  return result;
+}
+
+/* Given a kextutil- or kextcache-generated .sym file, returns the path to the
+   kext's corresponding symbol-rich executable, or NULL on error. Caller is
+   responsible for freeing the returned xmalloc'd filename. */
+
+char *
+macosx_locate_kext_executable_by_symfile (bfd *abfd)
+{
+#if USE_DEBUG_SYMBOLS_FRAMEWORK
+  char *result = NULL;
+  CFUUIDRef symfile_uuid = NULL;
+  CFUUIDBytes symfile_uuid_bytes;
+  CFDictionaryRef dsym_info = NULL;
+  CFURLRef dsym_url = NULL;
+  char *kext_executable_name = NULL;
+  bfd *kext_executable_bfd = NULL;
+  CFUUIDRef kext_executable_uuid = NULL;
+  CFUUIDBytes kext_executable_uuid_bytes;
+
+  symfile_uuid = get_uuidref_for_bfd (abfd);
+  if (symfile_uuid == NULL) 
+    goto finish;
+
+  /* Find the dSYM using the DebugSymbols framework */
+
+  dsym_url = DBGCopyDSYMURLForUUID (symfile_uuid);
+  if (!dsym_url)
+    {
+      warning ("Can't find dSYM for .sym file %s", abfd->filename);
+      goto finish;
+    }
+
+  /* We have two ways to find the kext bundle:
+   *   1) A plist in the dSYM will give us a path
+   *   2) If that plist doesn't exist, look for a kext nearby
+   */
+
+  dsym_info = DBGCopyDSYMPropertyLists (dsym_url);
+  if (dsym_info)
+    {
+      kext_executable_name = locate_kext_executable_by_dsym_plist (dsym_info, symfile_uuid);
+    }
+  else
+    {
+      kext_executable_name = locate_kext_executable_by_dsym_url (dsym_url);
+    }
+  if (!kext_executable_name) 
+    goto finish;
+
+  /* Ensure the symfile's UUID matches the symbol-rich executable's */
+
+  kext_executable_bfd = symfile_bfd_open (kext_executable_name, 0, GDB_OSABI_UNKNOWN);
+  if (!kext_executable_bfd) 
+    goto finish;
+
+  kext_executable_uuid = get_uuidref_for_bfd (kext_executable_bfd);
+  if (!kext_executable_uuid) goto finish;
+
+  symfile_uuid_bytes = CFUUIDGetUUIDBytes(symfile_uuid);
+  kext_executable_uuid_bytes = CFUUIDGetUUIDBytes(kext_executable_uuid);
+  if (memcmp (&symfile_uuid_bytes, &kext_executable_uuid_bytes,
+              sizeof(CFUUIDBytes)))
+    {
+      goto finish;
+    }
+
+  result = kext_executable_name;
+  kext_executable_name = NULL;
+finish:
+  if (symfile_uuid) 
+    CFRelease (symfile_uuid);
+  if (dsym_url) 
+    CFRelease (dsym_url);
+  if (dsym_info) 
+    CFRelease (dsym_info);
+
+  if (kext_executable_name) 
+    xfree (kext_executable_name);
+  if (kext_executable_bfd) 
+    bfd_close (kext_executable_bfd);
+  if (kext_executable_uuid) 
+    CFRelease (kext_executable_uuid);
+
+  return result;
+#else
+  warning("DebugSymbols framework unavailable.  Can't locate kext bundle and dSYM.");
+  return NULL;
+#endif
+}
 
 struct objfile *
 macosx_find_objfile_matching_dsym_in_bundle (char *dsym_bundle_path, char **out_full_path)
@@ -1358,50 +1581,37 @@ macosx_find_objfile_matching_dsym_in_bundle (char *dsym_bundle_path, char **out_
 
   ALL_OBJFILES (objfile)
   {
-    unsigned char uuid[16];
-  /* Extract the UUID from the objfile.  */
-    if (bfd_mach_o_get_uuid (objfile->obfd, uuid, sizeof (uuid)))
-      {
-	/* Create a CFUUID object for use with DebugSymbols framework.  */
-	CFUUIDRef uuid_ref = CFUUIDCreateWithBytes (kCFAllocatorDefault, uuid[0], 
-						    uuid[1], uuid[2], uuid[3], 
-						    uuid[4], uuid[5], uuid[6], 
-						    uuid[7], uuid[8], uuid[9],
-						    uuid[10], uuid[11], uuid[12], 
-						    uuid[13], uuid[14], uuid[15]);
-	if (uuid_ref == NULL)
-	  continue;
-	results.test_uuid = uuid_ref;
-	CFDictionaryApplyFunction (paths_and_uuids, paths_and_uuids_map_func,
-				   &results);
-	CFRelease (uuid_ref);
-
-	if (results.found_it)
-	  {
-	    *out_full_path = xmalloc (PATH_MAX);
-	    *(*out_full_path) = '\0';
-	    if (CFURLGetFileSystemRepresentation (results.path_url, 1,
-						  (UInt8 *) (*out_full_path), PATH_MAX - 1))
-	      {
-		out_objfile = objfile;
-	      }
-	    else
-	      {
-		warning ("Could not get file system representation for URL:");
-		CFShow (results.path_url);
-		*out_full_path = NULL;
-		out_objfile = NULL;
-	      }
-	    CFRelease (results.path_url);
-	    goto cleanup_and_return;
-	    
-	  }
-      }
-    else
+    /* Extract the UUID from the objfile.  */
+    CFUUIDRef uuid_ref = get_uuidref_for_bfd(objfile->obfd);
+    if (uuid_ref == NULL)
       continue;
-    
+    results.test_uuid = uuid_ref;
+    CFDictionaryApplyFunction (paths_and_uuids, paths_and_uuids_map_func,
+        &results);
+    CFRelease (uuid_ref);
+
+    if (results.found_it)
+    {
+      *out_full_path = xmalloc (PATH_MAX);
+      *(*out_full_path) = '\0';
+      if (CFURLGetFileSystemRepresentation (results.path_url, 1,
+            (UInt8 *) (*out_full_path), PATH_MAX - 1))
+        {
+          out_objfile = objfile;
+        }
+      else
+        {
+          warning ("Could not get file system representation for URL:");
+          CFShow (results.path_url);
+          *out_full_path = NULL;
+          out_objfile = NULL;
+        }
+      CFRelease (results.path_url);
+      goto cleanup_and_return;
+
+    }
   }
- cleanup_and_return:
+cleanup_and_return:
   CFRelease (paths_and_uuids);
   return out_objfile;
 }
@@ -1997,4 +2207,12 @@ Show locate dSYM files using the DebugSymbols framework."), _("\
 If set, gdb will try and locate dSYM files using the DebugSymbols framework."),
 			    NULL, NULL,
 			    &setlist, &showlist);
+                            
+  add_setshow_boolean_cmd ("disable-aslr", class_obscure,
+			   &disable_aslr_flag, _("\
+Set if GDB should disable shared library address randomization."), _("\
+Show if GDB should disable shared library address randomization."), NULL,
+			   NULL, NULL,
+			   &setlist, &showlist);
+
 }

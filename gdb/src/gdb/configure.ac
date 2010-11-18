@@ -897,7 +897,7 @@ case "$host" in
 
     AC_MSG_CHECKING([for DebugSymbols framework])
     if test x"$enable_debug_symbols_framework" = xyes; then
-      if test -d "$SDKROOT/System/Library/PrivateFrameworks/DebugSymbols.framework"
+      if test -d "/System/Library/PrivateFrameworks/DebugSymbols.framework"
       then
         AC_DEFINE(USE_DEBUG_SYMBOLS_FRAMEWORK, 1, [Define if DebugSymbols framework is available and we should use it.])
         DEBUG_SYMBOLS_LIBS="-F/System/Library/PrivateFrameworks -framework DebugSymbols"

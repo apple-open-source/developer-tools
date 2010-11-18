@@ -1,9 +1,9 @@
 /*
  * "$Id: ppd.c 7906 2008-09-03 20:19:43Z mike $"
  *
- *   PPD file routines for the Common UNIX Printing System (CUPS).
+ *   PPD file routines for CUPS.
  *
- *   Copyright 2007-2009 by Apple Inc.
+ *   Copyright 2007-2010 by Apple Inc.
  *   Copyright 1997-2007 by Easy Software Products, all rights reserved.
  *
  *   These coded instructions, statements, and computer programs are the
@@ -60,6 +60,7 @@
  */
 
 #include "ppd-private.h"
+#include "pwg-private.h"
 #include "globals.h"
 #include "debug.h"
 #include <stdlib.h>
@@ -314,6 +315,13 @@ ppdClose(ppd_file_t *ppd)		/* I - PPD file record */
   }
 
  /*
+  * Free any PWG mapping data...
+  */
+
+  if (ppd->pwg)
+    _pwgDestroy((_pwg_t *)ppd->pwg);
+
+ /*
   * Free the whole record...
   */
 
@@ -352,11 +360,13 @@ ppdErrorString(ppd_status_t status)	/* I - PPD status */
 		  _("Illegal option keyword string"),
 		  _("Illegal translation string"),
 		  _("Illegal whitespace character"),
-		  _("Bad custom parameter")
+		  _("Bad custom parameter"),
+		  _("Missing option keyword"),
+		  _("Bad value string")
 		};
 
 
-  if (status < PPD_OK || status > PPD_ILLEGAL_WHITESPACE)
+  if (status < PPD_OK || status >= PPD_MAX_STATUS)
     return (_cupsLangString(cupsLangDefault(), _("Unknown")));
   else
     return (_cupsLangString(cupsLangDefault(), messages[status]));
@@ -1177,6 +1187,37 @@ ppdOpen2(cups_file_t *fp)		/* I - File to read from */
     }
     else if (!strcmp(keyword, "JobPatchFile"))
     {
+     /*
+      * CUPS STR #3421: Check for "*JobPatchFile: int: string"
+      */
+
+      if (isdigit(*string & 255))
+      {
+        for (sptr = string + 1; isdigit(*sptr & 255); sptr ++);
+
+        if (*sptr == ':')
+        {
+         /*
+          * Found "*JobPatchFile: int: string"...
+          */
+
+          cg->ppd_status = PPD_BAD_VALUE;
+
+	  goto error;
+        }
+      }
+
+      if (!name[0])
+      {
+       /*
+        * Found "*JobPatchFile: string"...
+        */
+
+        cg->ppd_status = PPD_MISSING_OPTION_KEYWORD;
+
+	goto error;
+      }
+
       if (ppd->patches == NULL)
         ppd->patches = strdup(string);
       else

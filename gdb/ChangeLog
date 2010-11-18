@@ -1,3 +1,8 @@
+2010-08-05  Jason Molenda  (jmolenda@apple.com)
+
+	* Makefile (TARGET_ONLY_EXTRA_ARCHS): Build the cross arm
+	debugger unconditionally, eliminate TARGET_ONLY_EXTRA_ARCHS.
+
 2009-11-18  Jason Molenda  (jmolenda@apple.com)
 
 	* Makefile:  Don't un-set MACOSX_DEPLOYMENT_TARGET.

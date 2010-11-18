@@ -966,9 +966,18 @@ fill_symbuf (struct objfile *objfile)
   unsigned int count;
   int nbytes;
 
+  const unsigned objfile_symbol_size = DBX_SYMBOL_SIZE (objfile);
+  const unsigned objfile_symbuf_size = 4096 * objfile_symbol_size;
+  if (symbuf != NULL && objfile_symbuf_size != symbuf_size)
+    {
+      warning ("Inconsistent DBX_SYMBOL_SIZE\n");
+      xfree (symbuf);
+      symbuf = NULL;
+    }
+
   if (symbuf == NULL)
     {
-      symbuf_size = 4096 * DBX_SYMBOL_SIZE (objfile);
+      symbuf_size = objfile_symbuf_size;
       symbuf = xmalloc (symbuf_size);
     }
 

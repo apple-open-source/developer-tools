@@ -27,7 +27,9 @@
 #include "gdb_string.h"
 #include "event-top.h"
 #include "exceptions.h"
+#include "bfd.h"
 #include <execinfo.h>
+#include <sys/resource.h>
 
 #ifdef TUI
 #include "tui/tui.h"		/* For tui_get_command_dimension.   */
@@ -3783,4 +3785,57 @@ bundle_basename (const char *filepath)
     }
 
   return bundle_name_start;
+}
+
+static int orig_file_rlimit;
+
+void 
+restore_file_rlimit ()
+{
+  struct rlimit limit;
+  if (orig_file_rlimit == 0)
+    return;
+
+  getrlimit (RLIMIT_NOFILE, &limit);
+  limit.rlim_cur = orig_file_rlimit;
+  setrlimit (RLIMIT_NOFILE, &limit);
+}
+
+void 
+unlimit_file_rlimit ()
+{
+  struct rlimit limit;
+  rlim_t reserve;
+  int ret;
+
+  getrlimit (RLIMIT_NOFILE, &limit);
+  orig_file_rlimit = limit.rlim_cur;
+  limit.rlim_cur = limit.rlim_max;
+  ret = setrlimit (RLIMIT_NOFILE, &limit);
+  if (ret != 0)
+    {
+      /* Okay, that didn't work, let's try something that's at least
+         reasonably big: */
+      limit.rlim_cur = 10000;
+      ret = setrlimit (RLIMIT_NOFILE, &limit);
+    }
+  /* rlim_max is set to RLIM_INFINITY on X, at least on Leopard &
+     SnowLeopard.  so it's better to see what we really got and use
+     cur, not max below...  */ 
+  getrlimit (RLIMIT_NOFILE, &limit);
+
+  /* Reserve 10% of file descriptors for non-BFD uses, or 5, whichever
+     is greater.  Allocate at least one file descriptor for use by
+     BFD. */
+
+  reserve = limit.rlim_cur * 0.1;
+  reserve = (reserve > 5) ? reserve : 5;
+  if (reserve >= limit.rlim_cur)
+    {
+      bfd_set_cache_max_open (1);
+    }
+  else
+    {
+      bfd_set_cache_max_open (limit.rlim_cur - reserve);
+    }
 }

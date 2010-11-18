@@ -1002,6 +1002,12 @@ struct equiv_psym_list {
    objfile_obstack.  FIXME, this is bad for dynamic linking or VxWorks-
    style execution of a bunch of .o's.  */
 
+/* APPLE LOCAL begin differentiate between arm & thumb.  */
+#define DW_ISA_UNKNOWN         0
+#define DW_ISA_ARM_thumb       1
+#define DW_ISA_ARM_arm         2
+/* APPLE LOCAL end differentiate between arm & thumb.  */
+
 struct partial_symtab
 {
 

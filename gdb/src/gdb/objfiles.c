@@ -2438,6 +2438,61 @@ objfile_on_hitlist_p (struct objfile_hitlist *hitlist,
   return 0;
 }
 
+/* APPLE LOCAL begin - Differentiate between arm & thumb  */
+
+char *
+partial_symbol_special_info (struct objfile *objfile,
+                             struct partial_symbol *psym)
+{
+  char *ret_value = NULL;
+  int i;
+
+  if (objfile->num_thumb_psyms == 0)
+    return ret_value;
+
+  for (i = 0; i < objfile->num_thumb_psyms; ++i)
+    if (objfile->thumb_psyms[i] == psym)
+      return (char *) (0x80000000); 
+
+  return ret_value;
+}
+
+void
+objfile_add_special_psym (struct objfile *objfile,
+                          struct partial_symbol *psym,
+                          int short isa_value)
+{
+  int max_size = objfile->max_thumb_psyms;
+  int size = objfile->num_thumb_psyms;
+  int index = size;
+
+  /* At the moment we only deal with DW_ISA_ARM_thumb  */
+  if (isa_value != DW_ISA_ARM_thumb)
+    return;
+
+  if (max_size == 0)
+    {
+      max_size = 100;
+      objfile->thumb_psyms = (struct partial_symbol **) malloc 
+                                  (max_size * sizeof (struct partial_symbol*));
+    }
+  else if (size >= max_size)
+    {
+      max_size = 2 * max_size;
+      objfile->thumb_psyms = (struct partial_symbol **) realloc 
+           (objfile->thumb_psyms, max_size * sizeof (struct partial_symbol *));
+
+    }
+
+  objfile->max_thumb_psyms = max_size;
+
+  objfile->thumb_psyms[index] = psym;
+  size++;
+  objfile->num_thumb_psyms = size;
+}
+/* APPLE LOCAL end - Differentiate between arm & thumb  */
+
+
 void
 _initialize_objfiles (void)
 {

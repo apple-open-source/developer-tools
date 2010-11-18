@@ -4,15 +4,13 @@
 #
 .PATH: ${.CURDIR}/arm/string
 
-MDSRCS +=	\
-	bcopy.s \
-	bzero.s \
-	ffs.s \
+MDSRCS +=	 \
+	bcopy.s  \
+	bzero.s  \
+	ffs.s    \
+	memcmp.s \
+	memset_pattern.s \
 	strcmp.s \
 	strlen.s
 
-.if defined(FEATURE_ARM_ARCH_6)
-MDSRCS += memset_pattern.s
-.endif
-
-SUPPRESSSRCS += memcpy.c memmove.c memset.c strlen.c
+SUPPRESSSRCS += bcmp.c memcpy.c memmove.c memset.c strlen.c

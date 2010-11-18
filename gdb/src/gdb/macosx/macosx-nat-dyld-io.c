@@ -178,6 +178,42 @@ inferior_read_mach_o (bfd *abfd, void *stream, void *data, file_ptr nbytes, file
        return 0;
       }
 
+    /* dyld may have slid this dylib within the shared cache region
+      a little bit extra for this one process.  The Mach-O header
+      addresses we get from the MEM_BFD will be the system-wide generic 
+      shared cache addresses, not this process' specific slid values.  
+      Both of these differ from the on-disk addresses in the load 
+      commands of the actual library file (which typically show the
+      library loading at 0x0).  
+      The same slide value will be applied to all sections of the dylib
+      so we determine it outside the section loop below.  */
+
+    bfd_vma process_shared_cache_slide = 0;
+    if (iptr->offset == 0)
+      {
+        for (i = 0; i < mdata->header.ncmds; i++)
+          {
+            struct bfd_mach_o_load_command *cmd = &mdata->commands[i];
+            /* Break out of the loop if we find any zero load commands
+               since this can happen if we are currently reading the
+               load commands.  */
+            if (cmd->type == 0)
+              break;
+            if (cmd->type == BFD_MACH_O_LC_SEGMENT
+                || cmd->type == BFD_MACH_O_LC_SEGMENT_64)
+              {
+                struct bfd_mach_o_segment_command *segment;
+                segment = &cmd->command.segment;
+                
+                if (strcmp(segment->segname, "__TEXT") == 0)
+                  {
+                    process_shared_cache_slide = iptr->addr - segment->vmaddr;
+                    break;
+                  }
+              }
+          }
+      }
+
     for (i = 0; i < mdata->header.ncmds; i++)
       {
         struct bfd_mach_o_load_command *cmd = &mdata->commands[i];
@@ -251,7 +287,7 @@ inferior_read_mach_o (bfd *abfd, void *stream, void *data, file_ptr nbytes, file
 		  {
 		    /* We were given an offset (slide) when this bfd was 
 		       created, so we are going to use that.  */
-		    infaddr = infaddr + iptr->offset;
+		    infaddr = infaddr + iptr->offset + process_shared_cache_slide;
 		  }
 		
 		return inferior_read_memory_partial (infaddr, nbytes, data);

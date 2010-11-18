@@ -37,10 +37,10 @@ IOUSBWorkLoop * IOUSBWorkLoop::workLoop(const char * controllerLocation)
     IOUSBWorkLoop *loop;
     
     loop = new IOUSBWorkLoop;
-    if(!loop)
+    if (!loop)
         return loop;
 	
-    if(!loop->init(controllerLocation)) 
+    if (!loop->init(controllerLocation)) 
     {
         loop->release();
         loop = NULL;
@@ -51,6 +51,7 @@ IOUSBWorkLoop * IOUSBWorkLoop::workLoop(const char * controllerLocation)
 bool
 IOUSBWorkLoop::init (const char * controllerLocation)
 {
+#pragma unused(controllerLocation)
 	
 	return super::init( );
 	
@@ -59,11 +60,6 @@ IOUSBWorkLoop::init (const char * controllerLocation)
 void IOUSBWorkLoop::free ( void )
 {
 	
-	if ( fLockGroup )
-	{
-		lck_grp_free ( fLockGroup );
-		fLockGroup = NULL;
-	}
 	
 	super::free ( );
 	
@@ -73,7 +69,7 @@ void IOUSBWorkLoop::closeGate()
 {
     IOWorkLoop::closeGate();
     // do not do this if we are on the actual workloop/interrupt thread
-    if(fSleepToken ) 
+    if (fSleepToken ) 
     {
         IOReturn res;
 		if (onThread())
@@ -83,7 +79,7 @@ void IOUSBWorkLoop::closeGate()
         do 
         {
             res = sleepGate(fSleepToken, THREAD_ABORTSAFE);
-            if(res == kIOReturnSuccess)
+            if (res == kIOReturnSuccess)
                 break;
             IOLog("sleepGate returned 0x%x\n", res);
         } while (true);
@@ -94,7 +90,7 @@ bool IOUSBWorkLoop::tryCloseGate()
 {
     bool ret;
     ret = IOWorkLoop::tryCloseGate();
-    if(ret && fSleepToken) 
+    if (ret && fSleepToken) 
     {
         openGate();
         ret = false;
@@ -104,7 +100,7 @@ bool IOUSBWorkLoop::tryCloseGate()
 
 IOReturn IOUSBWorkLoop::sleep(void *token)
 {
-    if(fSleepToken) 
+    if (fSleepToken) 
     {
         DEBUGLOG("IOUSBWorkLoop::sleep: Already asleep: %p\n", token);
         return kIOReturnError;
@@ -117,7 +113,7 @@ IOReturn IOUSBWorkLoop::sleep(void *token)
 IOReturn 
 IOUSBWorkLoop::wake(void *token)
 {
-    if(fSleepToken != token) 
+    if (fSleepToken != token) 
     {
         DEBUGLOG("IOUSBWorkLoop::wake: wrong token: %p<->%p\n", token, fSleepToken);
         return kIOReturnError;

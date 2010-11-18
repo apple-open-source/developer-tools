@@ -201,7 +201,15 @@ void IOUSBDeviceDescriptionSetClass(IOUSBDeviceDescriptionRef ref, UInt8 bClass)
 AVAILABLE_MAC_OS_X_VERSION_10_5_AND_LATER;
 
 CF_EXPORT
+void IOUSBDeviceDescriptionSetSubClass(IOUSBDeviceDescriptionRef devDesc, UInt8 bSubClass)
+AVAILABLE_MAC_OS_X_VERSION_10_5_AND_LATER;
+
+CF_EXPORT
 uint8_t IOUSBDeviceDescriptionGetSubClass(IOUSBDeviceDescriptionRef ref)
+AVAILABLE_MAC_OS_X_VERSION_10_5_AND_LATER;
+
+CF_EXPORT
+void IOUSBDeviceDescriptionSetProtocol(IOUSBDeviceDescriptionRef devDesc, UInt8 protocol)
 AVAILABLE_MAC_OS_X_VERSION_10_5_AND_LATER;
 
 CF_EXPORT
@@ -264,6 +272,15 @@ CF_EXPORT
 int IOUSBDeviceDescriptionGetMatchingConfiguration(IOUSBDeviceDescriptionRef devDesc, CFArrayRef interfaceNames);
 AVAILABLE_MAC_OS_X_VERSION_10_5_AND_LATER;
 
+
+/*! @function   IOUSBDeviceDescriptionCopyInterfaces
+ @abstract   Return a an array of the interfaces on each configuration.
+ @discussion This function returns an array of arrays of strings where each item in the top array corresponds to a single configuration and each string is the name of an interface in on the configuration.
+ @param		devDesc	The USB device description to query
+ */
+CF_EXPORT
+CFArrayRef IOUSBDeviceDescriptionCopyInterfaces(IOUSBDeviceDescriptionRef devDesc)
+AVAILABLE_MAC_OS_X_VERSION_10_5_AND_LATER;
 
 __END_DECLS
 

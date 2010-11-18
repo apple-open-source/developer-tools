@@ -1,9 +1,9 @@
 /*
  * "$Id: http.c 7850 2008-08-20 00:07:25Z mike $"
  *
- *   HTTP routines for the Common UNIX Printing System (CUPS).
+ *   HTTP routines for CUPS.
  *
- *   Copyright 2007-2009 by Apple Inc.
+ *   Copyright 2007-2010 by Apple Inc.
  *   Copyright 1997-2007 by Easy Software Products, all rights reserved.
  *
  *   This file contains Kerberos support code, copyright 2006 by
@@ -25,7 +25,7 @@
  *                          server.
  *   httpClearCookie()    - Clear the cookie value(s).
  *   httpClearFields()    - Clear HTTP request fields.
- *   httpClose()          - Close an HTTP connection...
+ *   httpClose()          - Close an HTTP connection.
  *   httpConnect()        - Connect to a HTTP server.
  *   httpConnectEncrypt() - Connect to a HTTP server using encryption.
  *   _httpCreate()        - Create an unconnected HTTP connection.
@@ -62,7 +62,7 @@
  *   _httpReadGNUTLS()    - Read function for the GNU TLS library.
  *   httpReconnect()      - Reconnect to a HTTP server.
  *   httpSetAuthString()  - Set the current authorization string.
- *   httpSetCookie()      - Set the cookie value(s)...
+ *   httpSetCookie()      - Set the cookie value(s).
  *   httpSetExpect()      - Set the Expect: header in a request.
  *   httpSetField()       - Set the value of an HTTP header.
  *   httpSetLength()      - Set the content-length and content-encoding.
@@ -83,10 +83,12 @@
  *   http_debug_hex()     - Do a hex dump of a buffer.
  *   http_field()         - Return the field index for a field name.
  *   http_read_ssl()      - Read from a SSL/TLS connection.
+ *   http_locking_cb()    - Lock/unlock a thread's mutex.
  *   http_send()          - Send a request with all fields and the trailing
  *                          blank line.
  *   http_setup_ssl()     - Set up SSL/TLS support on a connection.
  *   http_shutdown_ssl()  - Shut down SSL/TLS on a connection.
+ *   http_threadid_cb()   - Return the current thread ID.
  *   http_upgrade()       - Force upgrade to TLS encryption.
  *   http_write()         - Write a buffer to a HTTP connection.
  *   http_write_chunk()   - Write a chunked buffer.
@@ -144,6 +146,19 @@ static int		http_setup_ssl(http_t *http);
 static void		http_shutdown_ssl(http_t *http);
 static int		http_upgrade(http_t *http);
 static int		http_write_ssl(http_t *http, const char *buf, int len);
+
+#  ifdef HAVE_GNUTLS
+#    ifdef HAVE_PTHREAD_H
+GCRY_THREAD_OPTION_PTHREAD_IMPL;
+#    endif /* HAVE_PTHREAD_H */
+
+#  elif defined(HAVE_LIBSSL) && defined(HAVE_PTHREAD_H)
+static pthread_mutex_t	*http_locks;	/* OpenSSL lock mutexes */
+
+static void		http_locking_cb(int mode, int type, const char *file,
+					int line);
+static unsigned long	http_threadid_cb(void);
+#  endif /* HAVE_GNUTLS */
 #endif /* HAVE_SSL */
 
 
@@ -312,7 +327,7 @@ httpClearFields(http_t *http)		/* I - Connection to server */
 
 
 /*
- * 'httpClose()' - Close an HTTP connection...
+ * 'httpClose()' - Close an HTTP connection.
  */
 
 void
@@ -560,8 +575,9 @@ httpError(http_t *http)			/* I - Connection to server */
 void
 httpFlush(http_t *http)			/* I - Connection to server */
 {
-  char	buffer[8192];			/* Junk buffer */
-  int	blocking;			/* To block or not to block */
+  char		buffer[8192];		/* Junk buffer */
+  int		blocking;		/* To block or not to block */
+  http_state_t	oldstate;		/* Old state */
 
 
   DEBUG_printf(("httpFlush(http=%p), state=%s", http,
@@ -578,6 +594,7 @@ httpFlush(http_t *http)			/* I - Connection to server */
   * Read any data we can...
   */
 
+  oldstate = http->state;
   while (httpRead2(http, buffer, sizeof(buffer)) > 0);
 
  /*
@@ -587,7 +604,7 @@ httpFlush(http_t *http)			/* I - Connection to server */
 
   http->blocking = blocking;
 
-  if (http->state != HTTP_WAITING && http->fd >= 0)
+  if (http->state == oldstate && http->state != HTTP_WAITING && http->fd >= 0)
   {
    /*
     * Didn't get the data back, so close the current connection.
@@ -721,7 +738,7 @@ httpGetField(http_t       *http,	/* I - Connection to server */
 {
   if (!http || field <= HTTP_FIELD_UNKNOWN || field >= HTTP_FIELD_MAX)
     return (NULL);
-  else if (field == HTTP_FIELD_AUTHORIZATION && 
+  else if (field == HTTP_FIELD_AUTHORIZATION &&
 	   http->field_authorization)
   {
    /*
@@ -1137,7 +1154,7 @@ httpGets(char   *line,			/* I - Line to read into */
       http->activity = time(NULL);
 
       *lineptr = '\0';
-      
+
       DEBUG_printf(("3httpGets: Returning \"%s\"", line));
 
       return (line);
@@ -1171,21 +1188,22 @@ httpHead(http_t     *http,		/* I - Connection to server */
 void
 httpInitialize(void)
 {
-#ifdef HAVE_LIBSSL
-#  ifndef WIN32
-  struct timeval	curtime;	/* Current time in microseconds */
-#  endif /* !WIN32 */
-  int			i;		/* Looping var */
-  unsigned char		data[1024];	/* Seed data */
-#endif /* HAVE_LIBSSL */
-
+  static int	initialized = 0;	/* Have we been called before? */
 #ifdef WIN32
   WSADATA	winsockdata;		/* WinSock data */
-  static int	initialized = 0;	/* Has WinSock been initialized? */
+#endif /* WIN32 */
+#ifdef HAVE_LIBSSL
+  int		i;			/* Looping var */
+  unsigned char	data[1024];		/* Seed data */
+#endif /* HAVE_LIBSSL */
 
 
-  if (!initialized)
-    WSAStartup(MAKEWORD(1,1), &winsockdata);
+  if (initialized)
+    return;
+
+#ifdef WIN32
+  WSAStartup(MAKEWORD(1,1), &winsockdata);
+
 #elif !defined(SO_NOSIGPIPE)
  /*
   * Ignore SIGPIPE signals...
@@ -1193,6 +1211,7 @@ httpInitialize(void)
 
 #  ifdef HAVE_SIGSET
   sigset(SIGPIPE, SIG_IGN);
+
 #  elif defined(HAVE_SIGACTION)
   struct sigaction	action;		/* POSIX sigaction data */
 
@@ -1200,35 +1219,63 @@ httpInitialize(void)
   memset(&action, 0, sizeof(action));
   action.sa_handler = SIG_IGN;
   sigaction(SIGPIPE, &action, NULL);
+
 #  else
   signal(SIGPIPE, SIG_IGN);
 #  endif /* !SO_NOSIGPIPE */
 #endif /* WIN32 */
 
 #ifdef HAVE_GNUTLS
-  gnutls_global_init();
-#endif /* HAVE_GNUTLS */
+ /*
+  * Make sure we handle threading properly...
+  */
 
-#ifdef HAVE_LIBSSL
+#  ifdef HAVE_PTHREAD_H
+  gcry_control(GCRYCTL_SET_THREAD_CBS, &gcry_threads_pthread);
+#  endif /* HAVE_PTHREAD_H */
+
+ /*
+  * Initialize GNU TLS...
+  */
+
+  gnutls_global_init();
+
+#elif defined(HAVE_LIBSSL)
+ /*
+  * Initialize OpenSSL...
+  */
+
   SSL_load_error_strings();
   SSL_library_init();
+
+ /*
+  * Set the threading callbacks...
+  */
+
+#  ifdef HAVE_PTHREAD_H
+  http_locks = calloc(CRYPTO_num_locks(), sizeof(pthread_mutex_t));
+
+  for (i = 0; i < CRYPTO_num_locks(); i ++)
+    pthread_mutex_init(http_locks + i, NULL);
+
+  CRYPTO_set_id_callback(http_threadid_cb);
+  CRYPTO_set_locking_callback(http_locking_cb);
+#  endif /* HAVE_PTHREAD_H */
 
  /*
   * Using the current time is a dubious random seed, but on some systems
   * it is the best we can do (on others, this seed isn't even used...)
   */
 
-#  ifdef WIN32
-#  else
-  gettimeofday(&curtime, NULL);
-  srand(curtime.tv_sec + curtime.tv_usec);
-#  endif /* WIN32 */
+  CUPS_SRAND(time(NULL));
 
   for (i = 0; i < sizeof(data); i ++)
-    data[i] = rand();
+    data[i] = CUPS_RAND();
 
   RAND_seed(data, sizeof(data));
-#endif /* HAVE_LIBSSL */
+#endif /* HAVE_GNUTLS */
+
+  initialized = 1;
 }
 
 
@@ -1816,7 +1863,7 @@ httpSetAuthString(http_t     *http,	/* I - Connection to server */
 
 
 /*
- * 'httpSetCookie()' - Set the cookie value(s)...
+ * 'httpSetCookie()' - Set the cookie value(s).
  *
  * @since CUPS 1.1.19/Mac OS X 10.3@
  */
@@ -2283,7 +2330,7 @@ httpWait(http_t *http,			/* I - Connection to server */
  *
  * @deprecated@
  */
- 
+
 int					/* O - Number of bytes written */
 httpWrite(http_t     *http,		/* I - Connection to server */
           const char *buffer,		/* I - Buffer for data */
@@ -2298,7 +2345,7 @@ httpWrite(http_t     *http,		/* I - Connection to server */
  *
  * @since CUPS 1.2/Mac OS X 10.5@
  */
- 
+
 ssize_t					/* O - Number of bytes written */
 httpWrite2(http_t     *http,		/* I - Connection to server */
            const char *buffer,		/* I - Buffer for data */
@@ -2456,7 +2503,7 @@ _httpWriteCDSA(
   else
   {
     *dataLength = 0;
-  
+
     if (errno == EAGAIN)
       result = errSSLWouldBlock;
     else
@@ -2517,7 +2564,7 @@ http_bio_ctrl(BIO  *h,			/* I - BIO data */
 	}
 	else
 	  return (0);
-        
+
     case BIO_CTRL_DUP :
     case BIO_CTRL_FLUSH :
         return (1);
@@ -2719,7 +2766,36 @@ http_read_ssl(http_t *http,		/* I - Connection to server */
   return (SSL_read((SSL *)(http->tls), buf, len));
 
 #  elif defined(HAVE_GNUTLS)
-  return (gnutls_record_recv(((http_tls_t *)(http->tls))->session, buf, len));
+  ssize_t	result;			/* Return value */
+
+
+  result = gnutls_record_recv(((http_tls_t *)(http->tls))->session, buf, len);
+
+  if (result < 0 && !errno)
+  {
+   /*
+    * Convert GNU TLS error to errno value...
+    */
+
+    switch (result)
+    {
+      case GNUTLS_E_INTERRUPTED :
+	  errno = EINTR;
+	  break;
+
+      case GNUTLS_E_AGAIN :
+          errno = EAGAIN;
+          break;
+
+      default :
+          errno = EPIPE;
+          break;
+    }
+
+    result = -1;
+  }
+
+  return ((int)result);
 
 #  elif defined(HAVE_CDSASSL)
   int		result;			/* Return value */
@@ -2756,6 +2832,25 @@ http_read_ssl(http_t *http,		/* I - Connection to server */
 #  endif /* HAVE_LIBSSL */
 }
 #endif /* HAVE_SSL */
+
+
+#if defined(HAVE_LIBSSL) && defined(HAVE_PTHREAD_H)
+/*
+ * 'http_locking_cb()' - Lock/unlock a thread's mutex.
+ */
+
+static void
+http_locking_cb(int        mode,	/* I - Lock mode */
+		int        type,	/* I - Lock type */
+		const char *file,	/* I - Source file */
+		int        line)	/* I - Line number */
+{
+  if (mode & CRYPTO_LOCK)
+    pthread_mutex_lock(http_locks + type);
+  else
+    pthread_mutex_unlock(http_locks + type);
+}
+#endif /* HAVE_LIBSSL && HAVE_PTHREAD_H */
 
 
 /*
@@ -2857,7 +2952,7 @@ http_send(http_t       *http,	/* I - Connection to server */
       DEBUG_printf(("9http_send: %s: %s", http_fields[i],
                     httpGetField(http, i)));
 
-      if (httpPrintf(http, "%s: %s\r\n", http_fields[i], 
+      if (httpPrintf(http, "%s: %s\r\n", http_fields[i],
 		     httpGetField(http, i)) < 1)
       {
 	http->status = HTTP_ERROR;
@@ -2896,15 +2991,15 @@ http_send(http_t       *http,	/* I - Connection to server */
   * The Kerberos and AuthRef authentication strings can only be used once...
   */
 
-  if (http->field_authorization && http->authstring && 
-      (!strncmp(http->authstring, "Negotiate", 9) || 
+  if (http->field_authorization && http->authstring &&
+      (!strncmp(http->authstring, "Negotiate", 9) ||
        !strncmp(http->authstring, "AuthRef", 7)))
   {
     http->_authstring[0] = '\0';
 
     if (http->authstring != http->_authstring)
       free(http->authstring);
-  
+
     http->authstring = http->_authstring;
   }
 
@@ -3129,6 +3224,19 @@ http_shutdown_ssl(http_t *http)		/* I - Connection to server */
 #endif /* HAVE_SSL */
 
 
+#if defined(HAVE_LIBSSL) && defined(HAVE_PTHREAD_H)
+/*
+ * 'http_threadid_cb()' - Return the current thread ID.
+ */
+
+static unsigned long			/* O - Thread ID */
+http_threadid_cb(void)
+{
+  return ((unsigned long)pthread_self());
+}
+#endif /* HAVE_LIBSSL && HAVE_PTHREAD_H */
+
+
 #ifdef HAVE_SSL
 /*
  * 'http_upgrade()' - Force upgrade to TLS encryption.
@@ -3220,7 +3328,7 @@ http_upgrade(http_t *http)		/* I - Connection to server */
 /*
  * 'http_write()' - Write a buffer to a HTTP connection.
  */
- 
+
 static int				/* O - Number of bytes written */
 http_write(http_t     *http,		/* I - Connection to server */
            const char *buffer,		/* I - Buffer for data */
@@ -3335,7 +3443,36 @@ http_write_ssl(http_t     *http,	/* I - Connection to server */
   return (SSL_write((SSL *)(http->tls), buf, len));
 
 #  elif defined(HAVE_GNUTLS)
-  return (gnutls_record_send(((http_tls_t *)(http->tls))->session, buf, len));
+  ssize_t	result;			/* Return value */
+
+  result = gnutls_record_send(((http_tls_t *)(http->tls))->session, buf, len);
+
+  if (result < 0 && !errno)
+  {
+   /*
+    * Convert GNU TLS error to errno value...
+    */
+
+    switch (result)
+    {
+      case GNUTLS_E_INTERRUPTED :
+	  errno = EINTR;
+	  break;
+
+      case GNUTLS_E_AGAIN :
+          errno = EAGAIN;
+          break;
+
+      default :
+          errno = EPIPE;
+          break;
+    }
+
+    result = -1;
+  }
+
+  return ((int)result);
+
 #  elif defined(HAVE_CDSASSL)
   int		result;			/* Return value */
   OSStatus	error;			/* Error info */
@@ -3358,11 +3495,11 @@ http_write_ssl(http_t     *http,	/* I - Connection to server */
 	else
 	{
 	  result = -1;
-	  errno = EINTR;
+	  errno  = EINTR;
 	}
 	break;
     default :
-	errno = EPIPE;
+	errno  = EPIPE;
 	result = -1;
 	break;
   }

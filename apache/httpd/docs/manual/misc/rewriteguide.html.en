@@ -1300,9 +1300,9 @@ www   IN  A       1.2.3.5
 
               <p>A sophisticated DNS-based method for
               load-balancing is to use the program
-              <code>lbnamed</code> which can be found at <a href="http://www.stanford.edu/~schemers/docs/lbnamed/lbnamed.html">
-              http://www.stanford.edu/~schemers/docs/lbnamed/lbnamed.html</a>.
-              It is a Perl 5 program in conjunction with auxilliary
+              <code>lbnamed</code> which can be found at <a href="http://www.stanford.edu/~riepel/lbnamed/">
+              http://www.stanford.edu/~riepel/lbnamed/</a>.
+              It is a Perl 5 program in conjunction with auxiliary
               tools which provides a real load-balancing for
               DNS.</p>
             </li>
@@ -1753,10 +1753,10 @@ RewriteMap    vhost        txt:/path/to/vhost.map
 #   via a huge and complicated single rule:
 #
 #   1. make sure we don't map for common locations
-RewriteCond   %{REQUEST_URL}  !^/commonurl1/.*
-RewriteCond   %{REQUEST_URL}  !^/commonurl2/.*
+RewriteCond   %{REQUEST_URI}  !^/commonurl1/.*
+RewriteCond   %{REQUEST_URI}  !^/commonurl2/.*
     :
-RewriteCond   %{REQUEST_URL}  !^/commonurlN/.*
+RewriteCond   %{REQUEST_URI}  !^/commonurlN/.*
 #
 #   2. make sure we have a Host header, because
 #      currently our approach only supports
@@ -2104,6 +2104,6 @@ while (&lt;&gt;) {
 <p><span>Available Languages: </span><a href="../en/misc/rewriteguide.html" title="English">&nbsp;en&nbsp;</a> |
 <a href="../ko/misc/rewriteguide.html" hreflang="ko" rel="alternate" title="Korean">&nbsp;ko&nbsp;</a></p>
 </div><div id="footer">
-<p class="apache">Copyright 2008 The Apache Software Foundation.<br />Licensed under the <a href="http://www.apache.org/licenses/LICENSE-2.0">Apache License, Version 2.0</a>.</p>
+<p class="apache">Copyright 2009 The Apache Software Foundation.<br />Licensed under the <a href="http://www.apache.org/licenses/LICENSE-2.0">Apache License, Version 2.0</a>.</p>
 <p class="menu"><a href="../mod/">Modules</a> | <a href="../mod/directives.html">Directives</a> | <a href="../faq/">FAQ</a> | <a href="../glossary.html">Glossary</a> | <a href="../sitemap.html">Sitemap</a></p></div>
 </body></html>

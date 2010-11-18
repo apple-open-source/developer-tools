@@ -308,14 +308,15 @@ bool IOHIDLibUserClient::resourceNotification(void * refcon, IOService *service,
 void IOHIDLibUserClient::resourceNotificationGated()
 {
 	IOReturn ret = kIOReturnSuccess;
-	OSData * data;
-	IOService * service = getResourceService();
 	
 	do {
 		// We should force success on seize
 		if ( kIOHIDOptionsTypeSeizeDevice & fCachedOptionBits )
 			break;
 		
+#if !TARGET_OS_EMBEDDED
+        OSData * data;
+        IOService * service = getResourceService();
 		if ( !service ) {
 			ret = kIOReturnError;
 			break;
@@ -351,7 +352,7 @@ void IOHIDLibUserClient::resourceNotificationGated()
 			return;
 			
 		fCachedConsoleUsersSeed = currentSeed;
-
+#endif
 		ret = clientHasPrivilege(fClient, kIOClientPrivilegeAdministrator);
 		if (ret == kIOReturnSuccess)
 			break;
@@ -528,6 +529,11 @@ void IOHIDLibUserClient::free()
 		fWL = 0;
 	}
 	
+    if ( fValidMessage ) {
+        IOFree(fValidMessage, sizeof (struct _notifyMsg));
+        fValidMessage = NULL;
+    }
+    
 	super::free();
 }
 
@@ -544,7 +550,7 @@ IOReturn IOHIDLibUserClient::messageGated(UInt32 type, IOService * provider, voi
 	switch ( type ) {
 		case kIOMessageServiceIsRequestingClose:
 			if ((options & kIOHIDOptionsTypeSeizeDevice) && (options != fCachedOptionBits))
-				setValid(false);
+ 				setValid(false);
 			break;
 			
 		case kIOMessageServiceWasClosed:
@@ -1311,13 +1317,12 @@ IOHIDEventQueue* IOHIDLibUserClient::getQueueForToken(u_int token)
 u_int IOHIDLibUserClient::getNextTokenForToken(u_int token)
 {
 	u_int next_token = (token < kIOHIDLibUserClientQueueTokenOffset) ? 
-								kIOHIDLibUserClientQueueTokenOffset : token;
+								kIOHIDLibUserClientQueueTokenOffset - 1 : token;
 	
-	IOHIDEventQueue *queue = NULL;
-	
+    IOHIDEventQueue *queue = NULL;
+    
 	do {
-		next_token++;
-		queue = getQueueForToken(next_token);
+		queue = getQueueForToken(++next_token);
 	}
 	while ((next_token < fQueueMap->getCount() + kIOHIDLibUserClientQueueTokenOffset) && (queue == NULL));
 	

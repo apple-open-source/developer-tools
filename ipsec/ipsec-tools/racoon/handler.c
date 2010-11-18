@@ -732,6 +732,14 @@ delph2(iph2)
 		unlink_sainfo_from_ph2(iph2->sainfo);
 		iph2->sainfo = NULL;
 	}
+	if (iph2->ext_nat_id) {
+		vfree(iph2->ext_nat_id);
+		iph2->ext_nat_id = NULL;
+	}
+	if (iph2->ext_nat_id_p) {
+		vfree(iph2->ext_nat_id_p);
+		iph2->ext_nat_id_p = NULL;
+	}
 #endif
 
 	racoon_free(iph2);
@@ -772,7 +780,9 @@ flushph2(int ignore_established_handles)
 
 	for (p = LIST_FIRST(&ph2tree); p; p = next) {
 		next = LIST_NEXT(p, chain);
-		
+		if (p->is_dying || p->status == PHASE2ST_EXPIRED) {
+			continue;
+		}
 		if (p->status == PHASE2ST_ESTABLISHED){
 			if (ignore_established_handles) {
 				plog(LLV_DEBUG2, LOCATION, NULL,
@@ -812,6 +822,9 @@ deleteallph2(src, dst, proto_id)
 
 	for (iph2 = LIST_FIRST(&ph2tree); iph2 != NULL; iph2 = next) {
 		next = LIST_NEXT(iph2, chain);
+		if (iph2->is_dying || iph2->status == PHASE2ST_EXPIRED) {
+			continue;
+		}
 		if (iph2->proposal == NULL && iph2->approval == NULL)
 			continue;
 		if (cmpsaddrwop(src, iph2->src) != 0 ||
@@ -1195,7 +1208,7 @@ sweep_recvdpkt(dummy)
 		}
 	}
 
-	sched_new(lt, sweep_recvdpkt, NULL);
+	sched_new(lt, sweep_recvdpkt, &rcptree);
 }
 
 void
@@ -1208,6 +1221,7 @@ clear_recvdpkt()
 		rem_recvdpkt(r);
 		del_recvdpkt(r);
 	}
+	sched_scrub_param(&rcptree);
 }
 
 void
@@ -1217,7 +1231,7 @@ init_recvdpkt()
 
 	LIST_INIT(&rcptree);
 
-	sched_new(lt, sweep_recvdpkt, NULL);
+	sched_new(lt, sweep_recvdpkt, &rcptree);
 }
 
 #ifdef ENABLE_HYBRID
@@ -1316,12 +1330,15 @@ purgephXbyspid(u_int32_t spid,
     // do ph2's first... we need the ph1s for notifications
 	LIST_FOREACH(iph2, &ph2tree, chain) {
 		if (spid == iph2->spid) {
+			if (iph2->is_dying || iph2->status == PHASE2ST_EXPIRED) {
+				continue;
+			}
             if (iph2->status == PHASE2ST_ESTABLISHED) {
                 isakmp_info_send_d2(iph2);
             }
-            isakmp_ph2expire(iph2); // iph2 will go down 1 second later.
             ike_session_stopped_by_controller(iph2->parent_session,
                                               ike_session_stopped_by_flush);
+            isakmp_ph2expire(iph2); // iph2 will go down 1 second later.
         }
     }
 
@@ -1330,6 +1347,9 @@ purgephXbyspid(u_int32_t spid,
 		if (spid == iph2->spid) {
             if (del_boundph1 && iph2->parent_session) {
                 for (iph1 = LIST_FIRST(&iph2->parent_session->ikev1_state.ph1tree); iph1; iph1 = LIST_NEXT(iph1, ph1ofsession_chain)) {
+					if (iph1->is_dying || iph1->status == PHASE1ST_EXPIRED) {
+						continue;
+					}
                     if (iph1->status == PHASE1ST_ESTABLISHED) {
                         isakmp_info_send_d1(iph1);
                     }

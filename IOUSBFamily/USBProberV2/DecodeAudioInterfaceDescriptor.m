@@ -27,10 +27,6 @@
 
 @implementation DecodeAudioInterfaceDescriptor
 +(void)decodeBytes:(UInt8 *)descriptor forDevice:(BusProbeDevice *)thisDevice {
-    GenericAudioDescriptorPtr			desc = (GenericAudioDescriptorPtr) descriptor;
-    auto AudioCtrlHdrDescriptorPtr		pAudioHdrDesc;
-	pAudioHdrDesc = (AudioCtrlHdrDescriptorPtr)desc;
-
 	if ( [[thisDevice lastInterfaceClassInfo]protocolNum] < 0x20 )
 		decodeBytes10( descriptor, thisDevice );
 	else
@@ -64,7 +60,7 @@ void decodeBytes10( UInt8 *descriptor, BusProbeDevice * thisDevice ) {
     {
         IOUSBEndpointDescriptor	*	pEndpointDesc = ( IOUSBEndpointDescriptor * ) desc;
 
-        if( sizeof( AS_IsocEndPtDesc ) == desc->descLen )
+        if ( sizeof( AS_IsocEndPtDesc ) == desc->descLen )
             sprintf((char *)buf, "Standard AS Audio EndPoint");
         else
             sprintf((char *)buf, "Class-Specific AS Audio EndPoint"); 
@@ -101,7 +97,7 @@ void decodeBytes10( UInt8 *descriptor, BusProbeDevice * thisDevice ) {
     if ( ((GenericAudioDescriptorPtr)desc)->descType != CS_INTERFACE )
         return;
 
-    if( AC_CONTROL_SUBCLASS == [[thisDevice lastInterfaceClassInfo] subclassNum] )
+    if ( AC_CONTROL_SUBCLASS == [[thisDevice lastInterfaceClassInfo] subclassNum] )
     {
         switch ( ((GenericAudioDescriptorPtr)desc)->descSubType )
         {
@@ -112,7 +108,7 @@ void decodeBytes10( UInt8 *descriptor, BusProbeDevice * thisDevice ) {
                 sprintf((char *)buf, "Audio Class Specific Input Terminal");
                 break;
             case ACS_OUTPUT_TERMINAL:
-                sprintf((char *)buf, "Audio Class Specific Ouput Terminal");
+                sprintf((char *)buf, "Audio Class Specific Output Terminal");
                 break;
             case ACS_MIXER_UNIT:
                 sprintf((char *)buf, "Audio Class Specific Mixer Unit");
@@ -133,7 +129,7 @@ void decodeBytes10( UInt8 *descriptor, BusProbeDevice * thisDevice ) {
                 sprintf((char *)buf, "Uknown AC_CONTROL_SUBCLASS SubClass");
         }
     }
-    else if( AC_STREAM_SUBCLASS == [[thisDevice lastInterfaceClassInfo] subclassNum] )
+    else if ( AC_STREAM_SUBCLASS == [[thisDevice lastInterfaceClassInfo] subclassNum] )
     {
         switch ( ((GenericAudioDescriptorPtr)desc)->descSubType )
         {
@@ -260,7 +256,7 @@ void decodeBytes10( UInt8 *descriptor, BusProbeDevice * thisDevice ) {
                 sprintf((char *)buf, 	"0x%x (%s)", pAudioInTermDesc->descTermType, s );
                 [thisDevice addProperty:"Input Terminal Type:" withValue:buf atDepth:INTERFACE_LEVEL+1];
 
-                if( !pAudioInTermDesc->descOutTermID )
+                if ( !pAudioInTermDesc->descOutTermID )
                 {
                     sprintf((char *)buf, "%u [NONE]", pAudioInTermDesc->descOutTermID );
                 }
@@ -295,7 +291,7 @@ void decodeBytes10( UInt8 *descriptor, BusProbeDevice * thisDevice ) {
 
                 for( tempIndex = 0; tempIndex < 12; tempIndex++ )
                 {
-                    if( pAudioInTermDesc->descChannelConfig & (1 <<  tempIndex) )
+                    if ( pAudioInTermDesc->descChannelConfig & (1 <<  tempIndex) )
                     {
                         switch( tempIndex )
                         {
@@ -319,7 +315,7 @@ void decodeBytes10( UInt8 *descriptor, BusProbeDevice * thisDevice ) {
                 sprintf((char *)buf, "%u", pAudioInTermDesc->descChannelNames );
                 [thisDevice addProperty:"String index for first logical channel:" withValue:buf atDepth:INTERFACE_LEVEL+1];
 
-                if( !pAudioInTermDesc->descTermName )
+                if ( !pAudioInTermDesc->descTermName )
                 {
                     sprintf((char *)buf, "%u [NONE]", pAudioInTermDesc->descTermName );
                 }
@@ -399,7 +395,7 @@ void decodeBytes10( UInt8 *descriptor, BusProbeDevice * thisDevice ) {
                 sprintf((char *)buf, 	"0x%x (%s)", pAudioOutTermDesc->descTermType, s );
                 [thisDevice addProperty:"Output Terminal Type:" withValue:buf atDepth:INTERFACE_LEVEL+1];
 
-                if( !pAudioOutTermDesc->descInTermID )
+                if ( !pAudioOutTermDesc->descInTermID )
                 {
                     sprintf((char *)buf, "%u [NONE]", pAudioOutTermDesc->descInTermID );
                 }
@@ -414,7 +410,7 @@ void decodeBytes10( UInt8 *descriptor, BusProbeDevice * thisDevice ) {
                 [thisDevice addProperty:"Source ID:" withValue:buf atDepth:INTERFACE_LEVEL+1];
 
 
-                if( !pAudioOutTermDesc->descTermName )
+                if ( !pAudioOutTermDesc->descTermName )
                 {
                     sprintf((char *)buf, "%u [NONE]", pAudioOutTermDesc->descTermName );
                 }
@@ -514,7 +510,6 @@ void decodeBytes10( UInt8 *descriptor, BusProbeDevice * thisDevice ) {
 					n = 4;
 					ch = ((pAudioFeatureDesc->descLen - 6)/n) - 1;
 				}
-                ch = ((pAudioFeatureDesc->descLen - 7)/n) - 1;
 					sprintf((char *)buf,	"%u", ch );
                 [thisDevice addProperty:"Number of Channels (ch):" withValue:buf atDepth:INTERFACE_LEVEL+1];
 
@@ -825,7 +820,7 @@ void decodeBytes20( UInt8 *descriptor, BusProbeDevice * thisDevice ) {
     {
         IOUSBEndpointDescriptor	*	pEndpointDesc = ( IOUSBEndpointDescriptor * ) desc;
 
-        if( sizeof( AS_IsocEndPtDesc ) == desc->descLen )
+        if ( sizeof( AS_IsocEndPtDesc ) == desc->descLen )
             sprintf((char *)buf, "Standard AS Audio EndPoint");
         else
             sprintf((char *)buf, "Class-Specific AS Audio EndPoint"); 
@@ -862,7 +857,7 @@ void decodeBytes20( UInt8 *descriptor, BusProbeDevice * thisDevice ) {
     if ( ((GenericAudioDescriptorPtr)desc)->descType != CS_INTERFACE )
         return;
 
-    if( AC_CONTROL_SUBCLASS == [[thisDevice lastInterfaceClassInfo] subclassNum] )
+    if ( AC_CONTROL_SUBCLASS == [[thisDevice lastInterfaceClassInfo] subclassNum] )
     {
         switch ( ((GenericAudioDescriptorPtr)desc)->descSubType )
         {
@@ -876,7 +871,7 @@ void decodeBytes20( UInt8 *descriptor, BusProbeDevice * thisDevice ) {
                 sprintf((char *)buf, "Audio Class Specific Clock Source");
                 break;
             case ACS_OUTPUT_TERMINAL:
-                sprintf((char *)buf, "Audio Class Specific Ouput Terminal");
+                sprintf((char *)buf, "Audio Class Specific Output Terminal");
                 break;
             case ACS_MIXER_UNIT:
                 sprintf((char *)buf, "Audio Class Specific Mixer Unit");
@@ -897,7 +892,7 @@ void decodeBytes20( UInt8 *descriptor, BusProbeDevice * thisDevice ) {
                 sprintf((char *)buf, "Uknown AC_CONTROL_SUBCLASS SubClass");
         }
     }
-    else if( AC_STREAM_SUBCLASS == [[thisDevice lastInterfaceClassInfo] subclassNum] )
+    else if ( AC_STREAM_SUBCLASS == [[thisDevice lastInterfaceClassInfo] subclassNum] )
     {
         switch ( ((GenericAudioDescriptorPtr)desc)->descSubType )
         {
@@ -1012,7 +1007,7 @@ void decodeBytes20( UInt8 *descriptor, BusProbeDevice * thisDevice ) {
                 sprintf((char *)buf, 	"0x%x (%s)", pAudioInTermDesc->descTermType, s );
                 [thisDevice addProperty:"Input Terminal Type:" withValue:buf atDepth:INTERFACE_LEVEL+1];
 
-                if( !pAudioInTermDesc->descOutTermID )
+                if ( !pAudioInTermDesc->descOutTermID )
                 {
                     sprintf((char *)buf, "%u [NONE]", pAudioInTermDesc->descOutTermID );
                 }
@@ -1047,7 +1042,7 @@ void decodeBytes20( UInt8 *descriptor, BusProbeDevice * thisDevice ) {
 
                 for( tempIndex = 0; tempIndex < 12; tempIndex++ )
                 {
-                    if( pAudioInTermDesc->descChannelConfig & (1 <<  tempIndex) )
+                    if ( pAudioInTermDesc->descChannelConfig & (1 <<  tempIndex) )
                     {
                         switch( tempIndex )
                         {
@@ -1071,7 +1066,7 @@ void decodeBytes20( UInt8 *descriptor, BusProbeDevice * thisDevice ) {
                 sprintf((char *)buf, "%u", pAudioInTermDesc->descChannelNames );
                 [thisDevice addProperty:"String index for first logical channel:" withValue:buf atDepth:INTERFACE_LEVEL+1];
 
-                if( !pAudioInTermDesc->descTermName )
+                if ( !pAudioInTermDesc->descTermName )
                 {
                     sprintf((char *)buf, "%u [NONE]", pAudioInTermDesc->descTermName );
                 }
@@ -1105,7 +1100,7 @@ void decodeBytes20( UInt8 *descriptor, BusProbeDevice * thisDevice ) {
 				sprintf((char *)buf, "%u", pAudioClockSourceDesc->descAssocTermID );
 				[thisDevice addProperty:"Associated Terminal:" withValue:buf atDepth:INTERFACE_LEVEL+1];
   
-				if( !pAudioClockSourceDesc->desciClockSourceName )
+				if ( !pAudioClockSourceDesc->desciClockSourceName )
                 {
                     sprintf((char *)buf, "%u [NONE]", pAudioClockSourceDesc->desciClockSourceName );
                 }
@@ -1186,7 +1181,7 @@ void decodeBytes20( UInt8 *descriptor, BusProbeDevice * thisDevice ) {
                 sprintf((char *)buf, 	"0x%x (%s)", pAudioOutTermDesc->descTermType, s );
                 [thisDevice addProperty:"Output Terminal Type:" withValue:buf atDepth:INTERFACE_LEVEL+1];
 
-                if( !pAudioOutTermDesc->descInTermID )
+                if ( !pAudioOutTermDesc->descInTermID )
                 {
                     sprintf((char *)buf, "%u [NONE]", pAudioOutTermDesc->descInTermID );
                 }
@@ -1201,7 +1196,7 @@ void decodeBytes20( UInt8 *descriptor, BusProbeDevice * thisDevice ) {
                 [thisDevice addProperty:"Source ID:" withValue:buf atDepth:INTERFACE_LEVEL+1];
 
 
-                if( !pAudioOutTermDesc->descTermName )
+                if ( !pAudioOutTermDesc->descTermName )
                 {
                     sprintf((char *)buf, "%u [NONE]", pAudioOutTermDesc->descTermName );
                 }

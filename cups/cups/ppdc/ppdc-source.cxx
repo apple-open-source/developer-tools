@@ -1,9 +1,9 @@
 //
-// "$Id: ppdc-source.cxx 1558 2009-06-10 19:21:50Z msweet $"
+// "$Id: ppdc-source.cxx 1821 2010-01-14 23:05:18Z msweet $"
 //
 //   Source class for the CUPS PPD Compiler.
 //
-//   Copyright 2007-2009 by Apple Inc.
+//   Copyright 2007-2010 by Apple Inc.
 //   Copyright 2002-2007 by Easy Software Products.
 //
 //   These coded instructions, statements, and computer programs are the
@@ -1321,7 +1321,7 @@ ppdcSource::get_integer(const char *v)	// I - Value string
     while (*v && *v != ')')
     {
       // Skip leading whitespace...
-      while (*v && isspace(*v & 255));
+      while (*v && isspace(*v & 255))
         v ++;
 
       if (!*v || *v == ')')
@@ -3514,7 +3514,8 @@ ppdcSource::write_file(const char *f)	// I - File to write
   for (d = (ppdcDriver *)drivers->first(); d; d = (ppdcDriver *)drivers->next())
   {
     // Start the driver...
-    cupsFilePrintf(fp, "\n// %s %s\n", d->manufacturer->value, d->model_name->value);
+    cupsFilePrintf(fp, "\n// %s %s\n", d->manufacturer->value,
+                   d->model_name->value);
     cupsFilePuts(fp, "{\n");
 
     // Write the copyright stings...
@@ -3896,5 +3897,5 @@ ppdcSource::write_file(const char *f)	// I - File to write
 
 
 //
-// End of "$Id: ppdc-source.cxx 1558 2009-06-10 19:21:50Z msweet $".
+// End of "$Id: ppdc-source.cxx 1821 2010-01-14 23:05:18Z msweet $".
 //

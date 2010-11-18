@@ -3,7 +3,7 @@
  *
  *   IEEE-1284 support functions for the Common UNIX Printing System (CUPS).
  *
- *   Copyright 2007-2008 by Apple Inc.
+ *   Copyright 2007-2009 by Apple Inc.
  *   Copyright 1997-2007 by Easy Software Products, all rights reserved.
  *
  *   These coded instructions, statements, and computer programs are the
@@ -26,26 +26,6 @@
  */
 
 #include "backend-private.h"
-
-#ifdef __linux
-#  include <sys/ioctl.h>
-#  include <linux/lp.h>
-#  define IOCNR_GET_DEVICE_ID		1
-#  define LPIOC_GET_DEVICE_ID(len)	_IOC(_IOC_READ, 'P', IOCNR_GET_DEVICE_ID, len)
-#  include <linux/parport.h>
-#  include <linux/ppdev.h>
-#  include <unistd.h>
-#  include <fcntl.h>
-#endif /* __linux */
-
-#ifdef __sun
-#  ifdef __sparc
-#    include <sys/ecppio.h>
-#  else
-#    include <sys/ioccom.h>
-#    include <sys/ecppsys.h>
-#  endif /* __sparc */
-#endif /* __sun */
 
 
 /*
@@ -196,20 +176,43 @@ backendGetDeviceID(
       * and then limit the length to the size of our buffer...
       */
 
-      if (length > (device_id_size - 2))
+      if (length > device_id_size)
 	length = (((unsigned)device_id[1] & 255) << 8) +
 		 ((unsigned)device_id[0] & 255);
 
-      if (length > (device_id_size - 2))
-	length = device_id_size - 2;
+      if (length > device_id_size)
+	length = device_id_size;
 
      /*
-      * Copy the device ID text to the beginning of the buffer and
-      * nul-terminate.
+      * The length field counts the number of bytes in the string
+      * including the length field itself (2 bytes).  The minimum
+      * length for a valid/usable device ID is 14 bytes:
+      *
+      *     <LENGTH> MFG: <MFG> ;MDL: <MDL> ;
+      *        2  +   4  +  1  +  5 +  1 +  1
       */
 
-      memmove(device_id, device_id + 2, length);
-      device_id[length] = '\0';
+      if (length < 14)
+      {
+       /*
+	* Can't use this device ID, so don't try to copy it...
+	*/
+
+	device_id[0] = '\0';
+	got_id       = 0;
+      }
+      else
+      {
+       /*
+	* Copy the device ID text to the beginning of the buffer and
+	* nul-terminate.
+	*/
+
+	length -= 2;
+
+	memmove(device_id, device_id + 2, length);
+	device_id[length] = '\0';
+      }
     }
 #    ifdef DEBUG
     else
@@ -306,6 +309,17 @@ backendGetDeviceID(
       mfg = temp;
     }
 
+    if (!mdl)
+      mdl = "";
+
+    if (!strncasecmp(mdl, mfg, strlen(mfg)))
+    {
+      mdl += strlen(mfg);
+
+      while (isspace(*mdl & 255))
+        mdl ++;
+    }
+
    /*
     * Generate the device URI from the manufacturer, make_model, and
     * serial number strings.
@@ -389,7 +403,11 @@ backendGetMakeModel(
 
       char	temp[1024];		/* Temporary make and model */
 
-      snprintf(temp, sizeof(temp), "%s %s", mfg, mdl);
+      if (mfg)
+	snprintf(temp, sizeof(temp), "%s %s", mfg, mdl);
+      else
+	snprintf(temp, sizeof(temp), "%s", mdl);
+
       _ppdNormalizeMakeAndModel(temp, make_model, make_model_size);
     }
   }

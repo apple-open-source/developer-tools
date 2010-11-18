@@ -466,6 +466,8 @@ execute_command (char *p, int from_tty)
     return;
 
   serial_log_command (p);
+  extern void log_command (char *);
+  log_command (p);
 
   while (*p == ' ' || *p == '\t')
     p++;

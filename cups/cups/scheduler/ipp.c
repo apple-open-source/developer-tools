@@ -3,7 +3,7 @@
  *
  *   IPP routines for the Common UNIX Printing System (CUPS) scheduler.
  *
- *   Copyright 2007-2009 by Apple Inc.
+ *   Copyright 2007-2010 by Apple Inc.
  *   Copyright 1997-2007 by Easy Software Products, all rights reserved.
  *
  *   This file contains Kerberos support code, copyright 2006 by
@@ -390,7 +390,7 @@ cupsdProcessIPPRequest(
 		     charset->values[0].string.text);
       else
 	ippAddString(con->response, IPP_TAG_OPERATION, IPP_TAG_CHARSET,
-        	     "attributes-charset", NULL, DefaultCharset);
+        	     "attributes-charset", NULL, "utf-8");
 
       if (language)
 	ippAddString(con->response, IPP_TAG_OPERATION, IPP_TAG_LANGUAGE,
@@ -830,6 +830,9 @@ cupsdTimeoutJob(cupsd_job_t *job)	/* I - Job to timeout */
   * See if we need to add the ending sheet...
   */
 
+  if (!cupsdLoadJob(job))
+    return (-1);
+
   printer = cupsdFindDest(job->dest);
   attr    = ippFindAttribute(job->attrs, "job-sheets", IPP_TAG_NAME);
 
@@ -903,6 +906,9 @@ accept_jobs(cupsd_client_t  *con,	/* I - Client connection */
   printer->state_message[0] = '\0';
 
   cupsdAddPrinterHistory(printer);
+
+  cupsdAddEvent(CUPSD_EVENT_PRINTER_STATE, printer, NULL,
+                "Now accepting jobs.");
 
   if (dtype & CUPS_PRINTER_CLASS)
   {
@@ -1102,7 +1108,8 @@ add_class(cupsd_client_t  *con,		/* I - Client connection */
     cupsdSetString(&pclass->info, attr->values[0].string.text);
 
   if ((attr = ippFindAttribute(con->request, "printer-is-accepting-jobs",
-                               IPP_TAG_BOOLEAN)) != NULL)
+                               IPP_TAG_BOOLEAN)) != NULL &&
+      attr->values[0].boolean != pclass->accepting)
   {
     cupsdLogMessage(CUPSD_LOG_INFO,
                     "Setting %s printer-is-accepting-jobs to %d (was %d.)",
@@ -1110,6 +1117,9 @@ add_class(cupsd_client_t  *con,		/* I - Client connection */
 
     pclass->accepting = attr->values[0].boolean;
     cupsdAddPrinterHistory(pclass);
+
+    cupsdAddEvent(CUPSD_EVENT_PRINTER_STATE, pclass, NULL, "%s accepting jobs.",
+		  pclass->accepting ? "Now" : "No longer");
   }
 
   if ((attr = ippFindAttribute(con->request, "printer-is-shared",
@@ -1154,6 +1164,9 @@ add_class(cupsd_client_t  *con,		/* I - Client connection */
     strlcpy(pclass->state_message, attr->values[0].string.text,
             sizeof(pclass->state_message));
     cupsdAddPrinterHistory(pclass);
+
+    cupsdAddEvent(CUPSD_EVENT_PRINTER_STATE, pclass, NULL, "%s",
+                  pclass->state_message);
   }
   if ((attr = ippFindAttribute(con->request, "member-uris",
                                IPP_TAG_URI)) != NULL)
@@ -1232,9 +1245,9 @@ add_class(cupsd_client_t  *con,		/* I - Client connection */
 
   if (modify)
   {
-    cupsdAddEvent(CUPSD_EVENT_PRINTER_MODIFIED, pclass, NULL,
-                  "Class \"%s\" modified by \"%s\".", pclass->name,
-        	  get_username(con));
+    cupsdAddEvent(CUPSD_EVENT_PRINTER_MODIFIED | CUPSD_EVENT_PRINTER_CONFIG,
+		  pclass, NULL, "Class \"%s\" modified by \"%s\".",
+		  pclass->name, get_username(con));
 
     cupsdLogMessage(CUPSD_LOG_INFO, "Class \"%s\" modified by \"%s\".",
                     pclass->name, get_username(con));
@@ -1243,9 +1256,9 @@ add_class(cupsd_client_t  *con,		/* I - Client connection */
   {
     cupsdAddPrinterHistory(pclass);
 
-    cupsdAddEvent(CUPSD_EVENT_PRINTER_ADDED, pclass, NULL,
-                  "New class \"%s\" added by \"%s\".", pclass->name,
-        	  get_username(con));
+    cupsdAddEvent(CUPSD_EVENT_PRINTER_ADDED | CUPSD_EVENT_PRINTER_CONFIG,
+		  pclass, NULL, "New class \"%s\" added by \"%s\".",
+		  pclass->name, get_username(con));
 
     cupsdLogMessage(CUPSD_LOG_INFO, "New class \"%s\" added by \"%s\".",
                     pclass->name, get_username(con));
@@ -1332,12 +1345,16 @@ add_job(cupsd_client_t  *con,		/* I - Client connection */
 		*auth_info;		/* auth-info attribute */
   const char	*val;			/* Default option value */
   int		priority;		/* Job priority */
-  char		*title;			/* Job name/title */
   cupsd_job_t	*job;			/* Current job */
   char		job_uri[HTTP_MAX_URI];	/* Job URI */
   int		kbytes;			/* Size of print file */
   int		i;			/* Looping var */
   int		lowerpagerange;		/* Page range bound */
+  const char	*ppd;			/* PPD keyword for media selection */
+  int		exact;			/* Did we have an exact match? */
+  ipp_attribute_t *media_col,		/* media-col attribute */
+		*media_margin;		/* media-*-margin attribute */
+  ipp_t		*unsup_col;		/* media-col in unsupported response */
 
 
   cupsdLogMessage(CUPSD_LOG_DEBUG2, "add_job(%p[%d], %p(%s), %p(%s/%s))",
@@ -1504,6 +1521,63 @@ add_job(cupsd_client_t  *con,		/* I - Client connection */
   }
 
  /*
+  * Do media selection as needed...
+  */
+
+  if (!ippFindAttribute(con->request, "InputSlot", IPP_TAG_ZERO) &&
+      (ppd = _pwgGetInputSlot(printer->pwg, con->request, NULL)) != NULL)
+    ippAddString(con->request, IPP_TAG_JOB, IPP_TAG_NAME, "InputSlot", NULL,
+                 ppd);
+
+  if (!ippFindAttribute(con->request, "MediaType", IPP_TAG_ZERO) &&
+      (ppd = _pwgGetMediaType(printer->pwg, con->request, NULL)) != NULL)
+    ippAddString(con->request, IPP_TAG_JOB, IPP_TAG_NAME, "MediaType", NULL,
+                 ppd);
+
+  if (!ippFindAttribute(con->request, "PageSize", IPP_TAG_ZERO) &&
+      (ppd = _pwgGetPageSize(printer->pwg, con->request, NULL, &exact)) != NULL)
+  {
+    ippAddString(con->request, IPP_TAG_JOB, IPP_TAG_NAME, "PageSize", NULL,
+                 ppd);
+
+    if (!exact &&
+        (media_col = ippFindAttribute(con->request, "media-col",
+	                              IPP_TAG_BEGIN_COLLECTION)) != NULL)
+    {
+      send_ipp_status(con, IPP_OK_SUBST, _("Unsupported margins."));
+
+      unsup_col = ippNew();
+      if ((media_margin = ippFindAttribute(media_col->values[0].collection,
+                                           "media-bottom-margin",
+					   IPP_TAG_INTEGER)) != NULL)
+        ippAddInteger(unsup_col, IPP_TAG_ZERO, IPP_TAG_INTEGER,
+	              "media-bottom-margin", media_margin->values[0].integer);
+
+      if ((media_margin = ippFindAttribute(media_col->values[0].collection,
+                                           "media-left-margin",
+					   IPP_TAG_INTEGER)) != NULL)
+        ippAddInteger(unsup_col, IPP_TAG_ZERO, IPP_TAG_INTEGER,
+	              "media-left-margin", media_margin->values[0].integer);
+
+      if ((media_margin = ippFindAttribute(media_col->values[0].collection,
+                                           "media-right-margin",
+					   IPP_TAG_INTEGER)) != NULL)
+        ippAddInteger(unsup_col, IPP_TAG_ZERO, IPP_TAG_INTEGER,
+	              "media-right-margin", media_margin->values[0].integer);
+
+      if ((media_margin = ippFindAttribute(media_col->values[0].collection,
+                                           "media-top-margin",
+					   IPP_TAG_INTEGER)) != NULL)
+        ippAddInteger(unsup_col, IPP_TAG_ZERO, IPP_TAG_INTEGER,
+	              "media-top-margin", media_margin->values[0].integer);
+
+      ippAddCollection(con->response, IPP_TAG_UNSUPPORTED_GROUP, "media-col",
+                       unsup_col);
+      ippDelete(unsup_col);
+    }
+  }
+
+ /*
   * Make sure we aren't over our limit...
   */
 
@@ -1547,12 +1621,9 @@ add_job(cupsd_client_t  *con,		/* I - Client connection */
                   priority);
   }
 
-  if ((attr = ippFindAttribute(con->request, "job-name",
-                               IPP_TAG_NAME)) != NULL)
-    title = attr->values[0].string.text;
-  else
+  if (!ippFindAttribute(con->request, "job-name", IPP_TAG_NAME))
     ippAddString(con->request, IPP_TAG_JOB, IPP_TAG_NAME, "job-name", NULL,
-                 title = "Untitled");
+                 "Untitled");
 
   if ((job = cupsdAddJob(priority, printer->name)) == NULL)
   {
@@ -1706,8 +1777,6 @@ add_job(cupsd_client_t  *con,		/* I - Client connection */
                               "job-media-sheets-completed", 0);
   ippAddString(job->attrs, IPP_TAG_JOB, IPP_TAG_URI, "job-printer-uri", NULL,
                printer->uri);
-  ippAddString(job->attrs, IPP_TAG_JOB, IPP_TAG_NAME, "job-name", NULL,
-               title);
 
   if ((attr = ippFindAttribute(job->attrs, "job-k-octets",
                                IPP_TAG_INTEGER)) != NULL)
@@ -1727,8 +1796,7 @@ add_job(cupsd_client_t  *con,		/* I - Client connection */
     attr = ippAddString(job->attrs, IPP_TAG_JOB, IPP_TAG_KEYWORD,
                         "job-hold-until", NULL, val);
   }
-  if (attr && strcmp(attr->values[0].string.text, "no-hold") &&
-      !(printer->type & CUPS_PRINTER_REMOTE))
+  if (attr && strcmp(attr->values[0].string.text, "no-hold"))
   {
    /*
     * Hold job until specified time...
@@ -2325,8 +2393,9 @@ add_printer(cupsd_client_t  *con,	/* I - Client connection */
 		dstfile[1024];		/* Destination Script/PPD file */
   int		modify;			/* Non-zero if we are modifying */
   char		newname[IPP_MAX_NAME];	/* New printer name */
-  int		need_restart_job;	/* Need to restart job? */
-  int		set_device_uri,		/* Did we set the device URI? */
+  int		changed_driver,		/* Changed the PPD/interface script? */
+		need_restart_job,	/* Need to restart job? */
+		set_device_uri,		/* Did we set the device URI? */
 		set_port_monitor;	/* Did we set the port monitor? */
 
 
@@ -2470,6 +2539,7 @@ add_printer(cupsd_client_t  *con,	/* I - Client connection */
   * Look for attributes and copy them over as needed...
   */
 
+  changed_driver   = 0;
   need_restart_job = 0;
 
   if ((attr = ippFindAttribute(con->request, "printer-location",
@@ -2608,7 +2678,8 @@ add_printer(cupsd_client_t  *con,	/* I - Client connection */
   }
 
   if ((attr = ippFindAttribute(con->request, "printer-is-accepting-jobs",
-                               IPP_TAG_BOOLEAN)) != NULL)
+                               IPP_TAG_BOOLEAN)) != NULL &&
+      attr->values[0].boolean != printer->accepting)
   {
     cupsdLogMessage(CUPSD_LOG_INFO,
                     "Setting %s printer-is-accepting-jobs to %d (was %d.)",
@@ -2616,6 +2687,10 @@ add_printer(cupsd_client_t  *con,	/* I - Client connection */
 
     printer->accepting = attr->values[0].boolean;
     cupsdAddPrinterHistory(printer);
+
+    cupsdAddEvent(CUPSD_EVENT_PRINTER_STATE, printer, NULL,
+                  "%s accepting jobs.",
+		  printer->accepting ? "Now" : "No longer");
   }
 
   if ((attr = ippFindAttribute(con->request, "printer-is-shared",
@@ -2660,6 +2735,9 @@ add_printer(cupsd_client_t  *con,	/* I - Client connection */
     strlcpy(printer->state_message, attr->values[0].string.text,
             sizeof(printer->state_message));
     cupsdAddPrinterHistory(printer);
+
+    cupsdAddEvent(CUPSD_EVENT_PRINTER_STATE, printer, NULL, "%s",
+                  printer->state_message);
   }
 
   if ((attr = ippFindAttribute(con->request, "printer-state-reasons",
@@ -2701,6 +2779,9 @@ add_printer(cupsd_client_t  *con,	/* I - Client connection */
 
     if (PrintcapFormat == PRINTCAP_PLIST)
       cupsdMarkDirty(CUPSD_DIRTY_PRINTCAP);
+
+    cupsdAddEvent(CUPSD_EVENT_PRINTER_STATE, printer, NULL,
+                  "Printer \"%s\" state changed.", printer->name);
   }
 
   set_printer_defaults(con, printer);
@@ -2723,6 +2804,7 @@ add_printer(cupsd_client_t  *con,	/* I - Client connection */
   if (con->filename)
   {
     need_restart_job = 1;
+    changed_driver   = 1;
 
     strlcpy(srcfile, con->filename, sizeof(srcfile));
 
@@ -2793,18 +2875,6 @@ add_printer(cupsd_client_t  *con,	/* I - Client connection */
 	cupsdLogMessage(CUPSD_LOG_DEBUG,
 			"Copied PPD file successfully!");
 	chmod(dstfile, 0644);
-
-#ifdef __APPLE__
-       /*
-        * (Re)register color profiles...
-	*/
-
-        if (!RunUser)
-	{
-	  apple_unregister_profiles(printer);
-	  apple_register_profiles(printer);
-        }
-#endif /* __APPLE__ */
       }
       else
       {
@@ -2821,6 +2891,7 @@ add_printer(cupsd_client_t  *con,	/* I - Client connection */
                                     IPP_TAG_NAME)) != NULL)
   {
     need_restart_job = 1;
+    changed_driver   = 1;
 
     if (!strcmp(attr->values[0].string.text, "raw"))
     {
@@ -2858,19 +2929,37 @@ add_printer(cupsd_client_t  *con,	/* I - Client connection */
       cupsdLogMessage(CUPSD_LOG_DEBUG,
 		      "Copied PPD file successfully!");
       chmod(dstfile, 0644);
+    }
+  }
+
+  if (changed_driver)
+  {
+   /*
+    * If we changed the PPD/interface script, then remove the printer's cache
+    * file...
+    */
+
+    char cache_name[1024];		/* Cache filename for printer attrs */
+
+    snprintf(cache_name, sizeof(cache_name), "%s/%s.ipp", CacheDir,
+             printer->name);
+    unlink(cache_name);
+
+    snprintf(cache_name, sizeof(cache_name), "%s/%s.pwg", CacheDir,
+             printer->name);
+    unlink(cache_name);
 
 #ifdef __APPLE__
-     /*
-      * (Re)register color profiles...
-      */
+   /*
+    * (Re)register color profiles...
+    */
 
-      if (!RunUser)
-      {
-	apple_unregister_profiles(printer);
-	apple_register_profiles(printer);
-      }
-#endif /* __APPLE__ */
+    if (!RunUser)
+    {
+      apple_unregister_profiles(printer);
+      apple_register_profiles(printer);
     }
+#endif /* __APPLE__ */
   }
 
  /*
@@ -2936,9 +3025,9 @@ add_printer(cupsd_client_t  *con,	/* I - Client connection */
 
   if (modify)
   {
-    cupsdAddEvent(CUPSD_EVENT_PRINTER_MODIFIED, printer, NULL,
-                  "Printer \"%s\" modified by \"%s\".", printer->name,
-        	  get_username(con));
+    cupsdAddEvent(CUPSD_EVENT_PRINTER_MODIFIED | CUPSD_EVENT_PRINTER_CONFIG,
+                  printer, NULL, "Printer \"%s\" modified by \"%s\".",
+		  printer->name, get_username(con));
 
     cupsdLogMessage(CUPSD_LOG_INFO, "Printer \"%s\" modified by \"%s\".",
                     printer->name, get_username(con));
@@ -2947,9 +3036,9 @@ add_printer(cupsd_client_t  *con,	/* I - Client connection */
   {
     cupsdAddPrinterHistory(printer);
 
-    cupsdAddEvent(CUPSD_EVENT_PRINTER_ADDED, printer, NULL,
-                  "New printer \"%s\" added by \"%s\".", printer->name,
-        	  get_username(con));
+    cupsdAddEvent(CUPSD_EVENT_PRINTER_ADDED | CUPSD_EVENT_PRINTER_CONFIG,
+                  printer, NULL, "New printer \"%s\" added by \"%s\".",
+		  printer->name, get_username(con));
 
     cupsdLogMessage(CUPSD_LOG_INFO, "New printer \"%s\" added by \"%s\".",
                     printer->name, get_username(con));
@@ -3194,7 +3283,7 @@ apple_register_profiles(
       num_profiles ++;
     }
 
-  
+
  /*
   * If we have profiles, add them...
   */
@@ -3240,7 +3329,7 @@ apple_register_profiles(
 	snprintf(q_keyword, sizeof(q_keyword), "Default%s", attr->value);
 	q2_attr = ppdFindAttr(ppd, q_keyword, NULL);
       }
-      else 
+      else
 	q2_attr = ppdFindAttr(ppd, "DefaultMediaType", NULL);
 
       if (q2_attr && q2_attr->value && q2_attr->value[0])
@@ -3254,7 +3343,7 @@ apple_register_profiles(
 	snprintf(q_keyword, sizeof(q_keyword), "Default%s", attr->value);
 	q3_attr = ppdFindAttr(ppd, q_keyword, NULL);
       }
-      else 
+      else
 	q3_attr = ppdFindAttr(ppd, "DefaultResolution", NULL);
 
       if (q3_attr && q3_attr->value && q3_attr->value[0])
@@ -3423,7 +3512,7 @@ apple_register_profiles(
     attr = ppdFindAttr(ppd, "DefaultColorSpace", NULL);
 
     num_profiles = (attr && ppd->colorspace == PPD_CS_GRAY) ? 1 : 2;
-      
+
     if ((profiles = calloc(num_profiles, sizeof(CMDeviceProfileArray))) == NULL)
     {
       cupsdLogMessage(CUPSD_LOG_ERROR,
@@ -4421,7 +4510,7 @@ check_quotas(cupsd_client_t  *con,	/* I - Client connection */
     if (q->page_count == -4) /* special case: unlimited user */
     {
       cupsdLogMessage(CUPSD_LOG_INFO,
-                      "User \"%s\" request approved for printer %s (%s): " 
+                      "User \"%s\" request approved for printer %s (%s): "
 		      "unlimited quota.",
 		      username, p->name, p->info);
       q->page_count = 0; /* allow user to print */
@@ -4653,9 +4742,8 @@ copy_attribute(
 
         for (i = 0; i < attr->num_values; i ++)
 	{
-	  toattr->values[i].collection = ippNew();
-	  copy_attrs(toattr->values[i].collection, attr->values[i].collection,
-	             NULL, IPP_TAG_ZERO, 0);
+	  toattr->values[i].collection = attr->values[i].collection;
+	  attr->values[i].collection->use ++;
 	}
         break;
 
@@ -4720,11 +4808,14 @@ copy_attrs(ipp_t        *to,		/* I - Destination request */
     {
      /*
       * Don't send collection attributes by default to IPP/1.x clients
-      * since many do not support collections...
+      * since many do not support collections.  Also don't send
+      * media-col-database unless specifically requested by the client.
       */
 
       if (fromattr->value_tag == IPP_TAG_BEGIN_COLLECTION &&
-          !ra && to->request.status.version[0] == 1)
+          !ra &&
+	  (to->request.status.version[0] == 1 ||
+	   !strcmp(fromattr->name, "media-col-database")))
 	continue;
 
       copy_attribute(to, fromattr, quickcopy);
@@ -5089,6 +5180,7 @@ copy_model(cupsd_client_t *con,		/* I - Client connection */
   int		i;			/* Looping var */
   char		option[PPD_MAX_NAME],	/* Option name */
 		choice[PPD_MAX_NAME];	/* Choice name */
+  ppd_size_t	*size;			/* Default size */
   int		num_defaults;		/* Number of default options */
   cups_option_t	*defaults;		/* Default options */
   char		cups_protocol[PPD_MAX_LINE];
@@ -5261,19 +5353,19 @@ copy_model(cupsd_client_t *con,		/* I - Client connection */
 
     cupsFileClose(dst);
   }
-  else if (ppdPageSize(ppd, DefaultPaperSize))
+  else if ((size = ppdPageSize(ppd, DefaultPaperSize)) != NULL)
   {
    /*
     * Add the default media sizes...
     */
 
-    num_defaults = cupsAddOption("PageSize", DefaultPaperSize,
+    num_defaults = cupsAddOption("PageSize", size->name,
                                  num_defaults, &defaults);
-    num_defaults = cupsAddOption("PageRegion", DefaultPaperSize,
+    num_defaults = cupsAddOption("PageRegion", size->name,
                                  num_defaults, &defaults);
-    num_defaults = cupsAddOption("PaperDimension", DefaultPaperSize,
+    num_defaults = cupsAddOption("PaperDimension", size->name,
                                  num_defaults, &defaults);
-    num_defaults = cupsAddOption("ImageableArea", DefaultPaperSize,
+    num_defaults = cupsAddOption("ImageableArea", size->name,
                                  num_defaults, &defaults);
   }
 
@@ -5415,6 +5507,8 @@ copy_printer_attrs(
 {
   char			printer_uri[HTTP_MAX_URI];
 					/* Printer URI */
+  char			printer_icons[HTTP_MAX_URI];
+					/* Printer icons */
   time_t		curtime;	/* Current time */
   int			i;		/* Looping var */
   ipp_attribute_t	*history;	/* History collection */
@@ -5520,6 +5614,16 @@ copy_printer_attrs(
       ippAddStrings(con->response, IPP_TAG_PRINTER, IPP_TAG_NAME | IPP_TAG_COPY,
 		    "printer-error-policy-supported",
 		    sizeof(errors) / sizeof(errors[0]), NULL, errors);
+  }
+
+  if (!ra || cupsArrayFind(ra, "printer-icons"))
+  {
+    httpAssembleURIf(HTTP_URI_CODING_ALL, printer_icons, sizeof(printer_icons),
+                     "http", NULL, con->servername, con->serverport,
+		     "/icons/%s.png", printer->name);
+    ippAddString(con->response, IPP_TAG_PRINTER, IPP_TAG_URI, "printer-icons",
+                 NULL, printer_icons);
+    cupsdLogMessage(CUPSD_LOG_DEBUG2, "printer-icons=\"%s\"", printer_icons);
   }
 
   if (!ra || cupsArrayFind(ra, "printer-is-accepting-jobs"))
@@ -6418,6 +6522,12 @@ delete_printer(cupsd_client_t  *con,	/* I - Client connection */
   snprintf(filename, sizeof(filename), "%s/%s.ipp", CacheDir, printer->name);
   unlink(filename);
 
+	snprintf(filename, sizeof(filename), "%s/%s.png", CacheDir, printer->name);
+	unlink(filename);
+
+  snprintf(filename, sizeof(filename), "%s/%s.pwg", CacheDir, printer->name);
+  unlink(filename);
+
 #ifdef __APPLE__
  /*
   * Unregister color profiles...
@@ -6439,7 +6549,9 @@ delete_printer(cupsd_client_t  *con,	/* I - Client connection */
     cupsdLogMessage(CUPSD_LOG_INFO, "Printer \"%s\" deleted by \"%s\".",
                     printer->name, get_username(con));
 
-    cupsdDeletePrinter(printer, 0);
+    if (cupsdDeletePrinter(printer, 0))
+      cupsdMarkDirty(CUPSD_DIRTY_CLASSES);
+
     cupsdMarkDirty(CUPSD_DIRTY_PRINTERS);
   }
 
@@ -6557,7 +6669,7 @@ get_devices(cupsd_client_t *con)	/* I - Client connection */
            "%d+%d+%d+%d+%s%s%s%s%s",
            con->request->request.op.request_id,
            limit ? limit->values[0].integer : 0,
-	   timeout ? timeout->values[0].integer : 10,
+	   timeout ? timeout->values[0].integer : 15,
 	   (int)User,
 	   requested_str,
 	   exclude_str[0] ? "%20" : "", exclude_str,
@@ -6741,6 +6853,7 @@ get_job_attrs(cupsd_client_t  *con,	/* I - Client connection */
   ipp_attribute_t *attr;		/* Current attribute */
   int		jobid;			/* Job ID */
   cupsd_job_t	*job;			/* Current job */
+  cupsd_printer_t *printer;		/* Current printer */
   char		scheme[HTTP_MAX_URI],	/* Method portion of URI */
 		username[HTTP_MAX_URI],	/* Username portion of URI */
 		host[HTTP_MAX_URI],	/* Host portion of URI */
@@ -6815,7 +6928,19 @@ get_job_attrs(cupsd_client_t  *con,	/* I - Client connection */
   * Check policy...
   */
 
-  if ((status = cupsdCheckPolicy(DefaultPolicyPtr, con, NULL)) != HTTP_OK)
+  if ((printer = job->printer) == NULL)
+    printer = cupsdFindDest(job->dest);
+
+  if (printer)
+  {
+    if ((status = cupsdCheckPolicy(printer->op_policy_ptr, con,
+                                   NULL)) != HTTP_OK)
+    {
+      send_http_error(con, status, printer);
+      return;
+    }
+  }
+  else if ((status = cupsdCheckPolicy(DefaultPolicyPtr, con, NULL)) != HTTP_OK)
   {
     send_http_error(con, status, NULL);
     return;
@@ -6991,7 +7116,18 @@ get_jobs(cupsd_client_t  *con,		/* I - Client connection */
   else
     username[0] = '\0';
 
-  ra = create_requested_array(con->request);
+  if ((ra = create_requested_array(con->request)) == NULL &&
+      !ippFindAttribute(con->request, "requested-attributes", IPP_TAG_KEYWORD))
+  {
+   /*
+    * IPP conformance - Get-Jobs has a default requested-attributes value of
+    * "job-id" and "job-uri".
+    */
+
+    ra = cupsArrayNew((cups_array_func_t)strcmp, NULL);
+    cupsArrayAdd(ra, "job-id");
+    cupsArrayAdd(ra, "job-uri");
+  }
 
  /*
   * OK, build a list of jobs for this printer...
@@ -8471,7 +8607,9 @@ ppd_parse_line(const char *line,	/* I - Line */
   * Read the option name...
   */
 
-  for (line += 8, olen --; isalnum(*line & 255); line ++)
+  for (line += 8, olen --;
+       *line > ' ' && *line < 0x7f && *line != ':' && *line != '/';
+       line ++)
     if (olen > 0)
     {
       *option++ = *line;
@@ -8499,7 +8637,9 @@ ppd_parse_line(const char *line,	/* I - Line */
   while (isspace(*line & 255))
     line ++;
 
-  for (clen --; isalnum(*line & 255); line ++)
+  for (clen --;
+       *line > ' ' && *line < 0x7f && *line != ':' && *line != '/';
+       line ++)
     if (clen > 0)
     {
       *choice++ = *line;
@@ -9013,6 +9153,9 @@ reject_jobs(cupsd_client_t  *con,	/* I - Client connection */
             sizeof(printer->state_message));
 
   cupsdAddPrinterHistory(printer);
+
+  cupsdAddEvent(CUPSD_EVENT_PRINTER_STATE, printer, NULL,
+                "No longer accepting jobs.");
 
   if (dtype & CUPS_PRINTER_CLASS)
   {
@@ -9608,7 +9751,7 @@ save_auth_info(
   * Write a random number of newlines to the end of the file...
   */
 
-  for (i = (rand() % 1024); i >= 0; i --)
+  for (i = (CUPS_RAND() % 1024); i >= 0; i --)
     cupsFilePutChar(fp, '\n');
 
  /*
@@ -9814,6 +9957,17 @@ send_document(cupsd_client_t  *con,	/* I - Client connection */
 
   if (!con->filename)
   {
+   /*
+    * Check for an empty request with "last-document" set to true, which is
+    * used to close an "open" job by RFC 2911, section 3.3.2.
+    */
+
+    if (job->num_files > 0 &&
+        (attr = ippFindAttribute(con->request, "last-document",
+	                         IPP_TAG_BOOLEAN)) != NULL &&
+        attr->values[0].boolean)
+      goto last_document;
+
     send_ipp_status(con, IPP_BAD_REQUEST, _("No file!?!"));
     return;
   }
@@ -9969,6 +10123,8 @@ send_document(cupsd_client_t  *con,	/* I - Client connection */
  /*
   * Start the job if this is the last document...
   */
+
+  last_document:
 
   if ((attr = ippFindAttribute(con->request, "last-document",
                                IPP_TAG_BOOLEAN)) != NULL &&
@@ -10166,7 +10322,7 @@ send_ipp_status(cupsd_client_t *con,	/* I - Client connection */
   if (ippFindAttribute(con->response, "attributes-charset",
                        IPP_TAG_ZERO) == NULL)
     ippAddString(con->response, IPP_TAG_OPERATION, IPP_TAG_CHARSET,
-                 "attributes-charset", NULL, DefaultCharset);
+                 "attributes-charset", NULL, "utf-8");
 
   if (ippFindAttribute(con->response, "attributes-natural-language",
                        IPP_TAG_ZERO) == NULL)

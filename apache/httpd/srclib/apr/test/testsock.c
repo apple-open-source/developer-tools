@@ -40,6 +40,9 @@ static void launch_child(abts_case *tc, apr_proc_t *proc, const char *arg1, apr_
     rv = apr_procattr_error_check_set(procattr, 1);
     APR_ASSERT_SUCCESS(tc, "Couldn't set error check in procattr", rv);
 
+    rv = apr_procattr_cmdtype_set(procattr, APR_PROGRAM_ENV);
+    APR_ASSERT_SUCCESS(tc, "Couldn't set copy environment", rv);
+
     args[0] = "sockchild" EXTENSION;
     args[1] = arg1;
     args[2] = NULL;
@@ -88,9 +91,9 @@ static void test_serv_by_name(abts_case *tc, void *data)
     rv = apr_getservbyname(sa, "complete_and_utter_rubbish");
     APR_ASSERT_SUCCESS(tc, "Problem getting non-existent service", !rv);
 
-    rv = apr_getservbyname(sa, "http");
-    APR_ASSERT_SUCCESS(tc, "Problem getting http service", rv);
-    ABTS_INT_EQUAL(tc, 80, sa->port);
+    rv = apr_getservbyname(sa, "telnet");
+    APR_ASSERT_SUCCESS(tc, "Problem getting telnet service", rv);
+    ABTS_INT_EQUAL(tc, 23, sa->port);
 }
 
 static apr_socket_t *setup_socket(abts_case *tc)

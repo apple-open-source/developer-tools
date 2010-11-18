@@ -464,7 +464,7 @@ void
 natt_float_ports (struct ph1handle *iph1)
 {
 	
-	if (! (iph1->natt_flags && NAT_DETECTED) )
+	if (! (iph1->natt_flags & NAT_DETECTED) )
 		return;
 	if (! iph1->natt_options->float_port){
 		/* Drafts 00 / 01, just schedule keepalive */
@@ -496,6 +496,8 @@ natt_float_ports (struct ph1handle *iph1)
 void
 natt_handle_vendorid (struct ph1handle *iph1, int vid_numeric)
 {
+  int version;
+
   if (! iph1->natt_options)
     iph1->natt_options = racoon_calloc (1, sizeof (*iph1->natt_options));
 
@@ -504,7 +506,13 @@ natt_handle_vendorid (struct ph1handle *iph1, int vid_numeric)
 	  "Allocating memory for natt_options failed!\n");
     return;
   }
-  
+
+  // stick to the version we already selected on a previous phase1
+  version = ike_session_get_natt_version(iph1);
+  if (version) {
+    vid_numeric = version;
+  }
+
   if (iph1->natt_options->version < vid_numeric)
     if (natt_fill_options (iph1->natt_options, vid_numeric) == 0)
       iph1->natt_flags |= NAT_ANNOUNCED;

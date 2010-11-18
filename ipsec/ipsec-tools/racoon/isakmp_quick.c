@@ -97,7 +97,8 @@
 /* quick mode */
 static vchar_t *quick_ir1mx __P((struct ph2handle *, vchar_t *, vchar_t *));
 static int get_sainfo_r __P((struct ph2handle *));
-static int get_proposal_r __P((struct ph2handle *, int));
+static int get_proposal_r __P((struct ph2handle *));
+static int get_proposal_r_remote __P((struct ph2handle *, int));
 
 /* %%%
  * Quick Mode
@@ -554,13 +555,32 @@ quick_i2recv(iph2, msg0)
 						if (f_id == 0 && (iph2->ph1->natt_flags & NAT_DETECTED_ME)) {
 							if (lcconf->ext_nat_id)
 								vfree(lcconf->ext_nat_id);
-							lcconf->ext_nat_id = vmalloc(idp_ptr->h.len - sizeof(struct isakmp_gen));
+							lcconf->ext_nat_id = vmalloc(ntohs(idp_ptr->h.len) - sizeof(struct isakmp_gen));
 							if (lcconf->ext_nat_id == NULL) {
 								plog(LLV_ERROR, LOCATION, NULL, "memory error while allocating external nat id.\n");
 								goto end;
 							}
 							memcpy(lcconf->ext_nat_id->v, &(idp_ptr->b), lcconf->ext_nat_id->l);
+							if (iph2->ext_nat_id)
+								vfree(iph2->ext_nat_id);
+							iph2->ext_nat_id = vdup(lcconf->ext_nat_id);
+							if (iph2->ext_nat_id == NULL) {
+								plog(LLV_ERROR, LOCATION, NULL, "memory error while allocating ph2's external nat id.\n");
+								goto end;
+							}
 							plog(LLV_DEBUG, LOCATION, NULL, "external nat address saved.\n");
+							plogdump(LLV_DEBUG, iph2->ext_nat_id->v, iph2->ext_nat_id->l);
+						} else if (f_id && (iph2->ph1->natt_flags & NAT_DETECTED_PEER)) {
+							if (iph2->ext_nat_id_p)
+								vfree(iph2->ext_nat_id_p);
+							iph2->ext_nat_id_p = vmalloc(ntohs(idp_ptr->h.len) - sizeof(struct isakmp_gen));
+							if (iph2->ext_nat_id_p == NULL) {
+								plog(LLV_ERROR, LOCATION, NULL, "memory error while allocating peers ph2's external nat id.\n");
+								goto end;
+							}
+							memcpy(iph2->ext_nat_id_p->v, &(idp_ptr->b), iph2->ext_nat_id_p->l);
+							plog(LLV_DEBUG, LOCATION, NULL, "peer's external nat address saved.\n");
+							plogdump(LLV_DEBUG, iph2->ext_nat_id_p->v, iph2->ext_nat_id_p->l);
 						} 
 					} else {
 						plog(LLV_ERROR, LOCATION, NULL, "mismatched ID was returned.\n");
@@ -1352,10 +1372,7 @@ quick_r1recv(iph2, msg0)
 	}
 
     /* check the existence of ID payload and create responder's proposal */
-    error = get_proposal_r(iph2, 0);
-    if (error != -2 && error != 0 && (iph2->ph1->natt_flags & NAT_DETECTED_ME) && (lcconf->ext_nat_id != NULL || ike_session_is_client_ph2_rekey(iph2)))
-        error = get_proposal_r(iph2, 1);
-		
+	error = get_proposal_r(iph2);
 	switch (error) {
 	case -2:
 		/* generate a policy template from peer's proposal */
@@ -1583,6 +1600,8 @@ quick_r2send(iph2, msg)
 	}
 #endif
 
+	plog(LLV_DEBUG, LOCATION, NULL, "Approved SA\n");
+	printsaprop0(LLV_DEBUG, iph2->approval);
 
 	body = vmalloc(tlen);
 	if (body == NULL) { 
@@ -1615,9 +1634,13 @@ quick_r2send(iph2, msg)
 	if (iph2->id_p != NULL) {
 		/* IDci */
 		p = set_isakmp_payload(p, iph2->id_p, ISAKMP_NPTYPE_ID);
+		plog(LLV_DEBUG, LOCATION, NULL, "sending IDci2:\n");
+		plogdump(LLV_DEBUG, iph2->id_p->v, iph2->id_p->l);
 		/* IDcr */
 		np_p = &((struct isakmp_gen *)p)->np;	/* XXX */
 		p = set_isakmp_payload(p, iph2->id, (natoa_type ? natoa_type : ISAKMP_NPTYPE_NONE));
+		plog(LLV_DEBUG, LOCATION, NULL, "sending IDcr2:\n");
+		plogdump(LLV_DEBUG, iph2->id->v, iph2->id->l);
 	}
 
 	/* add a RESPONDER-LIFETIME notify payload if needed */
@@ -2237,10 +2260,9 @@ get_sainfo_r(iph2)
 	vchar_t *idsrc = NULL, *iddst = NULL;
 	int prefixlen;
 	int error = ISAKMP_INTERNAL_ERROR;
-	int remoteid = 0;
+	struct sainfo *anonymous = NULL;
 
-	if (iph2->id == NULL ||
-        ((iph2->ph1->natt_flags & NAT_DETECTED_ME) && ike_session_is_client_ph2_rekey(iph2))) {
+	if (iph2->id == NULL) {
 		switch (iph2->src->sa_family) {
 		case AF_INET:
 			prefixlen = sizeof(struct in_addr) << 3;
@@ -2264,8 +2286,7 @@ get_sainfo_r(iph2)
 		goto end;
 	}
 
-	if (iph2->id_p == NULL ||
-        ((iph2->ph1->natt_flags & NAT_DETECTED_PEER) && ike_session_is_client_ph2_rekey(iph2))) {
+	if (iph2->id_p == NULL) {
 		switch (iph2->dst->sa_family) {
 		case AF_INET:
 			prefixlen = sizeof(struct in_addr) << 3;
@@ -2290,13 +2311,35 @@ get_sainfo_r(iph2)
 	}
 
 	iph2->sainfo = getsainfo(idsrc, iddst, iph2->ph1->id_p, 0);
-	if (iph2->sainfo == NULL)
+	// track anonymous sainfo, because we'll try to find a better sainfo if this is a client
+	if (iph2->sainfo && iph2->sainfo->idsrc == NULL)
+		anonymous = iph2->sainfo;
+
+	if (iph2->sainfo == NULL ||
+		(anonymous &&  iph2->parent_session && iph2->parent_session->is_client)) {
 		if ((iph2->ph1->natt_flags & NAT_DETECTED_ME) && lcconf->ext_nat_id != NULL)
 			iph2->sainfo = getsainfo(idsrc, iddst, iph2->ph1->id_p, 1);
+		if (iph2->sainfo) {
+			plog(LLV_DEBUG2, LOCATION, NULL,
+				 "get_sainfo_r case 1.\n");
+		}
+		// still no sainfo (or anonymous): for client, fallback to sainfo used by a previous established phase2
+		if (iph2->sainfo == NULL ||
+			(iph2->sainfo->idsrc == NULL && iph2->parent_session && iph2->parent_session->is_client)) {
+			ike_session_get_sainfo_r(iph2);
+			if (iph2->sainfo) {
+				plog(LLV_DEBUG2, LOCATION, NULL,
+					 "get_sainfo_r case 2.\n");
+			}
+		}
+	}
 	if (iph2->sainfo == NULL) {
-		plog(LLV_ERROR, LOCATION, NULL,
-			"failed to get sainfo.\n");
-		goto end;
+		if (anonymous == NULL) {
+			plog(LLV_ERROR, LOCATION, NULL,
+				 "failed to get sainfo.\n");
+			goto end;
+		}
+		iph2->sainfo = anonymous;
 	}
 #ifdef __APPLE__
 	if (link_sainfo_to_ph2(iph2->sainfo) != 0) {
@@ -2330,6 +2373,22 @@ end:
 	return error;
 }
 
+static int
+get_proposal_r(iph2)
+	struct ph2handle *iph2;
+{
+	int error = get_proposal_r_remote(iph2, 0);
+	if (error != -2 && error != 0 && 
+		(((iph2->ph1->natt_flags & NAT_DETECTED_ME) && lcconf->ext_nat_id != NULL) ||
+		 (iph2->parent_session && iph2->parent_session->is_client))) {
+		if (iph2->parent_session && iph2->parent_session->is_client)
+			error = ike_session_get_proposal_r(iph2);
+		if (error != -2 && error != 0)
+			error = get_proposal_r_remote(iph2, 1);					
+	}
+	return error;
+}
+
 /*
  * Copy both IP addresses in ID payloads into [src,dst]_id if both ID types
  * are IP address and same address family.
@@ -2341,7 +2400,7 @@ end:
  * NOTE: This function is only for responder.
  */
 static int
-get_proposal_r(iph2, use_remote_addr)
+get_proposal_r_remote(iph2, use_remote_addr)
 	struct ph2handle *iph2;
 	int use_remote_addr;
 {

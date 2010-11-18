@@ -3,7 +3,7 @@
  *
  *   Configuration routines for the Common UNIX Printing System (CUPS).
  *
- *   Copyright 2007-2009 by Apple Inc.
+ *   Copyright 2007-2010 by Apple Inc.
  *   Copyright 1997-2007 by Easy Software Products, all rights reserved.
  *
  *   These coded instructions, statements, and computer programs are the
@@ -108,7 +108,6 @@ static const cupsd_var_t	variables[] =
   { "ClassifyOverride",		&ClassifyOverride,	CUPSD_VARTYPE_BOOLEAN },
   { "ConfigFilePerm",		&ConfigFilePerm,	CUPSD_VARTYPE_INTEGER },
   { "DataDir",			&DataDir,		CUPSD_VARTYPE_STRING },
-  { "DefaultCharset",		&DefaultCharset,	CUPSD_VARTYPE_STRING },
   { "DefaultLanguage",		&DefaultLanguage,	CUPSD_VARTYPE_STRING },
   { "DefaultLeaseDuration",	&DefaultLeaseDuration,	CUPSD_VARTYPE_INTEGER },
   { "DefaultPaperSize",		&DefaultPaperSize,	CUPSD_VARTYPE_STRING },
@@ -132,7 +131,6 @@ static const cupsd_var_t	variables[] =
   { "KeepAlive",		&KeepAlive,		CUPSD_VARTYPE_BOOLEAN },
 #ifdef HAVE_LAUNCHD
   { "LaunchdTimeout",		&LaunchdTimeout,	CUPSD_VARTYPE_INTEGER },
-  { "LaunchdConf",		&LaunchdConf,		CUPSD_VARTYPE_STRING },
 #endif /* HAVE_LAUNCHD */
   { "LimitRequestBody",		&MaxRequestSize,	CUPSD_VARTYPE_INTEGER },
   { "ListenBackLog",		&ListenBackLog,		CUPSD_VARTYPE_INTEGER },
@@ -540,8 +538,6 @@ cupsdReadConfiguration(void)
   else
     cupsdSetString(&DefaultLanguage, language->language);
 
-  cupsdSetString(&DefaultCharset, _cupsEncodingName(language->encoding));
-
   cupsdClearString(&DefaultPaperSize);
 
   cupsdSetString(&RIPCache, "8m");
@@ -631,7 +627,7 @@ cupsdReadConfiguration(void)
   MaxClients               = 100;
   MaxClientsPerHost        = 0;
   MaxLogSize               = 1024 * 1024;
-  MaxPrinterHistory        = 10;
+  MaxPrinterHistory        = 0;
   MaxRequestSize           = 0;
   MultipleOperationTimeout = DEFAULT_TIMEOUT;
   ReloadTimeout	           = DEFAULT_KEEPALIVE;
@@ -692,7 +688,6 @@ cupsdReadConfiguration(void)
 
 #ifdef HAVE_LAUNCHD
   LaunchdTimeout = DEFAULT_TIMEOUT + 10;
-  cupsdSetString(&LaunchdConf, CUPS_DEFAULT_LAUNCHD_CONF);
 #endif /* HAVE_LAUNCHD */
 
 #ifdef __APPLE__
@@ -717,6 +712,9 @@ cupsdReadConfiguration(void)
 
   cupsdLogMessage(CUPSD_LOG_INFO, "Remote access is %s.",
                   RemotePort ? "enabled" : "disabled");
+
+  if (!RemotePort)
+    BrowseLocalProtocols = 0;		/* Disable sharing - no remote access */
 
  /*
   * See if the ServerName is an IP address...
@@ -910,7 +908,7 @@ cupsdReadConfiguration(void)
   * Set the default locale using the language and charset...
   */
 
-  cupsdSetStringf(&DefaultLocale, "%s.%s", DefaultLanguage, DefaultCharset);
+  cupsdSetStringf(&DefaultLocale, "%s.UTF-8", DefaultLanguage);
 
  /*
   * Update all relative filenames to include the full path from ServerRoot...
@@ -969,7 +967,7 @@ cupsdReadConfiguration(void)
 			     Group, 1, 1) < 0 ||
        cupsdCheckPermissions(StateDir, "certs", RunUser ? 0711 : 0511, User,
 			     SystemGroupIDs[0], 1, 1) < 0 ||
-       cupsdCheckPermissions(ServerRoot, NULL, 0755, RunUser, 
+       cupsdCheckPermissions(ServerRoot, NULL, 0755, RunUser,
 			     Group, 1, 0) < 0 ||
        cupsdCheckPermissions(ServerRoot, "ppd", 0755, RunUser,
 			     Group, 1, 1) < 0 ||
@@ -1896,7 +1894,7 @@ parse_aaa(cupsd_location_t *loc,	/* I - Location */
 	  cupsdDenyIP(loc, ones, zeros);
       }
 #ifdef AF_INET6
-      else if (value[0] == '*' || value[0] == '.' || 
+      else if (value[0] == '*' || value[0] == '.' ||
 	       (!isdigit(value[0] & 255) && value[0] != '['))
 #else
       else if (value[0] == '*' || value[0] == '.' || !isdigit(value[0] & 255))
@@ -2666,7 +2664,7 @@ read_configuration(cups_file_t *fp)	/* I - File to read from */
 
 	for (addr = addrlist; addr; addr = addr->next)
 	  if (addr->addr.addr.sa_family == AF_INET)
-	    break;	    
+	    break;
 
 	if (addr)
 	{
@@ -2676,7 +2674,7 @@ read_configuration(cups_file_t *fp)	/* I - File to read from */
 	  cupsdLogMessage(CUPSD_LOG_INFO,
 	                  "Sending browsing info to %s:%d (IPv4)",
 			  temp, ntohs(dira->to.ipv4.sin_port));
-  
+
 	  NumBrowsers ++;
 	}
 	else
@@ -2816,7 +2814,7 @@ read_configuration(cups_file_t *fp)	/* I - File to read from */
 	      cupsdDenyIP(location, ones, zeros);
 	  }
 #ifdef AF_INET6
-	  else if (value[0] == '*' || value[0] == '.' || 
+	  else if (value[0] == '*' || value[0] == '.' ||
 		   (!isdigit(value[0] & 255) && value[0] != '['))
 #else
 	  else if (value[0] == '*' || value[0] == '.' || !isdigit(value[0] & 255))
@@ -2912,7 +2910,7 @@ read_configuration(cups_file_t *fp)	/* I - File to read from */
       */
 
 #ifdef AF_INET6
-      if (value[0] == '*' || value[0] == '.' || 
+      if (value[0] == '*' || value[0] == '.' ||
           (!isdigit(value[0] & 255) && value[0] != '['))
 #else
       if (value[0] == '*' || value[0] == '.' || !isdigit(value[0] & 255))
@@ -2996,14 +2994,14 @@ read_configuration(cups_file_t *fp)	/* I - File to read from */
 
 	for (addr = addrlist; addr; addr = addr->next)
 	  if (addr->addr.addr.sa_family == AF_INET)
-	    break;	    
+	    break;
 
 	if (addr)
 	{
 	  memcpy(&(relay->to), &(addrlist->addr), sizeof(relay->to));
-  
+
 	  httpAddrString(&(relay->to), temp, sizeof(temp));
-  
+
 	  if (relay->from.type == CUPSD_AUTH_IP)
 	    snprintf(temp2, sizeof(temp2), "%u.%u.%u.%u/%u.%u.%u.%u",
 		     relay->from.mask.ip.address[0] >> 24,
@@ -3016,10 +3014,10 @@ read_configuration(cups_file_t *fp)	/* I - File to read from */
 		     relay->from.mask.ip.netmask[0] & 255);
 	  else
 	    strlcpy(temp2, relay->from.mask.name.name, sizeof(temp2));
-  
+
 	  cupsdLogMessage(CUPSD_LOG_INFO, "Relaying from %s to %s:%d (IPv4)",
 			  temp2, temp, ntohs(relay->to.ipv4.sin_port));
-  
+
 	  NumRelays ++;
 	}
 	else
@@ -3580,7 +3578,7 @@ read_location(cups_file_t *fp,		/* I - Configuration file */
         else
 	  continue;
       }
-      
+
       if ((loc = cupsdCopyLocation(&parent)) == NULL)
         return (0);
 
@@ -3722,7 +3720,7 @@ read_policy(cups_file_t *fp,		/* I - Configuration file */
         else
 	  continue;
       }
-      
+
      /*
       * Scan for IPP operation names...
       */

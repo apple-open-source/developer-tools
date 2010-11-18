@@ -2345,13 +2345,14 @@ print_object_command (char *args, int from_tty)
   struct value *object, *function, *description;
   struct cleanup *cleanup_chain = NULL;
   struct cleanup *debugger_mode;
-  CORE_ADDR string_addr, object_addr;
+  CORE_ADDR string_addr;
   int i = 0;
   gdb_byte c = 0;
   const char *fn_name;
   struct expression *expr;
   struct cleanup *old_chain;
   int pc = 0;
+  struct objc_object obj;
 
   if (!args || !*args)
     error (
@@ -2379,8 +2380,6 @@ print_object_command (char *args, int from_tty)
         }
     }
 
-  /* APPLE LOCAL begin initialize innermost_block  */
-  
   innermost_block = NULL;
   expr = parse_expression (args);
   old_chain =  make_cleanup (free_current_contents, &expr);
@@ -2389,7 +2388,6 @@ print_object_command (char *args, int from_tty)
     (builtin_type_void_data_ptr, expr, &pc, EVAL_NORMAL);
   do_cleanups (old_chain);
 
-  /* APPLE LOCAL begin */
   if (object != NULL && TYPE_CODE (value_type (object)) == TYPE_CODE_ERROR)
     {
       struct type *id_type;
@@ -2397,29 +2395,18 @@ print_object_command (char *args, int from_tty)
       if (id_type)
         object = value_cast (id_type, object);
     }
-  /* APPLE LOCAL end */
 
-  /* APPLE LOCAL begin -temporarily comment out new code(see old code below) */
-  /*
-   * struct objc_object obj;
-   * read_objc_object (value_as_address (object), &obj);
-   * if (obj.isa == 0)
-   *  {
-   *    error ("0x%s does not appear to point to a valid object.", 
-   *           paddr_nz (value_as_address (object)));
-   *  }
-   */
-  /* APPLE LOCAL begin -temporarily comment out new code(see old code below) */
+  read_objc_object (value_as_address (object), &obj);
+  if (obj.isa == 0)
+    {
+      CORE_ADDR object_addr = value_as_address (object);
+      if (object_addr == 0x0)
+	error ("Can't print the description of a NIL object.");
+      else
+	error ("0x%s does not appear to point to a valid object.", 
+	       paddr_nz (object_addr));
+    }
 
-  /* APPLE LOCAL begin - temporarily replace old code  (see new code above) */
-
-  /* Validate the address for sanity.  */
-  object_addr = value_as_address (object);
-  read_memory (object_addr, &c, 1);
-
-  /* APPLE LOCAL end   - temporarily replace old code  (see new code above) */
-
-  /* APPLE LOCAL begin */
   fn_name = "_NSPrintForDebugger";
   if (lookup_minimal_symbol (fn_name, NULL, NULL) == NULL)
     {
@@ -2715,7 +2702,7 @@ new_objc_runtime_internals ()
 
   /* If it's been determined programatically, go with that.  */
   if (objc_runtime_version != 0)
-    return objc_runtime_version;
+    return objc_runtime_version == 2;
 
   /* Else fall back on some rules of thumb that are currently accurate.  */
 #if defined (TARGET_ARM)
@@ -2931,7 +2918,8 @@ new_objc_runtime_find_impl (CORE_ADDR class, CORE_ADDR sel, int stret)
     }
   else
     {
-      if (objc_retval == objc_debugger_mode_fail_malloc_lock_held)
+      if (objc_retval == objc_debugger_mode_fail_malloc_lock_held
+          || objc_retval == objc_debugger_mode_fail_spinlock_held)
         {
           /* Something is holding a malloc/objc runtime lock so we can't call
              into the usual method lookup functions.  The objc runtime might
@@ -3052,8 +3040,12 @@ read_objc_object (CORE_ADDR addr, struct objc_object *object)
      from the memory read, especailly important in the case of (3) where
      the memory error does not indicate a problem.  */
 
+  struct cleanup * output_cleanup =
+    make_cleanup_ui_out_suppress_output (uiout);
+
   struct ui_file *prev_stderr = gdb_stderr;
   gdb_stderr = gdb_null;
+
   success = safe_read_memory_unsigned_integer (addr, addrsize, 
                                                      &(object->isa));
   gdb_stderr = prev_stderr;
@@ -3061,15 +3053,10 @@ read_objc_object (CORE_ADDR addr, struct objc_object *object)
 
   if (!new_objc_runtime_internals())
     {
-      if (success)
-        {
-          return;
-        }
-      else
-        {
+      if (!success)
           object->isa = (CORE_ADDR) 0;
-          return;
-        }
+
+      goto do_cleanup;
     }
   
   /* After this point this is all the new runtime.  */
@@ -3077,7 +3064,7 @@ read_objc_object (CORE_ADDR addr, struct objc_object *object)
   if (success)
     {
       if (class_valid_p (object->isa))
-        return;
+        goto do_cleanup;
     }
   else
     object->isa = (CORE_ADDR) 0;
@@ -3103,13 +3090,39 @@ read_objc_object (CORE_ADDR addr, struct objc_object *object)
   
   if (object_get_class_function == NULL)
     {
-      if (success)
-        return;
-      else
-        {
+      if (!success)
           object->isa = (CORE_ADDR) 0;
-          return;
-        }
+      else
+	{
+	  /* If we are on a system that doesn't have
+             gdb_object_getClass, use the isa value, and pass that to
+             gdb_class_getClass to validate the object. */
+	  struct value *class_ptr_val;
+	  struct cleanup *unwind_cleanup;
+      
+	  unwind_cleanup = make_cleanup_set_restore_unwind_on_signal (1);
+
+	  class_ptr_val = value_from_pointer (lookup_pointer_type
+					       (builtin_type_void_data_ptr), object->isa);
+          CORE_ADDR class_addr;
+	  class_addr = new_objc_runtime_class_getClass (class_ptr_val);	  
+          /* gdb_class_getClass for a Class address returns the class
+             address, not the meta-class address.  So if we've 
+	     gotten back a valid address that is the same as the object
+	     we passed in, it must be a class object.  In which case,
+	     we don't want to overwrite it with the meta-class address,
+	     which is currently in object->isa, since that's what we
+	     read in from memory.  */
+	  if (class_addr == 0)
+              object->isa = 0; 
+          else if (class_addr != addr)
+              object->isa = class_addr;
+         
+
+	  do_cleanups (unwind_cleanup);
+
+	}
+      goto do_cleanup;
     }
   else
     {
@@ -3144,10 +3157,24 @@ read_objc_object (CORE_ADDR addr, struct objc_object *object)
         }
       else
         {
-          object->isa = (CORE_ADDR) value_as_address (ret_value);      
-          add_class_to_cache (object->isa);
+	  CORE_ADDR class_addr;
+          class_addr = (CORE_ADDR) value_as_address (ret_value);
+	  /* gdb_object_getClass for a Class object returns the class
+	     object address, not the meta-class address.  So if we've 
+	     gotten back a valid address that is the same as the object
+	     we passed in, it must be a class object.  In which case,
+	     we don't want to overwrite it with the meta-class address,
+	     which is currently in object->isa, since that's what we
+	     read in from memory.  */
+	  if (class_addr != 0 
+	      && class_addr != addr)
+	      object->isa = class_addr;
+	  add_class_to_cache (object->isa);
         }
     }
+
+ do_cleanup:
+  do_cleanups (output_cleanup);
 }
 
 static void 

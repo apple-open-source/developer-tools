@@ -655,6 +655,7 @@ UserGroup **Mbrd_FindItemsAndRetain( tDirNodeReference dirNode, tDataListPtr rec
 	uint64_t *statTime = &gStatBlock.fAverageuSecPerRecordLookup;
 	uint64_t *statCount = &gStatBlock.fTotalRecordLookups;
 	const char *attribute = NULL;
+	tDirPatternMatch match = eDSExact;
 	
 	switch ( idType )
 	{
@@ -707,6 +708,7 @@ UserGroup **Mbrd_FindItemsAndRetain( tDirNodeReference dirNode, tDataListPtr rec
 		case ID_TYPE_GUID:
 			attribute = kDS1AttrGeneratedUID;
 			foundBy = kUGFoundByGUID;
+			match = eDSiExact;
 			break;
 			
 		case ID_TYPE_GROUPMEMBERS:
@@ -740,7 +742,7 @@ UserGroup **Mbrd_FindItemsAndRetain( tDirNodeReference dirNode, tDataListPtr rec
 		do {
 			count = (*recCount);
 			status = dsDoAttributeValueSearchWithData(dirNode, searchBuffer, recType,
-													  attrType, eDSExact, lookUpPtr, gAttrsToGet, 0,
+													  attrType, match, lookUpPtr, gAttrsToGet, 0,
 													  &count, &localContext);
 			if (status == eDSBufferTooSmall) {
 				buffSize *= 2;
@@ -817,16 +819,20 @@ UserGroup **Mbrd_FindItemsAndRetain( tDirNodeReference dirNode, tDataListPtr rec
 						result->fRecordType = kUGRecordTypeComputerGroup;
 					}
 					else {
+#if defined(PRE_CACHE_GROUPS)
 						const char	*keys[] = { "gr_name", "gr_gid", "gr_uuid", NULL };
 						sCacheValidation *valid;
+#endif
 						
 						result->fRecordType = kUGRecordTypeGroup;
 						
+#if defined(PRE_CACHE_GROUPS)
 						if ( gCacheNode != NULL ) {
 							valid = ParseGroupEntry( gMbrdDirRef, dirNode, NULL, searchBuffer, recordEntryPtr, attributeListRef,
 													 NULL, gCacheNode->fLibinfoCache, keys );
 							DSRelease( valid );
 						}
+#endif
 					}
 					
 					result->fFoundBy = foundBy;
@@ -1593,8 +1599,7 @@ static void Mbrd_ResolveGroupsForItem( UserGroup *item, uint32_t flags, UserGrou
 
 	uuid_unparse_upper( item->fGUID, guidString );
 	
-	// WARNING: do not use fQueue as refreshes are initiated on this queue to prevent collisions
-	dispatch_queue_t dispatchQueue = dispatch_get_concurrent_queue( DISPATCH_QUEUE_PRIORITY_DEFAULT );
+	dispatch_queue_t dispatchQueue = dispatch_queue_create("com.apple.DirectoryService.refresh", NULL);
 	dispatch_group_t dispatchGroup = dispatch_group_create();
 	
 	void (^addToHashesAndRelease)(UserGroup *, UserGroup *, UserGroup *) = ^(UserGroup *userItem, UserGroup *memberItem, UserGroup *groupItem) {
@@ -1756,6 +1761,7 @@ static void Mbrd_ResolveGroupsForItem( UserGroup *item, uint32_t flags, UserGrou
 	// now wait for group to finish
 	dispatch_group_wait( dispatchGroup, UINT64_MAX );
 	dispatch_release( dispatchGroup );
+	dispatch_release(dispatchQueue);
 	
 	DbgLog( kLogInfo, "%s - Membership - Finished resolving groups for %s '%s' - total %d", reqOrigin, 
 		    ((item->fRecordType & (kUGRecordTypeGroup | kUGRecordTypeComputerGroup)) ? "group" : "user"), 
@@ -1772,8 +1778,16 @@ static void Mbrd_ResolveGroupsForItem( UserGroup *item, uint32_t flags, UserGrou
 
 static void Mbrd_GenerateItemMembership( UserGroup *item, uint32_t flags, bool bAsyncRefresh = false )
 {
+	static dispatch_queue_t membership_queue;
+	static dispatch_once_t once;
+
 	// don't issue a refresh if one is in flight
 	if ( item == NULL ) return;
+	
+	dispatch_once(&once, ^(void) {
+		membership_queue = dispatch_queue_create("com.apple.DirectoryService.membership", NULL);
+		dispatch_queue_set_width(membership_queue, DISPATCH_QUEUE_WIDTH_MAX_LOGICAL_CPUS);
+	});
 	
 	__block bool bDoWaitBlock = false;
 	__block bool bIssueRefresh = false;
@@ -1846,7 +1860,9 @@ static void Mbrd_GenerateItemMembership( UserGroup *item, uint32_t flags, bool b
 								// copy the entry (skipping memberships) and resolve the memberships, then we'll merge back into the existing
 								UserGroup_Merge( workingCopy, refreshed, false );
 								
-								Mbrd_ResolveGroupsForItem( workingCopy, flags );
+								dispatch_sync(membership_queue, ^(void) {
+									Mbrd_ResolveGroupsForItem( workingCopy, flags );
+								});
 								
 								// now merge back into the original item
 								UserGroup_Merge( refreshed, workingCopy, true );
@@ -2153,7 +2169,10 @@ void Mbrd_Initialize( void )
 	// extended list so that Cache node can use
 	gAttrsToGet = dsBuildListFromStringsPriv( kDSNAttrMetaNodeLocation, kDSNAttrRecordName, kDS1AttrPassword, kDS1AttrUniqueID,
 											  kDS1AttrGeneratedUID, kDS1AttrPrimaryGroupID, kDS1AttrNFSHomeDirectory, kDS1AttrUserShell,
-											  kDS1AttrDistinguishedName, kDSNAttrGroupMembership, kDS1AttrTimeToLive, kDS1AttrSMBSID,
+											  kDS1AttrDistinguishedName, kDS1AttrTimeToLive, kDS1AttrSMBSID,
+#if defined(PRE_CACHE_GROUPS)
+											  kDSNAttrGroupMembership, 
+#endif
 											  kDS1AttrENetAddress, kDS1AttrCopyTimestamp, kDSNAttrAltSecurityIdentities, kDS1AttrSMBRID,
 											  kDS1AttrSMBGroupRID, kDS1AttrSMBPrimaryGroupSID, kDS1AttrOriginalNodeName, kDSNAttrKeywords, NULL );
 }

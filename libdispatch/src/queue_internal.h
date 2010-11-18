@@ -82,6 +82,7 @@ extern struct dispatch_queue_s _dispatch_mgr_q;
 void _dispatch_queue_init(dispatch_queue_t dq);
 void _dispatch_queue_drain(dispatch_queue_t dq);
 void _dispatch_queue_dispose(dispatch_queue_t dq);
+void _dispatch_queue_push_list_slow(dispatch_queue_t dq, struct dispatch_object_s *obj);
 
 __attribute__((always_inline))
 static inline void
@@ -96,8 +97,7 @@ _dispatch_queue_push_list(dispatch_queue_t dq, dispatch_object_t _head, dispatch
 		// for example, see _dispatch_queue_dispose or _dispatch_atfork_child
 		prev->do_next = head;
 	} else {
-		dq->dq_items_head = head;
-		_dispatch_wakeup(dq);
+		_dispatch_queue_push_list_slow(dq, head);
 	}
 }
 

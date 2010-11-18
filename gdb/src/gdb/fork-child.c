@@ -43,7 +43,10 @@
 
 char *exec_argv0 = NULL;
 char *exec_pathname = NULL;
-int disable_aslr_flag = 1;
+
+#if defined (TM_NEXTSTEP)
+extern int disable_aslr_flag;
+#endif
 
 /* This just gets used as a default if we can't find SHELL.  */
 #ifndef SHELL_FILE
@@ -479,6 +482,8 @@ fork_inferior (char *exec_file_arg, char *allargs, char **env,
 
 	    ps_flags = POSIX_SPAWN_SETEXEC;
 
+#if defined (TM_NEXTSTEP)
+
 #ifndef _POSIX_SPAWN_DISABLE_ASLR
 #define _POSIX_SPAWN_DISABLE_ASLR 0x0100
 #endif
@@ -496,6 +501,8 @@ fork_inferior (char *exec_file_arg, char *allargs, char **env,
 	    retval = posix_spawnp (&pid, fileptr, NULL,  &attr, argv, env);
 	    warning ("posix_spawn failed, trying execvp, error: %d", retval);
 	  }
+#endif /* #if defined (TM_NEXTSTEP)  */
+
 #endif
 	try_execvp:
 	  execvp (fileptr, argv);
@@ -669,12 +676,5 @@ Set if GDB should use shell to invoke inferior (performs argument expansion in s
 Show if GDB should use shell to invoke inferior (performs argument expansion in shell)."), NULL,
 			   NULL, NULL,
 			   &setlist, &showlist);
-  add_setshow_boolean_cmd ("disable-aslr", class_obscure,
-			   &disable_aslr_flag, _("\
-Set if GDB should disable shared library address randomization."), _("\
-Show if GDB should disable shared library address randomization."), NULL,
-			   NULL, NULL,
-			   &setlist, &showlist);
-
 }
 /* APPLE LOCAL end start with shell */
