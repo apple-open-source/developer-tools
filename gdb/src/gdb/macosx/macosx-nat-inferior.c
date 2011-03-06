@@ -1393,6 +1393,9 @@ macosx_mourn_inferior ()
 
   macosx_clear_pending_events ();
   remove_thread_event_breakpoints ();
+#if HAVE_64_BIT_STACK_LOGGING
+  macosx_clear_logging_path ();
+#endif
 }
 
 void

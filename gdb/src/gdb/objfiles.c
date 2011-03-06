@@ -328,12 +328,15 @@ allocate_objfile_internal (struct objfile *objfile,
   /* FIXME: At some point this should be a host specific callout.
      Even though this is a Mac OS X specific copy of allocate_objfile,
      we should still fix this when we fix that...  */
+  /* Added /usr/lib/system to the equivalence libraries list.  */
   
   if (objfile->name != NULL &&
-      strstr (objfile->name, "libSystem") != NULL)
+      (strstr (objfile->name, "libSystem") != NULL
+       || strstr (objfile->name, "/usr/lib/system") == objfile->name))
     objfile->check_for_equivalence = 1;
   else
     objfile->check_for_equivalence = 0;
+  
   objfile->equivalence_table = NULL;
   
   objfile->syms_only_objfile = 0;

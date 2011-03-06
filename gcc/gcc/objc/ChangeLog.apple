@@ -1,3 +1,26 @@
+2010-04-18 Fariborz Jahanian <fjahanian@apple.com>
+
+	Radar 7865106 - Take two
+	* objc-act.c (objc_class_weak_import,
+	objc_build_weak_reference_internal_classname): New.
+	(objc_start_class_interface): For weak_import
+	class declaration generate asm(.weak_reference ...)
+	statement.
+	(objc_warn_on_class_attributes): Do not warn on existance
+	of 'weak_import' attribute on a class.
+	
+2010-04-15 Fariborz Jahanian <fjahanian@apple.com>
+
+	Radar 7865106
+	* objc-act.c (objc_class_weak_import): New
+	(objc_create_global_decl_for_class): Tag metaclass
+	with weak_import attribute if class has one.
+	(ivar_offset_ref): Call to objc_create_global_decl_for_class takes
+	extra flag arg.
+	(generate_v2_shared_structures): Ditto.
+	(objc_warn_on_class_attributes): Do not warn on existance
+	of 'weak_import' attribute on a class.
+	
 2010-04-02 Fariborz Jahanian <fjahanian@apple.com>
 
         Radar 7591784

@@ -1423,7 +1423,14 @@ backtrace_command_1 (char *count_exp, int show_locals, int from_tty)
 	  QUIT;
 	  ps = find_pc_psymtab (get_frame_address_in_block (fi));
 	  if (ps)
-	    PSYMTAB_TO_SYMTAB (ps);	/* Force syms to come in */
+            {
+              /* Don't let bad debug info keep us from completing the backtrace. */
+              struct gdb_exception e;
+              TRY_CATCH (e, RETURN_MASK_ALL)
+                {
+                  PSYMTAB_TO_SYMTAB (ps);	/* Force syms to come in */
+                }
+            }
 	}
     }
 
@@ -1431,6 +1438,7 @@ backtrace_command_1 (char *count_exp, int show_locals, int from_tty)
        fi && count--;
        i++, fi = get_prev_frame (fi))
     {
+      struct gdb_exception e;
       QUIT;
 
       /* Don't use print_stack_frame; if an error() occurs it probably
@@ -1440,9 +1448,14 @@ backtrace_command_1 (char *count_exp, int show_locals, int from_tty)
       /* We already printed out the inlined information above; don't repeat
 	 it here.  */
 
-      print_frame_info (fi, 1, LOCATION, 1);
-      if (show_locals)
-	print_frame_local_vars (fi, 1, gdb_stdout);
+      /* Even if we have an uncaught error printing the frame, 
+         keep on backtracing. */
+      TRY_CATCH (e, RETURN_MASK_ALL)
+        {
+          print_frame_info (fi, 1, LOCATION, 1);
+          if (show_locals)
+            print_frame_local_vars (fi, 1, gdb_stdout);
+        }
     }
 
   /* If we've stopped before the end, mention that.  */

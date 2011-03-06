@@ -912,6 +912,28 @@ lookup_protocol_in_reflist (tree rproto_list, tree lproto)
   return 0;
 }
 
+/* APPLE LOCAL begin radar 7865106 */
+static bool objc_class_weak_import(tree class)
+{
+  tree chain;
+  gcc_assert (class && TREE_CODE (class) == CLASS_INTERFACE_TYPE);
+  for (chain = CLASS_ATTRIBUTES (class); chain; chain = TREE_CHAIN (chain))
+    if (is_attribute_p ("weak_import", TREE_PURPOSE (chain)))
+      return true;
+  return false;
+}
+
+static char*
+objc_build_weak_reference_internal_classname (tree ident, bool metaclass)
+{
+  static char string[BUFSIZE];
+  sprintf (string, ".weak_reference %s_%s", !metaclass ? "_OBJC_CLASS_$" 
+				       : "_OBJC_METACLASS_$", 
+			    IDENTIFIER_POINTER (ident));
+  return string;
+}
+/* APPLE LOCAL end radar 7865106 */
+
 void
 /* APPLE LOCAL radar 4548636 */
 objc_start_class_interface (tree class, tree super_class, tree protos, tree attributes)
@@ -923,6 +945,17 @@ objc_start_class_interface (tree class, tree super_class, tree protos, tree attr
   CLASS_ATTRIBUTES (objc_interface_context) = attributes;
   objc_warn_on_class_attributes (objc_interface_context, false);
 /* APPLE LOCAL end radar 4548636 */
+  /* APPLE LOCAL begin radar 7865106 */
+  if (flag_objc_abi == 2 && objc_class_weak_import(objc_interface_context)) {
+    const char * name = 
+      objc_build_weak_reference_internal_classname(CLASS_NAME(objc_interface_context) , 0);
+    tree asm_str = build_string(strlen(name), name);
+    cgraph_add_asm_node(asm_str);
+    name = objc_build_weak_reference_internal_classname(CLASS_NAME(objc_interface_context) , 1);
+    asm_str = build_string(strlen(name), name);
+    cgraph_add_asm_node(asm_str);
+  }
+  /* APPLE LOCAL end radar 7865106 */
   objc_public_flag = 0;
 }
 
@@ -14756,6 +14789,10 @@ objc_warn_on_class_attributes (tree class, bool use)
       else if (is_attribute_p ("objc_exception", TREE_PURPOSE (chain)))
         ;
       /* APPLE LOCAL end radar 5008110 */
+      /* APPLE LOCAL begin radar 7865106 */
+      else if (is_attribute_p ("weak_import", TREE_PURPOSE (chain)))
+        ;
+      /* APPLE LOCAL end radar 7865106 */
       else if (!use)
 	warning (0, "attribute %s is unknown - ignored",
 		  IDENTIFIER_POINTER (TREE_PURPOSE (chain)));

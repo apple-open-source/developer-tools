@@ -7502,7 +7502,10 @@ For example, if the compiler would normally search for headers in
 @file{/usr/include} and libraries in @file{/usr/lib}, it will instead
 search @file{@var{dir}/usr/include} and @file{@var{dir}/usr/lib}.  
 
-If you use both this option and the @option{-isysroot} option, then
+With Apple's version of GCC, this option is effectively replaced by
+@option{-isysroot}, which you should use instead of @option{--sysroot}.
+For other (non-Apple) versions of GCC,
+if you use both this option and the @option{-isysroot} option, then
 the @option{--sysroot} option will apply to libraries, but the
 @option{-isysroot} option will apply to header files.
 

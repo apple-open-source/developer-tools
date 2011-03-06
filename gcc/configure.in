@@ -1496,7 +1496,8 @@ AC_ARG_WITH([build-sysroot],
   [  --with-build-sysroot=sysroot
                           use sysroot as the system root during the build],
   [if test x"$withval" != x ; then
-     SYSROOT_CFLAGS_FOR_TARGET="--sysroot=$withval"
+     # APPLE LOCAL 7852964 Use -isysroot instead of --sysroot.
+     SYSROOT_CFLAGS_FOR_TARGET="-isysroot $withval"
    fi],
   [SYSROOT_CFLAGS_FOR_TARGET=])
 AC_SUBST(SYSROOT_CFLAGS_FOR_TARGET)

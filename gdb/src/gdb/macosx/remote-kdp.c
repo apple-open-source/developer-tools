@@ -43,6 +43,7 @@
 
 #include "defs.h"
 #include "value.h"
+#include "infcall.h"  /* For inferior_function_calls_disabled_p.  */
 
 #if KDP_TARGET_POWERPC
 #include "ppc-macosx-thread-status.h"
@@ -193,6 +194,8 @@ static void
 kdp_open (char *name, int from_tty)
 {
   push_target (&kdp_ops);
+  /* KDP can't do inferior function calls.  */
+  inferior_function_calls_disabled_p = 1;
 #if KDP_TARGET_ARM
   extern int set_arm_single_step_mode (struct gdbarch *, int);
   set_arm_single_step_mode (current_gdbarch, arm_single_step_mode_software);
@@ -2078,6 +2081,12 @@ kdp_remove_hw_breakpoint (CORE_ADDR unused1, gdb_byte *unused2)
   return 0;
 }
 
+static CORE_ADDR
+kdp_allocate_memory (int size)
+{
+  error ("KDP can't allocate memory in the kernel being debugged.");
+}
+
 static void
 init_kdp_ops (void)
 {
@@ -2117,6 +2126,7 @@ init_kdp_ops (void)
   kdp_ops.to_terminal_ours = kdp_terminal_ours;
   kdp_ops.to_async = kdp_async;
   kdp_ops.to_async_mask_value = 1;
+  kdp_ops.to_allocate_memory = kdp_allocate_memory;
   kdp_ops.to_magic = OPS_MAGIC;
 }
 

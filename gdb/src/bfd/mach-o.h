@@ -114,7 +114,10 @@ typedef enum bfd_mach_o_load_command_type
   BFD_MACH_O_LC_ENCRYPTION_INFO = 0x21,  /* encrypted segment information */
   BFD_MACH_O_LC_DYLD_INFO = 0x22,        /* compressed dyld information */
   BFD_MACH_O_LC_DYLD_INFO_ONLY = 0x22 | BFD_MACH_O_LC_REQ_DYLD,  /* compressed dyld information only */
-  BFD_MACH_O_LC_LOAD_UPWARD_DYLIB = 0x23 | BFD_MACH_O_LC_REQ_DYLD /* Same as LC_LOAD_DYLIB */
+  BFD_MACH_O_LC_LOAD_UPWARD_DYLIB = 0x23 | BFD_MACH_O_LC_REQ_DYLD, /* Same as LC_LOAD_DYLIB */
+  BFD_MACH_O_LC_VERSION_MIN_MACOSX = 0x24,  /* build for MacOSX min OS version */
+  BFD_MACH_O_LC_VERSION_MIN_IPHONEOS = 0x25,  /* build for iPhoneOS min OS version */
+  BFD_MACH_O_LC_FUNCTION_STARTS = 0x26      /* table of function start addresses. */
 }
 bfd_mach_o_load_command_type;
 
@@ -166,6 +169,36 @@ typedef enum bfd_mach_o_filetype
   BFD_MACH_O_MH_BUNDLE_KEXT = 11
 }
 bfd_mach_o_filetype;
+
+typedef enum bfd_mach_o_header_flags
+{
+  BFD_MACH_O_MH_NOUNDEFS	= 0x1,
+  BFD_MACH_O_MH_INCRLINK	= 0x2,	
+  BFD_MACH_O_MH_DYLDLINK	= 0x4,	
+  BFD_MACH_O_MH_BINDATLOAD	= 0x8,	
+  BFD_MACH_O_MH_PREBOUND	= 0x10,		
+  BFD_MACH_O_MH_SPLIT_SEGS	= 0x20,	
+  BFD_MACH_O_MH_LAZY_INIT	= 0x40,	
+  BFD_MACH_O_MH_TWOLEVEL	= 0x80,	
+  BFD_MACH_O_MH_FORCE_FLAT	= 0x100,		
+  BFD_MACH_O_MH_NOMULTIDEFS	= 0x200,	
+  BFD_MACH_O_MH_NOFIXPREBINDING = 0x400,	
+  BFD_MACH_O_MH_PREBINDABLE     = 0x800,       
+  BFD_MACH_O_MH_ALLMODSBOUND    = 0x1000,	
+  BFD_MACH_O_MH_SUBSECTIONS_VIA_SYMBOLS = 0x2000,
+  BFD_MACH_O_MH_CANONICAL    = 0x4000,
+  BFD_MACH_O_MH_WEAK_DEFINES	= 0x8000,	
+  BFD_MACH_O_MH_BINDS_TO_WEAK = 0x10000,
+  BFD_MACH_O_MH_ALLOW_STACK_EXECUTION = 0x20000,
+  BFD_MACH_O_MH_ROOT_SAFE = 0x40000,
+  BFD_MACH_O_MH_SETUID_SAFE = 0x80000,
+  BFD_MACH_O_MH_NO_REEXPORTED_DYLIBS = 0x100000,
+  BFD_MACH_O_MH_PIE = 0x200000,
+  BFD_MACH_O_MH_DEAD_STRIPPABLE_DYLIB = 0x40000,
+  BFD_MACH_O_MH_HAS_TLV_DESCRIPTORS = 0x800000,
+  BFD_MACH_O_MH_NO_HEAP_EXECUTION = 0x1000000
+}
+bfd_mach_o_header_flags;
 
 /* Constants for the type of a section.  */
 
@@ -530,6 +563,7 @@ typedef struct mach_o_data_struct bfd_mach_o_data_struct;
 /* APPLE LOCAL  Mach-O */
 unsigned int bfd_mach_o_version (bfd *);
 int bfd_mach_o_stub_library (bfd *);
+int bfd_mach_o_uses_dylinker (bfd *);
 bfd_boolean bfd_mach_o_encrypted_binary (bfd *);
 /* APPLE LOCAL shared cache  */
 bfd_boolean bfd_mach_o_in_shared_cached_memory (bfd *);

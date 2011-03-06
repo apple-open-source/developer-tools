@@ -269,7 +269,13 @@ core_open (char *filename, int from_tty)
 #ifdef MACOSX_DYLD
       /* Load all mach images by checking the frozen state of DYLD so
          we know where all shared libraries are.  */
-      macosx_init_dyld_from_core ();
+      /* Don't do this if the exec_bfd doesn't have the DYLDLINK flag set -
+         that means this is either a kernel core file or a core file of a
+         program that didn't use dyld.  */
+      if (!exec_bfd || bfd_mach_o_uses_dylinker(exec_bfd))
+	{
+	  macosx_init_dyld_from_core ();
+	}
 #endif
       /* Fetch all registers from core file.  */
       target_fetch_registers (-1);

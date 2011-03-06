@@ -592,7 +592,7 @@ macosx_check_safe_call (int which, enum check_which_threads thread_mode)
 	 the scheduler mode is set to off, just try the patterns.  */
 
       if (thread_mode == CHECK_CURRENT_THREAD 
-	  || (thread_mode = CHECK_SCHEDULER_VALUE && !scheduler_lock_on_p ()))
+	  || (thread_mode == CHECK_SCHEDULER_VALUE && !scheduler_lock_on_p ()))
           malloc_unsafe = -1;
       else
 	malloc_unsafe = macosx_check_malloc_is_unsafe ();

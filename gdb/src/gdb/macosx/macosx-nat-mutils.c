@@ -39,6 +39,8 @@
 #include "block.h"
 #include "objc-lang.h"
 
+#include <dlfcn.h>
+
 /* For the gdbarch_tdep structure so we can get the wordsize. */
 
 #if defined (TARGET_POWERPC)
@@ -1116,7 +1118,13 @@ extern kern_return_t __mach_stack_logging_frames_for_uniqued_stack(task_t task,
 								   uint32_t max_stack_frames, 
 								   uint32_t *num_frames);
 
+// This one may not be present, so I'll have to dlsym it...
+extern kern_return_t __mach_stack_logging_set_file_path(task_t task, char* file_path);
 
+typedef kern_return_t (*set_logging_file_path_ptr) (task_t, char *);
+
+static const char *stack_logging_set_file_function = "__mach_stack_logging_set_file_path";
+static const char *stack_log_filename_variable = "__stack_log_file_path__";
 /* END STACK_LOGGING.H  */
 
 /* I added these ones: */
@@ -1385,6 +1393,17 @@ do_over_unique_frames (stack_logging_record_t record, void *data)
    gathered by Libc if the MallocStackLoggingNoCompact environment
    variable is set.  */
 
+#if HAVE_64_BIT_STACK_LOGGING
+ static char malloc_path_string_buffer[2048];
+ static set_logging_file_path_ptr logging_file_path_fn = NULL;
+
+ void
+ macosx_clear_logging_path ()
+ {
+   malloc_path_string_buffer[0] = '\0';  
+ }
+#endif
+
 void
 malloc_history_info_command (char *arg, int from_tty)
 {
@@ -1454,6 +1473,64 @@ malloc_history_info_command (char *arg, int from_tty)
       state.block_address = 0;
       passed_state = &state;
     }
+
+#if HAVE_64_BIT_STACK_LOGGING
+  /* If the function __mach_stack_logging_set_file_path is defined,
+     and we can find the char * variable STACK_LOG_FILENAME_VARIABLE
+     in the target, then we read that variable as a string, and pass
+     it to the function.  */
+  /* Only look this up once.  This is okay for now, since the value
+     starts out as NULL, and then gets set once.  So if we read it
+     before it is set, it will be NULL & won't set our buffer.  Then
+     later we'll look it up again.  */
+
+  if (malloc_path_string_buffer[0] == '\0')
+    {
+      /* Only search for the logging function once.  */
+      static int already_looked = 0;
+
+      if (!already_looked)
+        logging_file_path_fn = dlsym (RTLD_DEFAULT, stack_logging_set_file_function);
+      already_looked = 1;
+
+      if (logging_file_path_fn != NULL)
+        {
+          /* Okay, look for the symbol in question: */
+
+          struct minimal_symbol *filename_variable  
+            = lookup_minimal_symbol (stack_log_filename_variable, NULL, NULL);
+          if (filename_variable)
+            {
+              TRY_CATCH (except, RETURN_MASK_ERROR)
+                {
+                  CORE_ADDR string_addr 
+                    = read_memory_unsigned_integer (SYMBOL_VALUE_ADDRESS(filename_variable), 
+                                                    TARGET_PTR_BIT/TARGET_CHAR_BIT);
+                  read_memory_string (string_addr, malloc_path_string_buffer, 2047);
+                }
+              if (except.reason == NO_ERROR)
+                {
+                  kern_return_t kret = logging_file_path_fn (macosx_status->task, 
+                                                             malloc_path_string_buffer);
+                  if (kret != KERN_SUCCESS)
+                    {
+                      warning ("Got an error setting the logging file path: %d.", kret);
+                    }
+                }
+              else
+                {
+                  warning ("Error reading the string for \"%s\" out of target memory, "
+                           "can't set logging filepath.", stack_log_filename_variable);
+                }
+            }
+          else 
+            {
+              warning ("Could not find variable \"%s\", so "
+                       "I can't set the logging filename.", stack_log_filename_variable);
+            }
+        }
+    }
+#endif
 
   TRY_CATCH (except, RETURN_MASK_ERROR)
     {
@@ -1894,10 +1971,6 @@ gc_print_references (CORE_ADDR list_addr, int wordsize)
   return list_addr;
 }
 
-/* We need this to return the auto_zone for the root & reference
-   tracing functions.  */
-static struct cached_value *auto_zone_fn = NULL;
-
 static void
 gc_free_data (struct value *addr_val)
 {
@@ -1918,10 +1991,37 @@ gc_free_data (struct value *addr_val)
   do_cleanups (old_cleanups);
 }
 
+static struct cached_value *
+get_zone_finder ()
+{
+  /* We need this to return the auto_zone for the root & reference
+     tracing functions.  */
+  static struct cached_value *auto_zone_fn = NULL;
+
+  /* Make a cached version of the root tracing functions,
+     auto_zone and auto_gdb_enumerate_roots.  Get the auto_zone,
+     and then call the root function.  */
+ 
+  if (auto_zone_fn == NULL)
+    {
+      /* objc_collectableZone is the 10.7 version of auto_zone.  
+         Use it if it exists.  */
+      if (lookup_minimal_symbol ("objc_collectableZone", 0, 0))
+        auto_zone_fn = create_cached_function ("objc_collectableZone",
+                                               builtin_type_voidptrfuncptr);
+
+      if (auto_zone_fn == NULL && lookup_minimal_symbol ("auto_zone", 0, 0))
+        auto_zone_fn = create_cached_function ("auto_zone", 
+                                               builtin_type_voidptrfuncptr);
+    }
+  return auto_zone_fn;
+}
+
 static void
 gc_root_tracing_command (char *arg, int from_tty)
 {
   static struct cached_value *enumerate_root_fn = NULL;
+  struct cached_value *zone_finder_fn;
   struct value *arg_list[3], *root_list_val;
   struct cleanup *cleanup_chain;
   CORE_ADDR addr, list_addr;
@@ -1949,15 +2049,9 @@ gc_root_tracing_command (char *arg, int from_tty)
      data structures that we will need.  */
   /* FIXME - Maybe it's easier to just grub in memory...  */
 
-  /* Make a cached version of the root tracing functions,
-     auto_zone and auto_gdb_enumerate_roots.  Get the auto_zone,
-     and then call the root function.  */
- 
-  if (auto_zone_fn == NULL)
-    auto_zone_fn = create_cached_function ("auto_zone", 
-					   builtin_type_voidptrfuncptr);
-  if (auto_zone_fn == NULL)
-    error ("Couldn't find \"auto_zone\" function in inferior.");
+  zone_finder_fn = get_zone_finder();
+  if (zone_finder_fn == NULL)
+    error ("Couldn't find \"objc_collectableZone\" or \"auto_zone\" function in inferior.");
 
   if (enumerate_root_fn == NULL)
     enumerate_root_fn = create_cached_function ("auto_gdb_enumerate_roots", 
@@ -1970,7 +2064,7 @@ gc_root_tracing_command (char *arg, int from_tty)
                       (scheduler_locking_on);
   make_cleanup_set_restore_debugger_mode (NULL, 0);
   arg_list[0] 
-    = call_function_by_hand (lookup_cached_function (auto_zone_fn), 
+    = call_function_by_hand (lookup_cached_function (zone_finder_fn), 
 			     0, NULL);
 
   /* Okay, we've got a value for the auto_zone, now call the enumerate
@@ -2040,6 +2134,7 @@ void
 gc_reference_tracing_command (char *arg, int from_tty)
 {
   static struct cached_value *enumerate_ref_fn = NULL;
+  struct cached_value *zone_finder_fn;
   struct value *arg_list[3], *ref_list_val;
   struct cleanup *cleanup_chain;
   CORE_ADDR addr, list_addr;
@@ -2069,12 +2164,10 @@ gc_reference_tracing_command (char *arg, int from_tty)
   /* Make a cached version of the root tracing functions,
      auto_zone and auto_gdb_enumerate_roots.  Get the auto_zone,
      and then call the root function.  */
- 
-  if (auto_zone_fn == NULL)
-    auto_zone_fn = create_cached_function ("auto_zone", 
-					   builtin_type_voidptrfuncptr);
-  if (auto_zone_fn == NULL)
-    error ("Couldn't find \"auto_zone\" function in inferior.");
+
+  zone_finder_fn = get_zone_finder ();
+  if (zone_finder_fn == NULL)
+    error ("Couldn't find \"objc_collectableZone\" or \"auto_zone\" function in inferior.");
 
   if (enumerate_ref_fn == NULL)
     enumerate_ref_fn = create_cached_function ("auto_gdb_enumerate_references", 
@@ -2087,7 +2180,7 @@ gc_reference_tracing_command (char *arg, int from_tty)
                       (scheduler_locking_on);
   make_cleanup_set_restore_debugger_mode (NULL, 0);
   arg_list[0] 
-    = call_function_by_hand (lookup_cached_function (auto_zone_fn), 
+    = call_function_by_hand (lookup_cached_function (zone_finder_fn), 
 			     0, NULL);
 
   /* Okay, we've got a value for the auto_zone, now call the enumerate

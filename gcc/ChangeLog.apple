@@ -1,3 +1,9 @@
+2010-08-06  Bob Wilson  <bob.wilson@apple.com>
+
+      Radar 8277973
+      * Makefile.in (FLAGS_FOR_TARGET): Add $(SYSROOT_CFLAGS_FOR_TARGET).
+      * build_gcc: Configure for powerpc using --with-build-sysroot.
+
 2010-02-08  Jim Grosbach <grosbach@apple.com>
 
 	Radar 7148788

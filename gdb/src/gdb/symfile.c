@@ -204,6 +204,11 @@ void _initialize_symfile (void);
    actual need for that?  */
 static char *kext_symbol_file_path = NULL;
 
+static void
+find_kext_loadaddrs_from_kernel (const char *filename,
+                                 struct section_addr_info **sect_addrs,
+                                 char **kext_bundle_executable_filename);
+
 /* APPLE LOCAL: Need to declare this one:  */
 static struct objfile *
 symbol_file_add_name_with_addrs_or_offsets_using_objfile (struct objfile *in_objfile,
@@ -2898,6 +2903,7 @@ add_kext_command (char *args, int from_tty)
 
   char *kextload_symbol_filename;
   char *kext_bundle_executable_filename;
+  struct section_addr_info *section_addrs = NULL;
 
   const char *const usage_string =
     "Error: %s\n"
@@ -2907,7 +2913,8 @@ add_kext_command (char *args, int from_tty)
     "path, the corresponding .dSYM bundle and .sym file must be located in\n"
     "the same directory.  If you provide a .sym filename, the .dSYM bundle\n"
     "and .kext file must be siblings of each other, and they must be in a\n"
-    "spotlight indexed location or the same directory as the .sym.\n";
+    "spotlight indexed location or the same directory as the .sym.\n"
+    "On newer kernels, the .sym file is not required - only the .kext and .dSYM.";
 
   struct cleanup *my_cleanups = make_cleanup (null_cleanup, NULL);
 
@@ -2931,8 +2938,21 @@ add_kext_command (char *args, int from_tty)
 
   if (!strncmp (ext, ".kext", strlen (".kext")))
     {
+       // See if we can find a .sym file next to the .kext bundle; use it 
+       // if it's there.
        find_kext_files_by_bundle (filename, &kextload_symbol_filename,
                                    &kext_bundle_executable_filename);
+
+       // See if the kernel can supply load addresses to us; if it can,
+       // we don't need a .sym file at all.
+       if ((!kextload_symbol_filename || !file_exists_p (kextload_symbol_filename))
+           && lookup_minimal_symbol ("gLoadedKextSummaries", NULL, NULL))
+         {
+           find_kext_loadaddrs_from_kernel (filename, &section_addrs, 
+                                            &kext_bundle_executable_filename);
+           if (section_addrs)
+             make_cleanup_free_section_addr_info (section_addrs);
+         }
     }
   else if (!strncmp (ext, ".sym", strlen (".sym")))
     {
@@ -2942,10 +2962,19 @@ add_kext_command (char *args, int from_tty)
   else
       error (usage_string, "supplied file must have a .kext or .sym extension");
 
-  o = symbol_file_add_name_with_addrs_or_offsets
-             (kextload_symbol_filename, from_tty, NULL, NULL, 0, 0,
-              flags, symflags, 0, NULL, kext_bundle_executable_filename);
-  o->syms_only_objfile = 1;
+  if (section_addrs)
+    {
+      o = symbol_file_add_name_with_addrs_or_offsets
+                 (kext_bundle_executable_filename, from_tty, section_addrs, 
+                  NULL, 0, 0, flags, symflags, 0, NULL, NULL);
+    }
+  else
+    {
+      o = symbol_file_add_name_with_addrs_or_offsets
+                 (kextload_symbol_filename, from_tty, NULL, NULL, 0, 0,
+                  flags, symflags, 0, NULL, kext_bundle_executable_filename);
+      o->syms_only_objfile = 1;
+    }
 
   if (bfd_default_compatible (bfd_get_arch_info (o->obfd),
                               gdbarch_bfd_arch_info (current_gdbarch)) == NULL)
@@ -2969,36 +2998,86 @@ add_kext_command (char *args, int from_tty)
   do_cleanups (my_cleanups);
 }
 
+/* Given the pathname to a kext bundle, read the Info.plist
+   to find the kext identifier (com.apple.blahblah) and the
+   full pathname to the actual kext binary in the bundle.
+
+   Throws an error if it sees an invalid or missing Info.plist.
+
+   kext_bundle_filename, kext_bundle_executable_filename and 
+   bundle_identifier_name_from_plist are xmalloced strings, it is the 
+   responsibility of the caller to free them.  */
+
+static void
+get_kext_bundle_ident_and_binary_path (const char *filename,
+                             const char **kext_bundle_filename,
+                             char **kext_bundle_executable_filename,
+                             const char **bundle_identifier_name_from_plist)
+{
+  const char *bundle_executable_name_from_plist;
+
+  *kext_bundle_filename = macosx_kext_info (filename, 
+                                           &bundle_executable_name_from_plist,
+                                           bundle_identifier_name_from_plist);
+
+  if (*kext_bundle_filename == NULL)
+    error ("Unable to find kext bundle at \"%s\"", filename);
+  if (bundle_executable_name_from_plist == NULL)
+    error ("Unable to find CFBundleExecutable in Info.plist");
+  if (*bundle_identifier_name_from_plist == NULL)
+    error ("Unable to find CFBundleIdentifier in Info.plist");
+
+ char *t = dirname ((char *)*kext_bundle_filename);
+  if (t == NULL)
+    error ("dirname on the kext bundle filename failed");
+
+  *kext_bundle_executable_filename = xmalloc (strlen (*kext_bundle_filename) +
+                                strlen ("/Contents/MacOS/") +
+                                strlen (bundle_executable_name_from_plist) + 1);
+  strcpy (*kext_bundle_executable_filename, *kext_bundle_filename);
+  strcat (*kext_bundle_executable_filename, "/Contents/MacOS/");
+  strcat (*kext_bundle_executable_filename, bundle_executable_name_from_plist);
+
+  /* See if we might be loading a shallow bundle here.  */
+  if (!file_exists_p (*kext_bundle_executable_filename))
+    {
+       char *shallow_bundle_name = xmalloc (strlen (*kext_bundle_filename) + 1 +
+                               strlen (bundle_executable_name_from_plist) + 1);
+       strcpy (shallow_bundle_name, *kext_bundle_filename);
+       strcat (shallow_bundle_name, "/");
+       strcat (shallow_bundle_name, bundle_executable_name_from_plist);
+       if (file_exists_p (shallow_bundle_name))
+         {
+           xfree ((char *) *kext_bundle_executable_filename);
+           *kext_bundle_executable_filename = shallow_bundle_name;
+         }
+       else
+         {
+           xfree ((char *) shallow_bundle_name);
+         }
+    }
+}
+
 static void
 find_kext_files_by_bundle (const char *filename,
                            char **kextload_symbol_filename,
                            char **kext_bundle_executable_filename)
 {
-  const char *bundle_executable_name_from_plist;
-  const char *bundle_identifier_name_from_plist;
   const char *kext_bundle_filename;
+  const char *bundle_identifier_name_from_plist;
   char *kextload_symbol_basename;
-  char *t;
 
-  kext_bundle_filename = macosx_kext_info (filename, 
-                                           &bundle_executable_name_from_plist,
-                                           &bundle_identifier_name_from_plist);
-  
-  if (kext_bundle_filename == NULL)
-    error ("Unable to find kext bundle at pathname provided");
-  if (bundle_executable_name_from_plist == NULL)
-    error ("Unable to find CFBundleExecutable in Info.plist");
-  if (bundle_identifier_name_from_plist == NULL)
-    error ("Unable to find CFBundleIdentifier in Info.plist");
-  
-  t = dirname ((char *)kext_bundle_filename);
-  if (t == NULL)
-    error ("dirname on the kext bundle filename failed");
+  get_kext_bundle_ident_and_binary_path (filename, &kext_bundle_filename,
+         kext_bundle_executable_filename, &bundle_identifier_name_from_plist);
 
   kextload_symbol_basename = xmalloc 
              (strlen (bundle_identifier_name_from_plist) + strlen (".sym") + 1);
   strcpy (kextload_symbol_basename, bundle_identifier_name_from_plist);
   strcat (kextload_symbol_basename, ".sym");
+
+ char *t = dirname ((char *)kext_bundle_filename);
+  if (t == NULL)
+    error ("dirname on the kext bundle filename failed");
 
   /* A string of "." means that KEXT_BUNDLE_FILENAME has no dirname 
      component. */
@@ -3041,35 +3120,52 @@ find_kext_files_by_bundle (const char *filename,
         }
     }
 
-  *kext_bundle_executable_filename = xmalloc (strlen (kext_bundle_filename) +
-                                strlen ("/Contents/MacOS/") +
-                                strlen (bundle_executable_name_from_plist) + 1);
-  strcpy (*kext_bundle_executable_filename, kext_bundle_filename);
-  strcat (*kext_bundle_executable_filename, "/Contents/MacOS/");
-  strcat (*kext_bundle_executable_filename, bundle_executable_name_from_plist);
-
-  /* See if we might be loading a shallow bundle here.  */
-  if (!file_exists_p (*kext_bundle_executable_filename))
-    {
-       char *shallow_bundle_name = xmalloc (strlen (kext_bundle_filename) + 1 +
-                               strlen (bundle_executable_name_from_plist) + 1);
-       strcpy (shallow_bundle_name, kext_bundle_filename);
-       strcat (shallow_bundle_name, "/");
-       strcat (shallow_bundle_name, bundle_executable_name_from_plist);
-       if (file_exists_p (shallow_bundle_name))
-         {
-           xfree ((char *) *kext_bundle_executable_filename);
-           *kext_bundle_executable_filename = shallow_bundle_name;
-         }
-       else
-         {
-           xfree ((char *) shallow_bundle_name);
-         }
-    }
-
-  xfree ((char *) kext_bundle_filename);
-  xfree ((char *) bundle_executable_name_from_plist);
   xfree ((char *) bundle_identifier_name_from_plist);
+}
+
+/* This is used in a kernel debug session where the user
+   is adding the symbol file and/or debug info for one of
+   the loaded kexts.  It looks in the kernel memory at the
+   list of currently loaded kexts, get the load addresses of
+   each section and fills in the SECT_ADDRS array.
+
+   An error will be thrown if there are any problems finding
+   the kext load addresses in the kernel's memory.
+
+   It is the responsibility of the caller to free
+   SECT_ADDRS which is xmalloced.  free_section_addr_info()
+   is the best way to do this.  */
+
+static void 
+find_kext_loadaddrs_from_kernel (const char *filename, 
+                                 struct section_addr_info **sect_addrs,
+                                 char **kext_bundle_executable_filename)
+{
+  const char *bundle_identifier_name_from_plist;
+  const char *kext_bundle_filename;
+
+  get_kext_bundle_ident_and_binary_path (filename, &kext_bundle_filename,
+         kext_bundle_executable_filename, &bundle_identifier_name_from_plist);
+
+  if (bundle_identifier_name_from_plist)
+    make_cleanup (xfree, bundle_identifier_name_from_plist);
+  if (kext_bundle_filename)
+    make_cleanup (xfree, kext_bundle_filename);
+
+  // kext_bundle_filename now holds the path to the kext executable binary
+
+  uint8_t **kext_uuids = get_binary_file_uuids (*kext_bundle_executable_filename);
+  if (kext_uuids == NULL)
+    error ("Unable to find Mach-O LC_UUID load command in file '%s'", 
+                                      *kext_bundle_executable_filename);
+  struct cleanup *clean = make_cleanup (free_uuids_array, kext_uuids);
+
+  if (!macosx_get_kext_sect_addrs_from_kernel (*kext_bundle_executable_filename,
+                                               kext_uuids, sect_addrs,
+                                               bundle_identifier_name_from_plist))
+    error ("Unable to find the kext '%s' loaded in this kernel.", filename);
+
+  do_cleanups (clean);
 }
 
 static void

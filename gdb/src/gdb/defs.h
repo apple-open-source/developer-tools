@@ -325,7 +325,7 @@ struct symtab_and_line;
 struct ui_out;
 struct symbol;
 
-/* From utils.c */
+
 
 /* APPLE LOCAL begin size */
 extern void set_screen_size (void);
@@ -856,6 +856,13 @@ struct ptid get_scheduler_lock_ptid ();
 struct cleanup * 
   make_cleanup_set_restore_scheduler_locking_mode (enum scheduler_locking_mode new_mode);
 /* APPLE LOCAL end scheduler locking */
+
+uint8_t **get_binary_file_uuids (const char *filename);
+
+void free_uuids_array (uint8_t **uuids);
+
+char *puuid (uint8_t *uuid);
+
 
 
 /* Optional host machine definition.  Pure autoconf targets will not

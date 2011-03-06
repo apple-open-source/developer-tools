@@ -41,4 +41,7 @@ extern int call_ptrace (int, int, PTRACE_ARG3_TYPE, int);
 
 CORE_ADDR macosx_allocate_space_in_inferior (int len);
 
+#if HAVE_64_BIT_STACK_LOGGING
+void macosx_clear_logging_path ();
+#endif
 #endif /* __GDB_MACOSX_NAT_MUTILS_H__ */

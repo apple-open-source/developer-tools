@@ -3544,11 +3544,13 @@ find_implementation (CORE_ADDR object, CORE_ADDR sel, int stret)
     {
       CORE_ADDR resolves_to;
       struct cleanup *cleanup;
+      enum objc_debugger_mode_result objc_retval;
+
       resolves_to = lookup_implementation_in_cache (ostr.isa, sel);
       if (resolves_to != 0)
 	return resolves_to;
 
-      /* If there is a malloc lock being held we can't do the 
+      /* If there is a malloc or spin lock being held we can't do the 
          get_class_address_from_object () call below - that requires a
          generic inferior function call to be able to run - but we can
          use a special fallback method in new_objc_runtime_find_impl.  So
@@ -3556,8 +3558,9 @@ find_implementation (CORE_ADDR object, CORE_ADDR sel, int stret)
          KVO interposer that this method should be dispatched to or anything.
          It isn't really correct but it's probably better than failing 
          outright. */
-      if (make_cleanup_set_restore_debugger_mode (&cleanup, 1) == 
-                                      objc_debugger_mode_fail_malloc_lock_held)
+      objc_retval = make_cleanup_set_restore_debugger_mode (&cleanup, 1);
+      if (objc_retval == objc_debugger_mode_fail_malloc_lock_held
+          || objc_retval == objc_debugger_mode_fail_spinlock_held)
         {
           real_class_addr = ostr.isa;
         }

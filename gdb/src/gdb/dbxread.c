@@ -968,7 +968,14 @@ fill_symbuf (struct objfile *objfile)
 
   const unsigned objfile_symbol_size = DBX_SYMBOL_SIZE (objfile);
   const unsigned objfile_symbuf_size = 4096 * objfile_symbol_size;
-  if (symbuf != NULL && objfile_symbuf_size != symbuf_size)
+
+  // DBX_SYMBOL_SIZE should not change within a single debug session
+  // Note that dSYM objfiles may have a symbol_size of zero; don't
+  // worry about that.
+
+  if (symbuf != NULL 
+      && objfile_symbuf_size != 0 
+      && objfile_symbuf_size != symbuf_size)
     {
       warning ("Inconsistent DBX_SYMBOL_SIZE\n");
       xfree (symbuf);

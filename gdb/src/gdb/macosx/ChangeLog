@@ -1,3 +1,102 @@
+2010-12-20  Jason Molenda  (jmolenda@apple.com)
+
+	* ppc-macosx-tdep.c (ppc_fast_show_stack): Remove this function,
+	it's not being used any longer.
+	* tm-ppc-macosx.h (FAST_COUNT_STACK_DEPTH): Remove this macro
+	definition, it's not needed any longer.
+
+2010-12-18  Jason Molenda  (jmolenda@apple.com)
+
+	* macosx-tdep.c (maintenance_list_kexts): Check for a 0 value
+	gLoadedKextSummaries, print a specific error about that.
+	(macosx_get_kext_sect_addrs_from_kernel): Check for a 0 value
+	gLoadedKextSummaries, print a specific error about that.
+	Accept a filename parameter of the kext binary for error
+	logging, if needed.
+	Update the error text when a kext is not matched in the kernel
+	to print the file path to the kext binary.
+
+2010-12-18  Jason Molenda  (jmolenda@apple.com)
+
+	* macosx-tdep.c (maintenance_list_kexts): Add command to dump all
+	of the kexts that a kernel has loaded.
+
+2010-12-16  Jason Molenda  (jmolenda@apple.com)
+
+        * macosx-tdep.c (macosx_get_kext_sect_addrs_from_kernel): Take the
+        kext bundle identifier as an input; if that bundle ident is found
+        in the kernel list but the uuids don't match, specifically warn
+        the user about that so they know why we didn't load the kext.
+	* macosx-tdep.h: Prototype updated.
+
+2010-12-17  Jim Ingham  <jingham@apple.com>
+
+	* macosx-nat-mutils.c (malloc_history_info_command): If the
+	__mach_stack_logging_set_file_path function is present, look up the
+	file path and pass it to this API.
+	(macosx_clear_logging_path): New function.
+	* macosx-nat-mutils.h: Declare macosx_clear_logging_path.
+	* macosx-nat-inferior.c (macosx_mourn_inferior): clear the logging path.
+
+2010-12-14  Jim Ingham  <jingham@apple.com>
+
+	* macosx-nat-utils.c (macosx_check_safe_call): Use "==" for comparision
+	not "="...
+	
+2010-12-14  Jason Molenda  (jmolenda@apple.com)
+
+	* machoread.c (macho_calculate_offsets_for_dsym): Update to
+	handle the case of add-kext files with dSYMs where we get
+	the actual load addresses from the kernel and need to adjust
+	the kext binary & kext dSYM addresses on a per-section basis.
+
+2010-12-12  Jim Ingham  <jingham@apple.com>
+
+	* i386-macosx-tdep.c (i386_fast_show_stack): Added start and end
+	instead of just end parameters.
+	* ppc-macosx-tdep.c (ppc_fast_show_stack): Ditto
+	* macosx-tdep.c (fast_show_stack_trace_prologue): Added start
+	as well as limit parameter.
+	(actually_do_stack_frame_prologue): Ditto.
+	* macosx-tdep.h: Change fast_show_stack_trace_prologue declaration.
+	* tm-{i386,ppc}-macosx.h: Change _fast_show_stack declaration.
+	
+2010-12-09  Jason Molenda  (jmolenda@apple.com)
+
+	* macosx-tdep.c (macosx_get_kext_sect_addrs_from_kernel): New
+	function which looks in kernel memory for a list of kexts 
+	currently loaded, finds a match for a provided Mach-O UUID,
+	builds up a section address table based on the in-memory
+	Mach-O load commands of the kext in the kernel memory.
+	* macosx-tdep.h: Add prototype.
+
+2010-10-20  Jim Ingham  <jingham@apple.com>
+
+	* darwin-kernel.c (darwin_kernel_open): Mark the fact that you
+	can't call functions in the darwin-kernel target.
+	* remote-kdp.c (kdp_open): Ditto.
+	(kdp_allocate_memory): A version that throws an error.
+	(init_kdp_ops): Add kdp_allocate_memory.
+	
+2010-10-07  Jim Ingham  <jingham@apple.com>
+
+	* macosx-tdep.c (fast_show_stack_trace_prologue): Look in 
+	/usr/lib/system for stuff that used to be in 
+	/usr/lib/libSystem.B.dylib.
+	
+	* macosx-nat-mutils.c (get_zone_finder): New function, centralize
+	the code to find the function that finds the auto_zone for objc.
+	Also use objc_collectableZone if available.
+	(gc_root_tracing_command): convert to using get_zone_finder.
+	(gc_reference_tracing_command): Ditto.
+	
+2010-10-06  Jim Ingham  <jingham@apple.com>
+
+ 	* core-macho.c (core-open): Don't init dyld if we have an exec_bfd,
+	and it doesn't use the dylinker.
+	* macosx-nat-dyld.c (macosx-init_dyld_from_core): Remember to check
+	the inferior_auto_start_dyld_flag.
+
 2010-09-17  Greg Clayton  <gclayton@apple.com>
 
 	* macosx-nat-dyld.c (macosx_lookup_dyld_file_load_address): Changed this

@@ -30,6 +30,7 @@
 #include "bfd.h"
 #include <execinfo.h>
 #include <sys/resource.h>
+#include <uuid/uuid.h>
 
 #ifdef TUI
 #include "tui/tui.h"		/* For tui_get_command_dimension.   */
@@ -71,6 +72,8 @@
 #ifdef USE_MMALLOC
 #include "mmalloc.h"
 #endif
+
+#include "mach-o.h"
 
 #if !HAVE_DECL_MALLOC
 extern PTR malloc ();		/* OK: PTR */
@@ -3785,6 +3788,98 @@ bundle_basename (const char *filepath)
     }
 
   return bundle_name_start;
+}
+
+/* For the binary file at FILENAME, return all Mach-O LC_UUIDs.
+   In a typical thin binary, one uuid will be returned.
+   In a universal aka fat binary there may be multiple UUIDs returned.
+   If the file is absent or is not a binary, NULL is returned.
+   Freeing of the returned array is the responsibility of the caller;
+   use the free_uuids_array() utility function to do it.  */
+
+uint8_t **
+get_binary_file_uuids (const char *filename)
+{
+  if (filename == NULL || !file_exists_p (filename))
+    return NULL;
+
+  // pre allocate 8 slots plus one for the terminating NULL pointer
+  uint8_t uuid[16];
+  int current_uuids_slot = 0;
+  int uuids_size = 8;
+  uint8_t **uuids = (uint8_t**) xmalloc (sizeof (uint8_t *) * uuids_size + 1);
+  bfd *abfd = NULL;
+  struct gdb_exception e;
+
+  TRY_CATCH (e, RETURN_MASK_ERROR)
+  {
+    abfd = symfile_bfd_open (filename, 0, GDB_OSABI_UNKNOWN);
+  }
+
+  if (abfd == NULL || e.reason == RETURN_ERROR)
+    return NULL;
+
+  if (bfd_check_format (abfd, bfd_archive)
+      && strcmp (bfd_get_target (abfd), "mach-o-fat") == 0)
+    {
+      bfd *nbfd = NULL;
+      for (;;)
+        {
+          nbfd = bfd_openr_next_archived_file (abfd, nbfd);
+          if (nbfd == NULL)
+            break;
+          if (!bfd_check_format (nbfd, bfd_object) 
+              && !bfd_check_format (nbfd, bfd_archive))
+            continue;
+
+          if (!bfd_mach_o_get_uuid (nbfd, uuid, sizeof (uuid)))
+            return NULL;
+
+          if (current_uuids_slot >= uuids_size)
+            {
+              uuids_size += 8;
+              uuids = (uint8_t**) xrealloc (uuids, sizeof (uint8_t*) * uuids_size + 1);
+              if (uuids == NULL)
+                return NULL;
+            }
+          uuids[current_uuids_slot] = (uint8_t *) xmalloc (sizeof (uuid));
+          memcpy (uuids[current_uuids_slot], uuid, sizeof (uuid));
+          current_uuids_slot++;
+        }
+      bfd_free_cached_info (abfd);
+    }
+  else
+    {
+      if (!bfd_mach_o_get_uuid (abfd, uuid, sizeof (uuid)))
+        return NULL;
+
+      uuids[0] = (uint8_t *) xmalloc (sizeof (uuid));
+      memcpy (uuids[current_uuids_slot++], uuid, sizeof (uuid));
+    }
+  uuids[current_uuids_slot] = NULL;
+  bfd_close (abfd);
+  return uuids;
+}
+
+/* Free the array allocated and returned by get_binary_file_uuids() */
+
+void
+free_uuids_array (uint8_t **uuids)
+{
+  int i;
+  if (uuids == NULL)
+    return;
+  for (i = 0; uuids[i] != NULL; i++)
+    xfree (uuids[i]);
+  xfree (uuids);
+}
+
+char *
+puuid (uint8_t *uuid)
+{
+  char *str = get_cell ();
+  uuid_unparse_upper (uuid, str);
+  return str;
 }
 
 static int orig_file_rlimit;

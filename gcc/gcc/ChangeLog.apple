@@ -1,3 +1,35 @@
+2010-09-27  Bob Wilson  <bob.wilson@apple.com>
+
+	Radar 8392704
+	* doc/cppopts.texi: Fix description of -isysroot for Apple's GCC.
+	* doc/invoke.texi (Directory Options): Update --sysroot description to
+	refer Apple users to -isysroot.
+
+2010-08-13  Bob Wilson  <bob.wilson@apple.com>
+
+	Radar 8307333
+	* config/i386/darwin.h (DARWIN_IPHONEOS_LIBGCC_SPEC): Do not link
+	against libgcc_s.10.5.dylib.
+	* config/rs6000/darwin.h (DARWIN_IPHONEOS_LIBGCC_SPEC): Likewise.
+
+2010-04-16 Fariborz Jahanian <fjahanian@apple.com>
+
+	Radar 7865106 is backed out.
+
+2010-04-15 Fariborz Jahanian <fjahanian@apple.com>
+
+        Radar 7865106
+	* config/darwin.h (objc_weak_import_class): New decl.
+	(ASM_WEAKEN_DECL): Call objc_weak_import_class see if
+	we have a 'weak_reference' decl.
+	* darwin.c (objc_weak_import_class): New definition.
+	
+2010-04-13  Stuart Hastings  <stuart@apple.com>
+
+        Radar 7212824
+        * cp/decl.c (redeclaration_error_message): Insure we're looking
+        at a VAR_DECL before diagnosing a redeclaration.
+
 2010-03-18  Stuart Hastings  <stuart@apple.com>
 
         Radar 7763139

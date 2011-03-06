@@ -1709,6 +1709,9 @@ macosx_init_dyld_from_core (void)
   struct target_ops *target;
   int i;
 
+  if (!inferior_auto_start_dyld_flag)
+    return;
+
   info = &macosx_dyld_status.current_info;
   target = &exec_ops;
 

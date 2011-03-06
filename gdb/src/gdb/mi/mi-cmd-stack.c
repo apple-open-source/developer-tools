@@ -181,7 +181,6 @@ mi_print_frame_info_lite_base (struct ui_out *uiout,
       struct minimal_symbol *msym ;
       struct obj_section *osect;
       int has_debug_info = 0;
-      struct partial_symtab *pst;
 
       /* APPLE LOCAL: if we are going to print names, we should raise
          the load level to ALL.  We will avoid doing psymtab to symtab,
@@ -205,16 +204,14 @@ mi_print_frame_info_lite_base (struct ui_out *uiout,
 	 contains the PC, just that there's some psymtab that
 	 does.  */
       osect = find_pc_sect_in_ordered_sections (pc, NULL);
-      if (osect != NULL && osect->objfile != NULL)
+      if (osect != NULL && osect->the_bfd_section != NULL)
 	{
-	  ALL_OBJFILE_PSYMTABS (osect->objfile, pst)
-	    {
-	      if (pc >= pst->textlow && pc < pst->texthigh)
-		{
-		  has_debug_info = 1;
-		  break;
-		}
-	    }
+	  struct partial_symtab *psymtab_for_pc = find_pc_sect_psymtab (pc, osect->the_bfd_section);
+	  if (psymtab_for_pc != NULL)
+	    has_debug_info = 1;
+	  else
+	    has_debug_info = 0;
+	  
 	}
       ui_out_field_int (uiout, "has_debug", has_debug_info);
     }
@@ -250,8 +247,10 @@ mi_print_frame_info_lite (struct ui_out *uiout,
 enum mi_cmd_result
 mi_cmd_stack_list_frames_lite (char *command, char **argv, int argc)
 {
-    int limit = 0;
-    int names = 0;
+    int limit;
+    int start;
+    int count_limit;
+    int names;
     int valid;
     unsigned int count = 0;
     void (*print_fun) (struct ui_out*, int, CORE_ADDR, CORE_ADDR);
@@ -264,11 +263,14 @@ mi_cmd_stack_list_frames_lite (char *command, char **argv, int argc)
     if (!target_has_stack)
         error ("mi_cmd_stack_list_frames_lite: No stack.");
 
-    if ((argc > 4))
-        error ("mi_cmd_stack_list_frames_lite: Usage: [-names (0|1)] [-limit max_frame_number]");
+    if ((argc > 8))
+        error ("mi_cmd_stack_list_frames_lite: Usage: [-names (0|1)] [-start start-num] "
+               "[-limit max_frame_number] [-count_limit how_many_to_count]");
 
     limit = -1;
     names = 0;
+    count_limit = -1;
+    start = 0;
 
     while (argc > 0)
       {
@@ -283,6 +285,28 @@ mi_cmd_stack_list_frames_lite (char *command, char **argv, int argc)
 	    argc -= 2;
 	    argv += 2;
 	  }
+	else if (strcmp (argv[0], "-start") == 0)
+          {
+            if (argc == 1)
+              error ("mi_cmd_stack_list_frames_lite: No argument to -start.");
+
+            if (! isnumber (argv[1][0]))
+              error ("mi_cmd_stack_list_frames_lite: Invalid argument to -start.");
+            start = atoi (argv[1]);
+            argc -= 2;
+            argv += 2;
+          }
+	else if (strcmp (argv[0], "-count_limit") == 0)
+          {
+            if (argc == 1)
+              error ("mi_cmd_stack_list_frames_lite: No argument to -count_limit.");
+
+            if (! isnumber (argv[1][0]))
+              error ("mi_cmd_stack_list_frames_lite: Invalid argument to -count_limit.");
+            count_limit = atoi (argv[1]);
+            argc -= 2;
+            argv += 2;
+          }
 	else if (strcmp (argv[0], "-names") == 0)
 	  {
 	    if (argc == 1)
@@ -305,7 +329,7 @@ mi_cmd_stack_list_frames_lite (char *command, char **argv, int argc)
       print_fun = mi_print_frame_info_lite;
 
 #ifdef FAST_COUNT_STACK_DEPTH
-      valid = FAST_COUNT_STACK_DEPTH (-1, limit, &count, print_fun);
+    valid = FAST_COUNT_STACK_DEPTH (count_limit, start, limit, &count, print_fun);
 #else
     /* Start at the inner most frame */
     {
@@ -324,11 +348,13 @@ mi_cmd_stack_list_frames_lite (char *command, char **argv, int argc)
 	{
 	  QUIT;
 	  
-	  if ((limit == 0) || (i < limit))
+	  if ((limit == -1) || (i >= start && i < limit))
 	    {
 	      print_fun (uiout, i, get_frame_pc (fi), 
                                         get_frame_base(fi));
 	    }
+	  if (count_limit != -1 && i > count_limit)
+	    break;
 	}
       
       count = i;
@@ -400,7 +426,7 @@ mi_cmd_stack_info_depth (char *command, char **argv, int argc)
     frame_high = -1;
 
 #ifdef FAST_COUNT_STACK_DEPTH
-  if (! FAST_COUNT_STACK_DEPTH (frame_high, frame_high, &i, NULL))
+  if (! FAST_COUNT_STACK_DEPTH (frame_high, 0, frame_high, &i, NULL))
 #endif
     {
       for (i = 0, fi = get_current_frame ();

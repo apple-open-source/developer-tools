@@ -9,7 +9,7 @@
    the revision of your modified compiler.  */
 
 /* APPLE LOCAL begin Apple version */
-#define VERSUFFIX " (Apple Inc. build 5664)"
+#define VERSUFFIX " (Apple Inc. build 5666) (dot 3)"
 /* APPLE LOCAL end Apple version */
 
 /* This is the location of the online document giving instructions for

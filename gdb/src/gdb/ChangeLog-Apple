@@ -1,3 +1,111 @@
+2011-01-04  Jason Molenda  (jmolenda@apple.com)
+
+	* dwarf2read.c (find_debug_info_for_pst): Don't scan past the beginning
+	of the psymtab filename when finding the requested suffix.
+
+2011-01-03  Jason Molenda  (jmolenda@apple.com)
+
+	* dwarf2read.c (find_debug_info_for_pst): Accept an additional argument
+	specifying how much of an exact match to perform with the source
+	file pathname.  Allows for looser pathname matching if a full pathname
+	match fails and we know it should have matched.  A special case that
+	happens only with kext debugging.
+	(dwarf2_kext_psymtab_to_symtab): Try to find a full match for the
+	source filename but settle for one directory name + file basename
+	or worst case, just a file basename match if necessary.  A special
+	case that only happens with kext debugging (and more importantly,
+	.sym file debugging).
+
+2010-12-22  Jason Molenda  (jmolenda@apple.com)
+
+	* dwarf2read.c (dwarf2_kext_psymtab_to_symtab): Update error
+	message to more clearly describe what the problem is.
+
+2010-12-22  Jason Molenda  (jmolenda@apple.com)
+
+	* dbxread.c (fill_symbuf): Don't issue a warning if we look
+	at a dSYM file and get an list record size of 0 (because there
+	are no nlist entries).
+
+2010-12-18  Jason Molenda  (jmolenda@apple.com)
+
+	* symfile.c (add_kext_command): First try to look for a .sym
+	file when given a kext.  Only look in the kernel's memory for
+	the kext addresses if that is missing.  (until the 
+	kext-from-kernel-mem code path has seen more use)
+	(get_kext_bundle_ident_and_binary_path): More specific error
+	message about what file was unable to be found.
+	(find_kext_loadaddrs_from_kernel): Pass in the kext binary 
+	full path.
+
+2010-12-16  Jason Molenda  (jmolenda@apple.com)
+
+	* symfile.c (add_kext_command): Update usage text.  Minor mem
+	leak fixed.
+	(find_kext_loadaddrs_from_kernel): Pass the bundle identifier
+	into macosx_get_kext_sect_addrs_from_kernel().
+	* utils.c (puuid): New utility function for printing a UUID.
+	* defs.h: Prototype added.
+
+2010-12-12  Jim Ingham <jingham@apple.com>
+
+	* objc-lang.c (find_implementation): Fix another case where we
+	should treat malloc lock held & spin_lock symmetrically.
+	
+	* arm-tdep.c (arm_macosx_fast_show_stack): Modify to take a print
+	start as well as limit.
+	* config/arm/tm-arm-macosx.h: Fix the declaration accordingly.
+
+2010-12-09  Jason Molenda  (jmolenda@apple.com)
+
+	* symfile.c (add_kext_command): When given a .kext argument,
+	see if the kernel has the gLoadedKextSummaries symbol which
+	gives us the kext load addresses.  If so, don't require/use a
+	.sym file.  Fall back to requiring a .sym file.
+	(get_kext_bundle_ident_and_binary_path): Pull out the pathname
+	munging from find_kext_files_by_bundle() into this standalone
+	function so it can be shared.
+	(find_kext_files_by_bundle): Call 
+	get_kext_bundle_ident_and_binary_path to do the pathname munging
+	when looking at a kext bundle.
+	(find_kext_loadaddrs_from_kernel): Given a kext bundle path, get
+	the Mach-O UUIDs of the kext at that path, try to find it in 
+	kernel memory and get the load addresses from kernel memory if
+	it is there.
+	* utils.c (get_binary_file_uuids): Given a filename, return an
+	array of UUIDs for that binary.
+	(free_uuids_array): Free that array.
+	* defs.h: Prototypes for the new utils.c functions.
+
+2010-12-06  Jason Molenda  (jmolenda@apple.com)
+
+	* dwarf2read.c (dwarf2_kext_psymtab_to_symtab): Check the objfile
+	to see if we've already read in the DWARF into the obstack for this
+	file; don't read the DWARF in multiple times when expanding different
+	psymtabs in a kext.
+
+2010-10-21  Jim Ingham  <jingham@apple.com>
+
+	* infcall.c (hand_function_call): No need to put the
+	inferior_function_calls_disabled_p into Mac specific guards,
+	it is generally applicable.
+	
+2010-10-07  Jim Ingham  <jingham@apple.com>
+
+	* objfiles.c (allocate_objfile_internal): Look in /usr/lib/system
+	for what used to be in /usr/lib/libSystem.B.dylib.
+
+2010-09-23  Jim Ingham  <jingham@apple.com>
+
+	* valops.c (check_field): Turn off the warning when we have a
+	this or self pointer, but we don't know its full type so we 
+	can't look up members in it.
+
+2010-09-22  Caroline Tice  <ctice@apple.com>
+
+	* dwarf2read.c (read_inlined_subroutine_scope): Remove unnecessary 
+        if-stmt when getting the decl-file and decl-line attributes.
+
 2010-09-16  Greg Clayton  <gclayton@apple.com>
 
 	* dbxread.c (fill_symbuf): Allow the symbol reader to switch nlist 
@@ -48,6 +156,27 @@
 	* objc-lang.c (print_object_command): re-enable use of read_objc_object.
 	(read_objc_object): If gdb_object_getClass is not available, try 
 	gdb_class_getClass on the ISA pointer.
+
+2010-08-25  Caroline Tice  <ctice@apple.com>
+
+	* dwarf2read.c (struct partial_die_info):  Add new field, isa_value.
+        (add_partial_symbol): If the isa_value field of a subprogram die says 
+        its for Thumb, add the psym to the objfile list of thumb psyms.
+        (read_partial_die):  Check for DW_AT_APPLE_isa and set the isa_value
+        field appropriately.
+        * objfiles.c (partial_symbol_special_info):  New function.
+        (objfile_add_special_psym):  New function.
+        * objfiles.h (struct objfile):  Add three new fields: thumb_psyms,
+        num_thumb_psyms, max_thumb_psyms.
+        (partial_symbol_special_info):  New function declaration.
+        (objfile_add_special_psym): New function declaration.
+        * symfile.c (append_psymbols_as_msymbols):  Call 
+        partial_symbol_special_info on each psym to get any "special info" that
+        needs to go into the msymbol; pass the results to 
+        prim_record_minimal_symbol_and_info.
+        * symtab.h (DW_ISA_UNKNOWN):  New global value.
+        (DW_ISA_ARM_thumb):  New global value.
+        (DW_ISA_ARM_arm):  New global value.
 
 2010-08-24  Jim Ingham  <jingham@apple.com>
 

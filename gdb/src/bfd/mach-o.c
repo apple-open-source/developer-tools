@@ -2169,8 +2169,17 @@ bfd_mach_o_scan_read_command (bfd *abfd, bfd_mach_o_load_command *command)
       }
       break;
     default:
-      fprintf (stderr, "unable to read unknown load command 0x%lx\n",
-	       (unsigned long) command->type);
+      /* 
+         The LC_REQ_DYLD flag is intended for dyld but let's assume that 
+         anything not critical for dyld to launch the process is probably 
+         not critical for gdb -- don't emit a warning for harmless 
+         load commands that are added.
+      */
+      if ((command->type & BFD_MACH_O_LC_REQ_DYLD) == BFD_MACH_O_LC_REQ_DYLD)
+        {
+          fprintf (stderr, "unable to read unknown load command 0x%lx\n",
+	           (unsigned long) command->type);
+        }
       break;
     }
 
@@ -2537,6 +2546,19 @@ bfd_mach_o_stub_library (bfd *abfd)
     return 0;
 
   if (header.filetype == BFD_MACH_O_MH_DYLIB_STUB)
+    return 1;
+
+  return 0;
+}
+
+int 
+bfd_mach_o_uses_dylinker (bfd *abfd)
+{
+  bfd_mach_o_header header;
+  if (bfd_mach_o_read_header (abfd, &header) != 0)
+    return 0;
+
+  if (header.flags & BFD_MACH_O_MH_DYLDLINK)
     return 1;
 
   return 0;

@@ -640,7 +640,9 @@ i386_mach_o_osabi_sniffer (bfd *abfd)
  */
 
 int
-i386_fast_show_stack (unsigned int count_limit, unsigned int print_limit,
+i386_fast_show_stack (unsigned int count_limit, 
+		      unsigned int print_start,
+		      unsigned int print_end,
                      unsigned int *count,
                      void (print_fun) (struct ui_out * uiout, int frame_num,
                                        CORE_ADDR pc, CORE_ADDR fp))
@@ -656,7 +658,7 @@ i386_fast_show_stack (unsigned int count_limit, unsigned int print_limit,
   ULONGEST pc = 0;
   int wordsize = gdbarch_tdep (current_gdbarch)->wordsize;
 
-  more_frames = fast_show_stack_trace_prologue (count_limit, print_limit, wordsize,
+  more_frames = fast_show_stack_trace_prologue (count_limit, print_start, print_end, wordsize,
 						&sigtramp_start, &sigtramp_end, 
 						&i, &fi, print_fun);
 
@@ -728,7 +730,7 @@ i386_fast_show_stack (unsigned int count_limit, unsigned int print_limit,
       
       pc_set_load_state (pc, OBJF_SYM_ALL, 0);
 
-      if (print_fun && (i < print_limit))
+      if (print_fun && (i >= print_start && i < print_end))
         print_fun (uiout, i, pc, fp + 2 * wordsize);
       i++;
 

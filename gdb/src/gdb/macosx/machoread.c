@@ -965,6 +965,21 @@ macho_calculate_offsets_for_dsym (struct objfile *main_objfile,
 	      (*sym_offsets)->offsets[i] = dsym_offset;
 	      if (addrs->addrs_are_offsets)
 		(*sym_offsets)->offsets[i] += addrs->other[0].addr;
+              else
+                {
+                  /* This clause will be hit when we're doing add-kext -
+                     the kernel provides us the actual load addresses of
+                     the sections (so ADDRS is filled in) instead of 
+                     offsets (so ADDRS_IS_OFFSETS is 0).  */
+                  if (addrs->other[i].name)
+                    {
+                      asection *exe_sect;
+                      exe_sect = bfd_get_section_by_name (main_objfile->obfd, 
+                                 addrs->other[i].name);
+                      (*sym_offsets)->offsets[i] = addrs->other[i].addr - 
+                                                   exe_sect->vma;
+                    }
+                }
 	    }
 	  *sym_num_offsets = addrs->num_sections;
 	}

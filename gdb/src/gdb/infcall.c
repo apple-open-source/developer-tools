@@ -47,11 +47,12 @@ extern void end_inferior_call_checkpoints (void);
 #if defined (NM_NEXTSTEP)
 #include "macosx-nat-infthread.h"
 
-/* Whether to allow inferior function calls to be made or not.
-   translated processes cannot do inferior function calls (or changing
-   the PC in any way) and can terminate the inferior if you try.  */
-int inferior_function_calls_disabled_p = 0;
 #endif
+/* Whether to allow inferior function calls to be made or not.
+   e.g. translated processes cannot do inferior function calls (or changing
+   the PC in any way) and can terminate the inferior if you try.  
+   There is also a set variable you can use to control this if you want to.  */
+int inferior_function_calls_disabled_p = 0;
 
 /* APPLE LOCAL: Usually you want to interrupt an inferior function call if it
    is about to raise an ObjC exception.  But somebody might not want to...  */
@@ -524,10 +525,11 @@ hand_function_call (struct value *function, struct type *expect_type,
 #if defined (NM_NEXTSTEP)
   macosx_setup_registers_before_hand_call ();
 
+#endif
   /* FIXME: This really needs to go in the target vector....  */
   if (inferior_function_calls_disabled_p)
-    error ("Function calls from gdb not possible when debugging translated processes.");
-#endif
+    error ("Function calls from gdb are not supported on this target.");
+
   /* APPLE LOCAL end inferior function call */
 
   /* A cleanup for the inferior status.  Create this AFTER the retbuf
@@ -1233,7 +1235,6 @@ in the debugger, so for the most part you will want to leave this on."),
 			   NULL,
 			   &setlist, &showlist);
 
-#if defined (NM_NEXTSTEP)
 /* APPLE LOCAL for Greg */
   add_setshow_boolean_cmd ("disable-inferior-function-calls", no_class,
 			   &inferior_function_calls_disabled_p, _("\
@@ -1247,7 +1248,7 @@ to disable these inferior function calls."),
 			   NULL,
 			   NULL,
 			   &setlist, &showlist);
-#endif
+
 /* APPLE LOCAL: one way to protect against deadlocking inferior function calls.  */
   add_setshow_zinteger_cmd ("target-function-call-timeout", class_obscure,
 			    &hand_call_function_timeout, "\

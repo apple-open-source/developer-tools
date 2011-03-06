@@ -59,6 +59,7 @@ the Free Software Foundation, 675 Mass Ave, Cambridge, MA 02139, USA.  */
 #include "source.h"
 #include "completer.h"
 #include "exceptions.h"
+#include "gdbcmd.h"
 
 #include "gdbcore.h"
 
@@ -78,6 +79,8 @@ the Free Software Foundation, 675 Mass Ave, Cambridge, MA 02139, USA.  */
 
 #include "x86-shared-tdep.h"
 
+#include <mach-o/loader.h>
+#include "macosx-nat-dyld.c" // for target_read_mach_header()
 
 int disable_aslr_flag = 1;
 
@@ -101,7 +104,8 @@ static int dsym_locate_enabled = 1;
 
 int
 actually_do_stack_frame_prologue (unsigned int count_limit, 
-				unsigned int print_limit,
+				unsigned int print_start,
+				unsigned int print_end,
 				unsigned int wordsize,
 				unsigned int *count,
 				struct frame_info **out_fi,
@@ -1931,7 +1935,8 @@ generic_mach_o_osabi_sniffer (bfd *abfd, enum bfd_architecture arch,
 
 int
 fast_show_stack_trace_prologue (unsigned int count_limit, 
-				unsigned int print_limit,
+				unsigned int print_start,
+				unsigned int print_end,
 				unsigned int wordsize,
 				CORE_ADDR *sigtramp_start_ptr,
 				CORE_ADDR *sigtramp_end_ptr,
@@ -1962,9 +1967,10 @@ fast_show_stack_trace_prologue (unsigned int count_limit,
           enum objfile_matches_name_return r;
           struct objfile *libsystem_objfile = NULL;
 
-          r = objfile_matches_name (ofile, "libSystem.B.dylib");
-          if (r != objfile_match_base)
-            continue;
+	  if (ofile->name == NULL 
+	      || (strstr (ofile->name, "libSystem.B.dylib") == NULL
+		  && strstr (ofile->name, "/usr/lib/system") != ofile->name))
+	    continue;
 
           /* APPLE LOCAL - Check to see if the libSystem objfile has a
              separate debug info objfile */
@@ -2054,25 +2060,28 @@ fast_show_stack_trace_prologue (unsigned int count_limit,
      This looks stupid, but shouldn't be all that inefficient.  */
 
   actually_do_stack_frame_prologue (count_limit, 
-			      print_limit,
-			      wordsize,
-			      count,
-			      out_fi,
-			      NULL);
+				    print_start,
+				    print_end,
+				    wordsize,
+				    count,
+				    out_fi,
+				    NULL);
 
   return actually_do_stack_frame_prologue (count_limit,
-				       print_limit,
-				       wordsize,
-				       count,
-				       out_fi,
-				       print_fun);
+					   print_start,
+					   print_end,
+					   wordsize,
+					   count,
+					   out_fi,
+					   print_fun);
 
 }
 
 
 int
 actually_do_stack_frame_prologue (unsigned int count_limit, 
-				unsigned int print_limit,
+				unsigned int print_start,
+				unsigned int print_end,
 				unsigned int wordsize,
 				unsigned int *count,
 				struct frame_info **out_fi,
@@ -2122,7 +2131,7 @@ actually_do_stack_frame_prologue (unsigned int count_limit,
       goto start_again;
     }
 
-  if (print_fun && (i < print_limit))
+  if (print_fun && (i >= print_start && i < print_end))
     print_fun (uiout, i, get_frame_pc (fi), get_frame_base (fi));
   i = 1;
 
@@ -2154,7 +2163,7 @@ actually_do_stack_frame_prologue (unsigned int count_limit,
 	  goto start_again;
 	}
 
-      if (print_fun && (i < print_limit))
+      if (print_fun && (i >= print_start && i < print_end))
         print_fun (uiout, i, pc, fp);
 
       i++;
@@ -2175,6 +2184,224 @@ actually_do_stack_frame_prologue (unsigned int count_limit,
   *count = i;
   return more_frames;
 }
+
+static void
+maintenance_list_kexts (char *arg, int from_tty)
+{
+  ULONGEST val;
+  struct minimal_symbol *msym = lookup_minimal_symbol ("gLoadedKextSummaries", NULL, NULL);
+  if (msym == NULL)
+    error ("No gLoadedKextSummaries symbol found.");
+
+  // gLoadedKextSummaries points to a 
+  // OSKextLoadedKextSummaryHeader structure.
+  if (!safe_read_memory_unsigned_integer (SYMBOL_VALUE_ADDRESS (msym), TARGET_PTR_BIT / 8, &val))
+    error ("Could not read the value of gLoadedKextSummaries from address 0x%s", paddr_nz (SYMBOL_VALUE_ADDRESS (msym)));
+
+  // p has the address of the OSKextLoadedKextSummaryHeader struct.
+  CORE_ADDR p = val;
+  printf_filtered ("OSKextLoadedKextSummaryHeader is at address 0x%s\n", paddr_nz (p));
+
+  if (val == 0)
+    error ("gLoadedKextSummaries has an address of 0x0 - you must be attached to a live kernel or debugging with a core file.");
+
+  // Skip over the uint32_t version field
+  p += 4;
+
+  // Read the uint32_t kext count field
+  if (!safe_read_memory_unsigned_integer (p, 4, &val))
+    error ("Unable to read kext count field at address 0x%s", paddr_nz (p));
+  int kextcount = (int) val;
+
+  printf_filtered ("There are %d kexts loaded.\n", kextcount);
+  p += sizeof (uint32_t);
+
+  int padcount = 0;
+  if (kextcount > 9)
+    padcount = 2;
+  if (kextcount > 99)
+    padcount = 3;
+
+  // Now read through the array of OSKextLoadedKextSummary's.
+  CORE_ADDR mh_addr = INVALID_ADDRESS;
+  int i = 0;
+  while (i < kextcount)
+    {
+      // First field is a 64-byte name which is of no interest to us.
+      char kextname[64];
+      if (target_read_memory (p, kextname, sizeof (kextname)))
+        error ("Unable to read kext name at 0x%s", paddr_nz (p));
+      kextname[sizeof (kextname) - 1] = '\0';
+      p += 64;
+
+      // now is a LC_UUID
+      gdb_byte buf16[16];
+      if (target_read_memory (p, buf16, 16))
+        error ("Unable to read kext uuid at 0x%s", paddr_nz (p));
+      p += 16;
+
+      if (!safe_read_memory_unsigned_integer (p, 8, &val) != 0)
+        error ("Unable to read Mach-O load address of kext %d", i);
+      mh_addr = (uint64_t) val;
+
+      printf_filtered ("%*d 0x%s %s %s\n",
+                       padcount, i,
+                       paddr_nz (mh_addr),
+                       puuid (buf16),
+                       kextname);
+      p += 8 + 8 + 8 + 4 + 4;
+      i++;
+    }
+}
+
+/* Given an array of Mach-O LC_UUIDs to search for, look in the target
+   (assumes target is the mach_kernel) for the array of loaded kexts, find
+   the first kext with an LC_UUID that matches one of the entries in the array,
+   fill in the SECT_ADDRS section addresses based on the in-memory load 
+   commands.
+
+   The caller is responsible for freeing *SECT_ADDRS - best done via
+   a call to free_section_addr_info().
+
+   Returns 0 if there was a problem or no matching kext was found.
+
+   Returns 1 if a matching kext was found and SECT_ADDRS was initialized.  */
+
+int
+macosx_get_kext_sect_addrs_from_kernel (const char *filename,
+                                        uint8_t **kext_uuids, 
+                                        struct section_addr_info **sect_addrs,
+                                        const char *kext_bundle_ident)
+{
+  ULONGEST val;
+  struct minimal_symbol *msym = lookup_minimal_symbol ("gLoadedKextSummaries", NULL, NULL);
+  if (msym == NULL)
+    return 0;
+  if (kext_uuids == NULL || kext_uuids[0] == NULL)
+    return 0;
+
+  // gLoadedKextSummaries points to a 
+  // OSKextLoadedKextSummaryHeader structure.
+  if (!safe_read_memory_unsigned_integer (SYMBOL_VALUE_ADDRESS (msym), TARGET_PTR_BIT / 8, &val))
+    return 0;
+
+  if (val == 0)
+    error ("gLoadedKextSummaries has an address of 0x0 - you must be attached to a live kernel or debugging with a core file.");
+
+  // p has the address of the OSKextLoadedKextSummaryHeader struct.
+  CORE_ADDR p = val;
+  // Skip over the uint32_t version field
+  p += 4;
+
+  // Read the uint32_t kext count field
+  if (!safe_read_memory_unsigned_integer (p, 4, &val))
+    return 0;
+  int kextcount = (int) val;
+  p += sizeof (uint32_t);
+
+  // Now read through the array of OSKextLoadedKextSummary's.
+  CORE_ADDR mh_addr = INVALID_ADDRESS;
+  int i = 0;
+  while (i < kextcount && mh_addr == INVALID_ADDRESS)
+    {
+      // First field is a 64-byte name which is of no interest to us.
+      char kextname[64];
+      if (target_read_memory (p, kextname, sizeof (kextname)))
+        return 0;
+      kextname[sizeof (kextname) - 1] = '\0';
+      p += 64;
+
+      // now is a LC_UUID
+      gdb_byte buf16[16];
+      if (target_read_memory (p, buf16, 16))
+        return 0;
+      p += 16;
+      int j = 0;
+      while (kext_uuids[j] != 0)
+        {
+          if (memcmp (kext_uuids[j], buf16, sizeof (buf16)) == 0)
+            {
+              if (!safe_read_memory_unsigned_integer (p, 8, &val) != 0)
+                return 0;
+              mh_addr = (uint64_t) val;
+              break;
+            }
+          j++;
+        }
+      if (kext_bundle_ident
+          && strcasecmp (kext_bundle_ident, kextname) == 0
+          && mh_addr == INVALID_ADDRESS)
+        {
+          warning ("Found an entry for \"%s\" in the\n"
+                   "kernel but it has a Mach-O LC_UUID of %s\n"
+                   "which does not match any of the UUIDs in the kext\n"
+                   "\"%s\"",
+                   kext_bundle_ident,
+                   puuid (buf16), filename);
+        }
+      p += 8 + 8 + 8 + 4 + 4;
+      i++;
+    }
+  if (mh_addr == INVALID_ADDRESS)
+    return 0;
+
+  // We found a matching UUID.
+  // Now look at the load commands in memory (create a temporary
+  // memory bfd) to get the load addresses of each text/data section.
+
+  struct bfd_section *mem_sect;
+  struct cleanup *bfd_cleanups;
+  bfd *mem_bfd = NULL;
+  struct mach_header h;
+  if (target_read_mach_header (mh_addr, &h) != 0)
+    return 0;
+  int header_size = target_get_mach_header_size (&h);
+  gdb_byte *buf = (gdb_byte *) xmalloc (h.sizeofcmds + header_size);
+  bfd_cleanups = make_cleanup (xfree, buf);
+  if (target_read_memory (mh_addr, buf, h.sizeofcmds + header_size))
+    {
+      do_cleanups (bfd_cleanups);
+      return 0;
+    }
+
+  mem_bfd = bfd_memopenr ("tempbfd", NULL, buf, h.sizeofcmds + header_size);
+  if (mem_bfd == NULL)
+    {
+      do_cleanups (bfd_cleanups);
+      return 0;
+    }
+  make_cleanup_bfd_close (mem_bfd);
+
+  if (!bfd_check_format (mem_bfd, bfd_object))
+    return 0;
+
+  int section_count = 0;
+  for (mem_sect = mem_bfd->sections; mem_sect; mem_sect = mem_sect->next)
+    if (mem_sect->name)
+      section_count++;
+
+  *sect_addrs = alloc_section_addr_info (section_count);
+  (*sect_addrs)->num_sections = section_count;
+  (*sect_addrs)->addrs_are_offsets = 0;
+
+  int sectnum = 0;
+  for (mem_sect = mem_bfd->sections; mem_sect; mem_sect = mem_sect->next)
+    {
+      if (mem_sect->name 
+          && (strstr (mem_sect->name, "__TEXT") 
+              || strstr (mem_sect->name, "__DATA")))
+        {
+          (*sect_addrs)->other[sectnum].sectindex = mem_sect->index;
+          (*sect_addrs)->other[sectnum].name = xstrdup (mem_sect->name);
+          (*sect_addrs)->other[sectnum].addr = mem_sect->vma;
+          sectnum++;
+        }
+    }
+  do_cleanups (bfd_cleanups);
+
+  return 1;
+}
+
 
 void
 _initialize_macosx_tdep ()
@@ -2207,7 +2434,12 @@ Show locate dSYM files using the DebugSymbols framework."), _("\
 If set, gdb will try and locate dSYM files using the DebugSymbols framework."),
 			    NULL, NULL,
 			    &setlist, &showlist);
-                            
+
+  add_cmd ("list-kexts", class_maintenance, 
+           maintenance_list_kexts, 
+           "List kexts loaded by the kernel (when kernel debugging).",
+           &maintenancelist);
+
   add_setshow_boolean_cmd ("disable-aslr", class_obscure,
 			   &disable_aslr_flag, _("\
 Set if GDB should disable shared library address randomization."), _("\

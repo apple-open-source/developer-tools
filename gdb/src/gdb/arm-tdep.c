@@ -3931,7 +3931,9 @@ data_proc_immediate (const uint32_t insn)
  */
 
 int
-arm_macosx_fast_show_stack (unsigned int count_limit, unsigned int print_limit,
+arm_macosx_fast_show_stack (unsigned int count_limit, 
+			    unsigned int print_start,
+			    unsigned int print_end,
 			    unsigned int *count,
 			    void (print_fun) (struct ui_out * uiout, 
 					      int frame_num,
@@ -3948,7 +3950,7 @@ arm_macosx_fast_show_stack (unsigned int count_limit, unsigned int print_limit,
   ULONGEST pc = 0;
   int wordsize = gdbarch_tdep (current_gdbarch)->wordsize;
 
-  more_frames = fast_show_stack_trace_prologue (count_limit, print_limit, 
+  more_frames = fast_show_stack_trace_prologue (count_limit, print_start, print_end, 
 						wordsize, &sigtramp_start, 
 						&sigtramp_end, &i, &fi, 
 						print_fun);
@@ -4044,7 +4046,7 @@ arm_macosx_fast_show_stack (unsigned int count_limit, unsigned int print_limit,
 	      pc = ADDR_BITS_REMOVE (pc);
 	      pc_set_load_state (pc, OBJF_SYM_ALL, 0);
       
-	      if (print_fun && (i < print_limit))
+	      if (print_fun && (i >= print_start && i < print_end))
 		print_fun (uiout, i, pc, fp);
 	      i++;
 

@@ -49,7 +49,8 @@ generic_mach_o_osabi_sniffer (bfd *abfd, enum bfd_architecture arch,
 
 int
 fast_show_stack_trace_prologue (unsigned int count_limit, 
-				unsigned int print_limit,
+				unsigned int print_start,
+				unsigned int print_end,
 				unsigned int wordsize,
 				CORE_ADDR *sigtramp_start_ptr,
 				CORE_ADDR *sigtramp_end_ptr,
@@ -65,5 +66,10 @@ macosx_find_exception_catchpoints (enum exception_event_kind kind,
                                    struct objfile *restrict_objfile);
 struct exception_event_record *
 macosx_get_current_exception_event ();
+
+int
+macosx_get_kext_sect_addrs_from_kernel (const char *kext_filename, 
+                                        uint8_t **kext_uuids, struct section_addr_info **sect_addrs,
+                                        const char *kext_bundle_ident);
 
 #endif /* __GDB_MACOSX_TDEP_H__ */

@@ -2531,10 +2531,14 @@ check_field (struct value *arg1, const char *name)
 	 means the debug info is messed up somehow.  However,
 	 throwing an error here will mean that ANY type search in
 	 this frame will fail, which is adding insult to injury.
-	 Just warn, and return not found instead.  */
-      
-      warning ("Trying to look up \"%s\" in 'this' but "
-	       "'this' is not an aggregate", name);
+         Most of the time this actually happens because we don't have
+         full debug info for the class (for instance in ObjC where we
+         don't have debug info for the Class object.  Even the warning
+         is noise that doesn't help anything.  So only emit it when verbose
+         is turned on.  */
+      if (info_verbose)
+          printf_unfiltered ("Trying to look up \"%s\" in 'this' but "
+	                     "'this' is not an aggregate", name);
       return 0;
       /* END APPLE LOCAL */
     }

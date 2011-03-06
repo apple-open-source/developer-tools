@@ -1088,7 +1088,7 @@ static void dwarf_decode_lines (struct line_header *, char *, bfd *,
 /* APPLE LOCAL: Third parameter.  */
 static void dwarf2_start_subfile (char *, char *, char *);
 
-static char * find_debug_info_for_pst (struct partial_symtab *pst);
+static char * find_debug_info_for_pst (struct partial_symtab *pst, int match_amount);
 
 static struct symbol *new_symbol (struct die_info *, struct type *,
 				  struct dwarf2_cu *);
@@ -4224,11 +4224,18 @@ dwarf2_kext_psymtab_to_symtab (struct partial_symtab *pst)
   if (PSYMTAB_OSO_NAME (pst) == NULL || pst->readin)
     return;
 
+  /* oso_bfd is the 0-address-based kext bundle binary; its addresses
+     match the dSYM addresses but have no relation to the actual
+     kextload'ed addresses of the binary loaded in kernel memory.  */
+
   oso_bfd = symfile_bfd_open (pst->objfile->not_loaded_kext_filename, 0, 
 			      GDB_OSABI_UNKNOWN);
   if (oso_bfd == NULL)
-    error ("Couldn't unloaded kext file '%s'", 
+    error ("Couldn't open kext file '%s'", 
            pst->objfile->not_loaded_kext_filename);
+
+  /* treat the kext binary bundle as if it were a .o file; read the
+     debug map entries out of it.  */
 
   read_oso_nlists (oso_bfd, pst, &oso_nlists, &oso_nlists_count,
                    &oso_common_symnames, &oso_common_symnames_count);
@@ -4237,10 +4244,53 @@ dwarf2_kext_psymtab_to_symtab (struct partial_symtab *pst)
                                            oso_common_symnames, 
                                            oso_common_symnames_count, pst);
 
+  /* Restore our global data from the objfile's data store if we've already
+     set it.
+     If not, run dwarf2_has_info_1() and dwarf2_copy_dwarf_from_file to set up
+     that global state and save it in the objfile.
 
-  dwarf2_has_info_1 (pst->objfile, pst->objfile->obfd);
-  dwarf2_copy_dwarf_from_file (pst->objfile, pst->objfile->obfd);
-  kext_dsym_comp_unit_start = find_debug_info_for_pst (pst);
+     Note that pst->objfile is the dSYM binary; pst->objfile_obfd is the BFD
+     for the dSYM binary.  The addresses in the dSYM are the 0-based un-loaded 
+     addresses that need to be updated before they can be used.  */
+
+  dwarf2_per_objfile = objfile_data (pst->objfile, dwarf2_objfile_data_key);
+  if (dwarf2_per_objfile == NULL)
+    {
+      dwarf2_has_info_1 (pst->objfile, pst->objfile->obfd);
+      dwarf2_copy_dwarf_from_file (pst->objfile, pst->objfile->obfd);
+    }
+
+  // The pst got its source filename from a .sym file.  It is
+  // possible under certain circumstances for the .dSYM to have
+  // DIFFERENT source filename paths -- the UUID for the .sym and .dSYM
+  // is calculated based only on the text/data contents of the kext
+  // binary.  If the debug info changes without any of the other
+  // content changing, you can get multiple .kext/.dSYM binaries that
+  // share a single UUID.  That'd normally be fine but the .sym
+  // file will have the debug map notes from ONE of those .dSYMs and if
+  // the full source pathnames don't match between the .sym and .dSYM,
+  // we have to fall back to trying a basename-only match when we look for
+  // a source file.  We try looking for one directory name + basename 
+  // before reverting to just-basename matching.
+
+  // kexts are especially unusual in this case because the source for
+  // the pst is different from the source for the DWARF and we can end up
+  // with this unusual mixmatch in some instances.
+
+  // match amount of "-1" means exact, full-string match - the normal behavior
+  kext_dsym_comp_unit_start = find_debug_info_for_pst (pst, -1);
+
+  // Try matching one directory name + base filename
+  if (kext_dsym_comp_unit_start == NULL)
+    kext_dsym_comp_unit_start = find_debug_info_for_pst (pst, 1);
+
+  // Try matching just the base filename
+  if (kext_dsym_comp_unit_start == NULL)
+    kext_dsym_comp_unit_start = find_debug_info_for_pst (pst, 0);
+ 
+  if (kext_dsym_comp_unit_start == NULL)
+    error ("Searching for the DWARF debug info for source file '%s' but did not find a matching source file name in '%s'",
+           pst->filename, pst->objfile->name);
   
   /* Normally the struct dwarf2_per_cu_data is constructed as a part of
      the dwarf partial symtab creation.  So fake one up here.  */
@@ -4248,9 +4298,6 @@ dwarf2_kext_psymtab_to_symtab (struct partial_symtab *pst)
                   obstack_alloc (&(pst->objfile->objfile_obstack),
                                  sizeof (struct dwarf2_per_cu_data));
 
-  if (kext_dsym_comp_unit_start < dwarf2_per_objfile->info_buffer)
-    error ("Unable to find compilation unit offset in DWARF debug info for compilation unit %s in module %s",
-           pst->filename, pst->objfile->name);
   this_cu->offset = kext_dsym_comp_unit_start - dwarf2_per_objfile->info_buffer;
   this_cu->length = read_initial_length (oso_bfd, 
                                          kext_dsym_comp_unit_start, 
@@ -4382,8 +4429,14 @@ dwarf2_debug_map_psymtab_to_symtab (struct partial_symtab *pst)
     printf_filtered (_("done.\n"));
 }
 
+/* MATCH_AMOUNT specifies how much of the filename path must match.
+   See the explanation of why this is being done in 
+   dwarf2_kext_psymtab_to_symtab().  If MATCH_AMOUNT is -1, we require
+   a full source pathname match.  If it's 0, only the base names are 
+   matched.  If 1, it's the base names plus the parent directory.  */
+
 char *
-find_debug_info_for_pst (struct partial_symtab *pst)
+find_debug_info_for_pst (struct partial_symtab *pst, int match_amount)
 {
   struct cleanup *back_to;
   char *info_ptr;
@@ -4395,6 +4448,22 @@ find_debug_info_for_pst (struct partial_symtab *pst)
      read_in_chain.  Make sure to free them when we're done.  */
   info_ptr = dwarf2_per_objfile->info_buffer;
   back_to = make_cleanup (free_cached_comp_units, NULL);
+
+  const char *pst_filename = pst->filename;
+  if (match_amount >= 0)
+    {
+      int i = match_amount + 1;
+      pst_filename = &(pst->filename[strlen(pst->filename)]);
+      while (pst_filename > pst->filename)
+        {
+          if (*pst_filename == '/')
+            {
+              if (--i == 0)
+                break;
+            }
+          pst_filename--;
+        }
+    }
 
   while (info_ptr < (dwarf2_per_objfile->info_buffer
 		     + dwarf2_per_objfile->info_size))
@@ -4434,13 +4503,30 @@ find_debug_info_for_pst (struct partial_symtab *pst)
       abbrev = peek_die_abbrev (info_ptr, (int *) &bytes_read, &cu);
       info_ptr = read_partial_die (&comp_unit_die, abbrev, bytes_read,
 				   dsym_abfd, info_ptr, &cu);
-      if (comp_unit_die.name != NULL
-          && strcmp (comp_unit_die.name, pst->filename) == 0)
+      if (comp_unit_die.name != NULL)
         {
-          do_cleanups (back_to);
-          return beg_of_comp_unit;
+          if (match_amount == -1 && strcmp (comp_unit_die.name, pst->filename) == 0)
+            {
+              do_cleanups (back_to);
+              return beg_of_comp_unit;
+            }
+          if (match_amount >= 0 
+              && pst_filename 
+              && pst_filename[0] != '\0' 
+              && comp_unit_die.name[0] != '\0')
+            {
+              int pst_file_len = strlen (pst_filename);
+              int cu_len = strlen (comp_unit_die.name);
+              if (cu_len != 0 && pst_file_len != 0
+                  && cu_len > pst_file_len 
+                  && strcmp (&(comp_unit_die.name[cu_len - pst_file_len]), 
+                             pst_filename) == 0)
+                {
+                  do_cleanups (back_to);
+                  return beg_of_comp_unit;
+                }
+            }
         }
- 
       info_ptr = beg_of_comp_unit + cu.header.length
                                   + cu.header.initial_length_size;
       do_cleanups (back_to_inner);
@@ -5207,11 +5293,8 @@ read_inlined_subroutine_scope (struct die_info *die, struct dwarf2_cu *cu)
   if (abs_orig_attr)
     {
       abstract_origin = follow_die_ref (die, abs_orig_attr, cu);
-      if (!dwarf2_attr (abstract_origin, DW_AT_low_pc, cu))
-	{
-	  decl_file = dwarf2_attr (abstract_origin, DW_AT_decl_file, cu);
-	  decl_line = dwarf2_attr (abstract_origin, DW_AT_decl_line, cu);
-	}
+      decl_file = dwarf2_attr (abstract_origin, DW_AT_decl_file, cu);
+      decl_line = dwarf2_attr (abstract_origin, DW_AT_decl_line, cu);
     }
 
   /* APPLE LOCAL begin address ranges  */

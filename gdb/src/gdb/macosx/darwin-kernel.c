@@ -45,6 +45,7 @@
 #include "event-top.h"
 #include "inf-loop.h"
 #include "regcache.h"
+#include "infcall.h"  /* For inferior_function_calls_disabled_p.  */
 
 #ifndef CPU_TYPE_I386
 #define CPU_TYPE_I386 (7)
@@ -102,7 +103,8 @@ darwin_kernel_logger (darwin_kernel_log_level l, char * call, const char *format
 static void
 darwin_kernel_open (char *name, int from_tty)
 {
-	push_target (&darwin_kernel_ops);
+  inferior_function_calls_disabled_p = 1;
+  push_target (&darwin_kernel_ops);
 }
 
 static void

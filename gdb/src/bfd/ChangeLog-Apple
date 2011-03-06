@@ -1,3 +1,18 @@
+2010-10-29  Jason Molenda  (jmolenda@apple.com)
+
+	* macho-o.c (bfd_mach_o_scan_read_command): Don't warn about recognized
+	load commands which don't have the LC_REQ_DYLD bit set.
+
+2010-09-06  Jim Ingham  <jingham@apple.com>
+
+	* mach-o.h: Add an enum for the header flag values.
+	* mach-o.c: (bfd_mach_o_uses_dylinker): New function.
+
+2010-08-23  Jim Ingham  <jingham@apple.com>
+
+	* mach-o.h: Three new load commands: BFD_MACH_O_LC_VERSION_MIN_MACOSX,
+	BFD_MACH_O_LC_VERSION_MIN_IPHONEOS and BFD_MACH_O_LC_FUNCTION_STARTS.
+	
 2010-02-18  Jim Ingham  <jingham@apple.com>
 
 	* mach-o.h: New load command LC_LOAD_UPWARD_DYLIB.

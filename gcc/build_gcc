@@ -86,6 +86,10 @@ if [ ! -d "$DEST_ROOT/include/c++/$LIBSTDCXX_VERSION" ]; then
 fi
 NON_ARM_CONFIGFLAGS="--with-gxx-include-dir=\${prefix}/include/c++/$LIBSTDCXX_VERSION"
 
+# Build against the MacOSX10.5 SDK for PowerPC.
+PPC_SYSROOT=/Developer/SDKs/MacOSX10.5.sdk
+PPC_CONFIGFLAGS="$NON_ARM_CONFIGFLAGS --with-build-sysroot=\"$PPC_SYSROOT\""
+
 DARWIN_VERS=`uname -r | sed 's/\..*//'`
 echo DARWIN_VERS = $DARWIN_VERS
 
@@ -297,6 +301,8 @@ for t in $CROSS_TARGETS ; do
       AS_FOR_TARGET=$DIR/bin/${t}-apple-darwin$DARWIN_VERS-as \
       LD_FOR_TARGET=$DIR/bin/${t}-apple-darwin$DARWIN_VERS-ld \
       $SRC_DIR/configure $T_CONFIGFLAGS $ARM_CONFIGFLAGS || exit 1
+    elif [ $t = 'powerpc' ] ; then
+      $SRC_DIR/configure $T_CONFIGFLAGS $PPC_CONFIGFLAGS || exit 1
     else
       $SRC_DIR/configure $T_CONFIGFLAGS $NON_ARM_CONFIGFLAGS || exit 1
     fi
@@ -345,6 +351,8 @@ for h in $HOSTS ; do
           --target=$t-apple-darwin$DARWIN_VERS"
 	if [ $t = 'arm' ] && [ $h != 'arm' ] ; then
           T_CONFIGFLAGS="$T_CONFIGFLAGS $ARM_CONFIGFLAGS"
+	elif [ $t = 'powerpc' ] && [ $h != 'powerpc' ] ; then
+          T_CONFIGFLAGS="$T_CONFIGFLAGS $PPC_CONFIGFLAGS"
         else
           T_CONFIGFLAGS="$T_CONFIGFLAGS $NON_ARM_CONFIGFLAGS"
         fi

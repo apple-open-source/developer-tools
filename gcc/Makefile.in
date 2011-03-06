@@ -308,7 +308,8 @@ STAGE1_LANGUAGES=@stage1_languages@
 # Programs producing files for the TARGET machine
 # -----------------------------------------------
 
-FLAGS_FOR_TARGET = @FLAGS_FOR_TARGET@
+# APPLE LOCAL 8277973 Add sysroot flag here.
+FLAGS_FOR_TARGET = @FLAGS_FOR_TARGET@ $(SYSROOT_CFLAGS_FOR_TARGET)
 
 AR_FOR_TARGET=@AR_FOR_TARGET@
 AS_FOR_TARGET=@AS_FOR_TARGET@

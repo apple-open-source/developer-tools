@@ -1,3 +1,10 @@
+2010-12-12  Jim Ingham  <jingham@apple.com>
+
+	* mi-cmd-stack.c (mi_print_info_lite_base): Come up with a simpler way to
+        calculate the has_debug value.
+	(mi_cmd_stack_list_frames_lite): Added the print_start variable, and made the
+ 	count_limit user-settable.
+
 2010-05-10  Jim Ingham  <jingham@apple.com>
 
 	* mi-cmd-stack.c (mi_print_frame_more_info): Add the shared library containing
