@@ -1,6 +1,0 @@
-
-searchpath example.com
-
-"%name%.example.com"			60 ADDR "%addr%"
-"%name%.local" { forward }		60 ADDR "%addr%"
-

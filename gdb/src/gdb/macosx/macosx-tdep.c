@@ -109,7 +109,7 @@ actually_do_stack_frame_prologue (unsigned int count_limit,
 				unsigned int wordsize,
 				unsigned int *count,
 				struct frame_info **out_fi,
-				void (print_fun) (struct ui_out * uiout, int frame_num,
+				void (print_fun) (struct ui_out * uiout, int *frame_num,
 						  CORE_ADDR pc, CORE_ADDR fp));
 
 /* When we're doing native debugging, and we attach to a process,
@@ -1525,21 +1525,43 @@ macosx_locate_kext_executable_by_symfile (bfd *abfd)
       kext_executable_name = locate_kext_executable_by_dsym_url (dsym_url);
     }
   if (!kext_executable_name) 
-    goto finish;
+    {
+      char path[PATH_MAX];
+      // print a specific warning message if we have a dSYM pathname
+      if (CFURLGetFileSystemRepresentation (dsym_url, 1, path, sizeof (path)))
+        {
+          path[sizeof (path) - 1] = '\0';
+          warning ("Unable to locate symbol-rich-executable for dSYM at %s",
+                    path);
+        }
+      goto finish;
+    }
+
+  if (!file_exists_p (kext_executable_name))
+    {
+      warning ("The needed symbol-rich-executable at '%s' does not exist.",
+               kext_executable_name);
+      goto finish;
+    }
 
   /* Ensure the symfile's UUID matches the symbol-rich executable's */
 
   kext_executable_bfd = symfile_bfd_open (kext_executable_name, 0, GDB_OSABI_UNKNOWN);
   if (!kext_executable_bfd) 
-    goto finish;
+    {
+      warning ("Unable to open symbol-rich-executable for reading at '%s'.", 
+               kext_executable_name);
+      goto finish;
+    }
 
   kext_executable_uuid = get_uuidref_for_bfd (kext_executable_bfd);
-  if (!kext_executable_uuid) goto finish;
+  if (!kext_executable_uuid) 
+    goto finish;
 
   symfile_uuid_bytes = CFUUIDGetUUIDBytes(symfile_uuid);
   kext_executable_uuid_bytes = CFUUIDGetUUIDBytes(kext_executable_uuid);
   if (memcmp (&symfile_uuid_bytes, &kext_executable_uuid_bytes,
-              sizeof(CFUUIDBytes)))
+              sizeof (CFUUIDBytes)))
     {
       goto finish;
     }
@@ -1942,7 +1964,7 @@ fast_show_stack_trace_prologue (unsigned int count_limit,
 				CORE_ADDR *sigtramp_end_ptr,
 				unsigned int *count,
 				struct frame_info **out_fi,
-				void (print_fun) (struct ui_out * uiout, int frame_num,
+				void (print_fun) (struct ui_out * uiout, int *frame_num,
 						  CORE_ADDR pc, CORE_ADDR fp))
 {
   ULONGEST pc = 0;
@@ -2085,7 +2107,7 @@ actually_do_stack_frame_prologue (unsigned int count_limit,
 				unsigned int wordsize,
 				unsigned int *count,
 				struct frame_info **out_fi,
-				void (print_fun) (struct ui_out * uiout, int frame_num,
+				void (print_fun) (struct ui_out * uiout, int *frame_num,
 						  CORE_ADDR pc, CORE_ADDR fp))
 {
   CORE_ADDR fp;
@@ -2132,9 +2154,32 @@ actually_do_stack_frame_prologue (unsigned int count_limit,
     }
 
   if (print_fun && (i >= print_start && i < print_end))
-    print_fun (uiout, i, get_frame_pc (fi), get_frame_base (fi));
-  i = 1;
+    print_fun (uiout, &i, get_frame_pc (fi), get_frame_base (fi));
 
+  if (i == 0)
+    i = 1;
+  else if (i > 0)
+    {
+
+      /* In this case, we must have found and printed out some inlined
+         frames already.  Therefore, we need to bring 'fi' up to our
+         currently printed frame location, then increment i and
+         proceed into the loop (if we're not already done). */
+      
+      int j = 0;
+      while ((j < i) && (fi != NULL))
+        {
+          fi = get_prev_frame (fi);
+          ++j;
+        }
+      if (fi == NULL)
+        {
+          more_frames = 0;
+          goto count_finish;
+        }
+      ++i;
+    }
+  
   do
     {
       if (i >= count_limit)
@@ -2164,7 +2209,23 @@ actually_do_stack_frame_prologue (unsigned int count_limit,
 	}
 
       if (print_fun && (i >= print_start && i < print_end))
-        print_fun (uiout, i, pc, fp);
+        print_fun (uiout, &i, pc, fp);
+
+      /* If we printed out multiple frames (because of inlining) then we
+         need to update fi appropriately)  */
+
+      int j = frame_relative_level (fi);
+      while ((j < i) && (fi != NULL))
+        {
+          fi = get_prev_frame (fi);
+          ++j;
+        }
+
+      if (fi == NULL)
+      {
+          more_frames = 0;
+          goto count_finish;
+      }
 
       i++;
 
@@ -2402,6 +2463,21 @@ macosx_get_kext_sect_addrs_from_kernel (const char *filename,
   return 1;
 }
 
+#ifdef NM_NEXTSTEP
+#include "macosx-nat-infthread.h"
+#endif
+
+char *
+macosx_pid_or_tid_to_str (ptid_t ptid)
+{
+  static char buf[64];
+#ifdef NM_NEXTSTEP
+  xsnprintf (buf, sizeof buf, "process %d thread 0x%x", ptid_get_pid (ptid), get_application_thread_port ((thread_t) ptid_get_tid (ptid)));
+#else
+  xsnprintf (buf, sizeof buf, "process %d thread 0x%x", ptid_get_pid (ptid), (unsigned int) ptid_get_tid (ptid));
+#endif
+  return buf;
+}
 
 void
 _initialize_macosx_tdep ()

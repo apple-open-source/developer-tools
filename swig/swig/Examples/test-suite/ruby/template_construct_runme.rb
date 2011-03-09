@@ -1,2 +1,0 @@
-require 'template_construct'
-

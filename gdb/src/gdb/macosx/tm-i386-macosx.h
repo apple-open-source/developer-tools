@@ -7,7 +7,7 @@ i386_fast_show_stack (unsigned int count_limit,
                       unsigned int print_start,
 		      unsigned int print_end,
                       unsigned int *count,
-                      void (print_fun) (struct ui_out * uiout, int frame_num,
+                      void (print_fun) (struct ui_out * uiout, int *frame_num,
                                        CORE_ADDR pc, CORE_ADDR fp));
 #define FAST_COUNT_STACK_DEPTH(count_limit, print_start, print_end, count, print_fun) \
   (i386_fast_show_stack (count_limit, print_start, print_end, count, print_fun))

@@ -1,3 +1,44 @@
+2011-01-22  Caroline Tice <ctice@apple.com>
+
+	* macosx-nat-inferior-util.c (macosx_inferior_resume_ptrace):  Change 
+	the error to a warning if the call to PTRACE_THUPDATE fails.
+	
+2011-01-21  Caroline Tice <ctice@apple.com>
+
+	* macosx-tdep.c (actually_do_frame_prologue): After calls to print_fun,
+	if we ended up printing more than one frame (due to inlined frames),
+	update the 'i' and 'fi' variables to match the number of frames 
+	actually printed out.
+	
+2011-01-18  Caroline Tice  <ctice@apple.com>
+
+	* i386-macosx-tdep.c, macosx-tdep.c, macosx-tdep.h, i386-macosx-tdep.h:
+        Fix problem where stack-list-frames-lite was not printing frames 
+	for inlined functions (change the int to int* in the signature of
+	print_fun, and pass in &i instead of i, so that if the print fun
+	prints multiple inlined frames the frame number gets updated 
+	appropriately).
+
+2011-01-11  Jim Ingham  <jingham@apple.com>
+
+	* macosx-tdep.c: (macosx_pid_or_tid_to_str): New function, this
+	will print the thread as well as the process in the [Switching to...}
+	messages.
+	* macosx-tdep.h: Declare macosx_pid_or_tid_to_str.
+	
+2011-01-11  Jason Molenda  (jmolenda@apple.com)
+
+	* macosx-tdep.c (macosx_locate_kext_executable_by_symfile): Add
+	warning messages for specific failure cases so it's easier to
+	diagnose what went wrong.
+
+2011-01-05  Jason Molenda  (jmolenda@apple.com)
+
+	* macosx-nat-dyld-process.c (dyld_load_library): If 'set verbose',
+	and we have a mismatch between the on-device UUID and the on-disk
+	UUID for a given file, print both the UUIDs in the warning message.
+	If verbose unset, the warning remains the same as it was before.
+
 2010-12-20  Jason Molenda  (jmolenda@apple.com)
 
 	* ppc-macosx-tdep.c (ppc_fast_show_stack): Remove this function,

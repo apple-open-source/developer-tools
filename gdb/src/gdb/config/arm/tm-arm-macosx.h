@@ -35,7 +35,7 @@ int arm_macosx_fast_show_stack (unsigned int count_limit,
 				unsigned int print_end,
 				unsigned int *count,
 				void (print_fun) (struct ui_out * uiout, 
-				int frame_num, CORE_ADDR pc, CORE_ADDR fp));
+				int *frame_num, CORE_ADDR pc, CORE_ADDR fp));
 
 #define FAST_COUNT_STACK_DEPTH(count_limit, print_start, print_end, count, print_fun) \
   (arm_macosx_fast_show_stack (count_limit, print_start, print_end, count, print_fun))

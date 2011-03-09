@@ -644,7 +644,7 @@ i386_fast_show_stack (unsigned int count_limit,
 		      unsigned int print_start,
 		      unsigned int print_end,
                      unsigned int *count,
-                     void (print_fun) (struct ui_out * uiout, int frame_num,
+                     void (print_fun) (struct ui_out * uiout, int *frame_num,
                                        CORE_ADDR pc, CORE_ADDR fp))
 {
   CORE_ADDR fp, prev_fp;
@@ -731,7 +731,7 @@ i386_fast_show_stack (unsigned int count_limit,
       pc_set_load_state (pc, OBJF_SYM_ALL, 0);
 
       if (print_fun && (i >= print_start && i < print_end))
-        print_fun (uiout, i, pc, fp + 2 * wordsize);
+        print_fun (uiout, &i, pc, fp + 2 * wordsize);
       i++;
 
       if (!backtrace_past_main && addr_inside_main_func (pc))

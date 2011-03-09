@@ -1,3 +1,0 @@
-manpage(ZSHCOMPWID)(1)(date())(zsh version())
-manpagename(zshcompwid)(zsh completion widgets)
-includefile(Zsh/compwid.yo)

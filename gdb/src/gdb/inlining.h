@@ -290,6 +290,10 @@ void set_current_sal_from_inlined_frame (struct frame_info *fi, int center);
 extern void print_inlined_frame (struct frame_info *, int, enum print_what,
 				 int, struct symtab_and_line, int);
 
+extern void print_inlined_frames_lite (struct ui_out *uiout, int with_names, 
+                                       int *frame_num, CORE_ADDR pc,
+                                       CORE_ADDR fp);
+
 extern int is_within_stepping_ranges (CORE_ADDR);
 
 extern int is_at_stepping_ranges_end (CORE_ADDR);

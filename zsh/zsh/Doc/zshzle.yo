@@ -1,3 +1,0 @@
-manpage(ZSHZLE)(1)(date())(zsh version())
-manpagename(zshzle)(zsh command line editor)
-includefile(Zsh/zle.yo)

@@ -156,13 +156,16 @@ mi_cmd_stack_list_frames (char *command, char **argv, int argc)
 static void 
 mi_print_frame_info_lite_base (struct ui_out *uiout,
 			       int with_names,
-			       int frame_num,
+			       int *frame_num,
 			       CORE_ADDR pc,
 			       CORE_ADDR fp)
 {
   char num_buf[8];
   struct cleanup *list_cleanup;
-  sprintf (num_buf, "%d", frame_num);
+
+  print_inlined_frames_lite (uiout, with_names, frame_num, pc, fp);
+
+  sprintf (num_buf, "%d", *frame_num);
   ui_out_text (uiout, "Frame ");
   ui_out_text(uiout, num_buf);
   ui_out_text(uiout, ": ");
@@ -221,7 +224,7 @@ mi_print_frame_info_lite_base (struct ui_out *uiout,
 
 static void
 mi_print_frame_info_with_names_lite (struct ui_out *uiout,
-			  int frame_num,
+			  int *frame_num,
 			  CORE_ADDR pc,
 			  CORE_ADDR fp)
 {
@@ -230,7 +233,7 @@ mi_print_frame_info_with_names_lite (struct ui_out *uiout,
 
 static void
 mi_print_frame_info_lite (struct ui_out *uiout,
-			  int frame_num,
+			  int *frame_num,
 			  CORE_ADDR pc,
 			  CORE_ADDR fp)
 {
@@ -253,7 +256,7 @@ mi_cmd_stack_list_frames_lite (char *command, char **argv, int argc)
     int names;
     int valid;
     unsigned int count = 0;
-    void (*print_fun) (struct ui_out*, int, CORE_ADDR, CORE_ADDR);
+    void (*print_fun) (struct ui_out*, int*, CORE_ADDR, CORE_ADDR);
 
 #ifndef FAST_COUNT_STACK_DEPTH
     int i;
@@ -350,8 +353,16 @@ mi_cmd_stack_list_frames_lite (char *command, char **argv, int argc)
 	  
 	  if ((limit == -1) || (i >= start && i < limit))
 	    {
-	      print_fun (uiout, i, get_frame_pc (fi), 
+	      print_fun (uiout, &i, get_frame_pc (fi), 
                                         get_frame_base(fi));
+              int j = frame_relative_level (fi);
+              while ((j < i) && (fi != NULL))
+                {
+                  fi = get_prev_frame (fi);
+                  ++j;
+                }
+              if (fi == NULL)
+                  break;
 	    }
 	  if (count_limit != -1 && i > count_limit)
 	    break;

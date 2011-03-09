@@ -1,3 +1,0 @@
-manpage(ZSHROADMAP)(1)(date())(zsh version())
-manpagename(zshroadmap)(informal introduction to the zsh manual)
-includefile(Zsh/roadmap.yo)

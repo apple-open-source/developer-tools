@@ -1,3 +1,0 @@
-manpage(ZSHCALSYS)(1)(date())(zsh version())
-manpagename(zshcalsys)(zsh calendar system)
-includefile(Zsh/calsys.yo)

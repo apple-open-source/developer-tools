@@ -1,7 +1,0 @@
-name=zsh/clone
-link=dynamic
-load=no
-
-autofeatures="b:clone"
-
-objects="clone.o"

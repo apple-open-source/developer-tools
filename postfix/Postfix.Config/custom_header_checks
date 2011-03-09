@@ -1,1 +1,0 @@
-/^subject: *$/ REJECT empty subject header 

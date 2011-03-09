@@ -1,3 +1,0 @@
-manpage(ZSHPARAM)(1)(date())(zsh version())
-manpagename(zshparam)(zsh parameters)
-includefile(Zsh/params.yo)

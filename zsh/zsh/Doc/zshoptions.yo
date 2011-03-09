@@ -1,3 +1,0 @@
-manpage(ZSHOPTIONS)(1)(date())(zsh version())
-manpagename(zshoptions)(zsh options)
-includefile(Zsh/options.yo)

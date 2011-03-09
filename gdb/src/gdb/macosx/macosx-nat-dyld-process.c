@@ -1368,14 +1368,22 @@ dyld_load_library (const struct dyld_path_info *d,
 			}
 		      curpos += cmd.cmdsize;
 		    }
-		  matches = (memcmp(mem_uuid, file_uuid, sizeof (file_uuid)) == 0);
+		  matches = (memcmp (mem_uuid, file_uuid, sizeof (file_uuid)) == 0);
 		}
 	      
 	      if (!matches)
 		{
-		  warning (_("UUID mismatch detected with the loaded library "
+                  if (!info_verbose)
+		    warning (_("UUID mismatch detected with the loaded library "
 			     "- on disk is:\n\t%s"),
 			   e->abfd->filename);
+                  else
+		    warning (_("UUID mismatch detected with the loaded library "
+			     "- on host side:\n\t%s (UUID %s)\n"
+                             "- on device side:\n\tUUID %s"),
+			   e->abfd->filename, puuid (file_uuid),
+                           puuid (mem_uuid));
+
 		  if (ui_out_is_mi_like_p (uiout))
 		    {
 		      struct cleanup *notify_cleanup =

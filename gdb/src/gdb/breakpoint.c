@@ -7018,6 +7018,9 @@ break_command_2 (char *arg, int flag, int from_tty,
       /* APPLE LOCAL: Record requested_shlib */
       if (requested_shlib != NULL)
 	b->requested_shlib = xstrdup (requested_shlib);
+      /* APPLE LOCAL: Add breakpoint to the new breakpoints list.  */
+      if (new_breakpoints != NULL)
+        add_breakpoint_to_new_list (new_breakpoints, b);
       mention (b);
     }
   

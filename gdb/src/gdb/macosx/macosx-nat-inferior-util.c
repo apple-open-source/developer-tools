@@ -319,19 +319,19 @@ macosx_inferior_resume_ptrace (macosx_inferior_status *s, unsigned int thread,
       inferior_debug (2, "Calling ptrace (%s, 0x%x, 0x%x, %d).\n",ptrace_request_unparse (PTRACE_THUPDATE),
 		       s->pid, thread, nsignal);
       if (call_ptrace (PTRACE_THUPDATE, s->pid, (PTRACE_ARG3_TYPE) thread, nsignal) != 0)
-        error ("Error calling ptrace (%s (0x%lx), %d, 0x%x, %d): %s",
-               ptrace_request_unparse (PTRACE_THUPDATE),
-               (unsigned long) PTRACE_THUPDATE, s->pid, thread, nsignal,
-               strerror (errno));
+        warning ("Error calling ptrace (%s (0x%lx), %d, 0x%x, %d): %s",
+                 ptrace_request_unparse (PTRACE_THUPDATE),
+                 (unsigned long) PTRACE_THUPDATE, s->pid, thread, nsignal,
+                 strerror (errno));
     }
 
   if ((s->stopped_in_ptrace && (!s->stopped_in_softexc))
       || (val == PTRACE_DETACH))
     {
       if (call_ptrace (val, s->pid, (PTRACE_ARG3_TYPE) 1, nsignal) != 0)
-        error ("Error calling ptrace (%s (0x%lx), %d, %d, %d): %s",
-               ptrace_request_unparse (val), (unsigned long) val,
-               s->pid, 1, nsignal, strerror (errno));
+        warning ("Error calling ptrace (%s (0x%lx), %d, %d, %d): %s",
+                 ptrace_request_unparse (val), (unsigned long) val,
+                 s->pid, 1, nsignal, strerror (errno));
     }
 
   s->stopped_in_softexc = 0;

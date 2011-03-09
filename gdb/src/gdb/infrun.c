@@ -2979,7 +2979,9 @@ extern void macosx_print_extra_stop_info (int, CORE_ADDR);
          function.  That's what tells us (a) whether we want to step
          into it at all, and (b) what prologue we want to run to the
          end of, if we do step into it.  */
+
       real_stop_pc = skip_language_trampoline (stop_pc);
+
       if (real_stop_pc == 0)
 	real_stop_pc = SKIP_TRAMPOLINE_CODE (stop_pc);
       if (real_stop_pc != 0)
@@ -3425,6 +3427,16 @@ keep_going (struct execution_control_state *ecs)
 
   /* If we did not do break;, it means we should keep running the
      inferior and not return to debugger.  */
+
+  /* proceed and keep_going need to turn off the debug mode before 
+     they restart the target.  proceed is generally called by the user
+     to restart, and keep_going is called internally within handle_inferior_event.  */
+
+  if (!proceed_from_hand_call)
+    {
+      do_hand_call_cleanups (ALL_CLEANUPS);
+      proceed_from_hand_call = 0;
+    }
 
   if (trap_expected && stop_signal != TARGET_SIGNAL_TRAP)
     {

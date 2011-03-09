@@ -2416,7 +2416,7 @@ print_inlined_frame (struct frame_info *fi, int print_level,
 	i--;
       
     }
-  
+
   /* Having found the record for our current position, we now need to
      work back down the stack and find the first record we haven't printed
      already.  */
@@ -2425,6 +2425,34 @@ print_inlined_frame (struct frame_info *fi, int print_level,
 	 && (stack_ptr->records[i].stack_frame_printed
 	     || !stack_ptr->records[i].stepped_into))
     i--;
+
+  /* Now we've got the right record, check our sal's symtab against the
+     record's; if they differ, try to find the right sal/symtab.  */
+
+  if ((stack_ptr->records[i].s != NULL)
+      && (sal.symtab != NULL)
+      && (sal.symtab != stack_ptr->records[i].s)
+      && (sal.next != NULL))
+    {
+      int found = 0;
+      struct symtab_and_line *tmp_sal = sal.next;
+      while (!found && tmp_sal)
+        {
+          if (tmp_sal->symtab == stack_ptr->records[i].s)
+            {
+              sal.symtab = tmp_sal->symtab;
+              sal.section = tmp_sal->section;
+              sal.line = tmp_sal->line;
+              sal.pc = tmp_sal->pc;
+              sal.end = tmp_sal->end;
+              sal.entry_type = tmp_sal->entry_type;
+              sal.next = NULL;
+              found = 1;
+            }
+          else
+            tmp_sal = tmp_sal->next;
+        }
+    }
   
   if (stack_ptr->records[i].stepped_into)
     tmp_name = stack_ptr->records[i].fn_name;
@@ -3617,5 +3645,76 @@ func_sym_has_inlining (struct symbol *func_sym, struct frame_info *fi)
 
   return found;
 }
+
+void
+print_inlined_frames_lite (struct ui_out *uiout, 
+                           int with_names, 
+                           int *frame_num, 
+                           CORE_ADDR pc, 
+                           CORE_ADDR fp)
+{
+  char num_buf[8];
+  struct cleanup *list_cleanup;
+  struct inlined_function_data *stack_ptr = NULL;
+  int i;
+
+  if (*frame_num == 0)
+    {
+      inlined_function_update_call_stack (pc);
+      stack_ptr = &global_inlined_call_stack;
+    }
+  else
+    {
+      update_tmp_frame_stack (pc);
+      stack_ptr = &temp_frame_stack;
+    }
+  
+  if (stack_ptr->nelts > 0)
+    {
+      for (i = stack_ptr->current_pos; i > 0; --i)
+        {
+          snprintf (num_buf, sizeof num_buf, "%d", *frame_num);
+          num_buf[sizeof (num_buf) - 1] = '\0';
+          *frame_num = *frame_num + 1;
+          ui_out_text (uiout, "Frame ");
+          ui_out_text (uiout, num_buf);
+          list_cleanup = make_cleanup_ui_out_tuple_begin_end (uiout, num_buf);
+          
+          ui_out_field_core_addr (uiout, "pc", pc);
+          ui_out_field_core_addr (uiout, "fp", fp);
+          
+          struct obj_section *osect = find_pc_sect_section (pc, NULL);
+          if (osect != NULL 
+              && osect->objfile != NULL 
+              && osect->objfile->name != NULL)
+            ui_out_field_string (uiout, "shlibname", osect->objfile->name);
+          else
+            ui_out_field_string (uiout, "shlibname", "<UNKNOWN>");
+          
+          if (with_names)
+            {
+              if (stack_ptr->records[i].fn_name)
+		{
+	          char *func_name;
+		  func_name = (char *) xmalloc 
+ 		                 (strlen (stack_ptr->records[i].fn_name) + 15);
+		  sprintf (func_name, "%s [inlined]", 
+			   stack_ptr->records[i].fn_name);
+		  ui_out_field_string (uiout, "func", func_name);
+                  xfree (func_name);
+		}
+              else
+                ui_out_field_string (uiout, "func", "<\?\?\?\?> [inlined]");
+            }
+          // Assume that if we know the function was inlined, then we 
+          //  *must* have debug information for it; otherwise we couldn't
+          // know about or detect the inlining.
+          ui_out_field_int (uiout, "has_debug", 1);
+          ui_out_text (uiout, "\n");
+          do_cleanups (list_cleanup);
+        }
+    }
+}
+
 /* APPLE LOCAL end radar 6534195  */
 /* APPLE LOCAL end subroutine inlining  (entire file) */

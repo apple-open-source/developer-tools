@@ -116,27 +116,61 @@ static int dcc_wait_for_cpp(pid_t cpp_pid,
     return 0;
 }
 
-static const char *dcc_map_optx_language_for_cpp(const char *language) {
+static const char *dcc_map_optx_language_for_cpp(const char *language, int use_new_names) {
     /* These are the only types we allowed in arg.c */
+
+    static const char* keys[] = {
+    	"c",
+    	"c++",
+    	"objective-c",
+    	"objective-c++",
+    	"cpp-output",
+    	"c++-cpp-output",
+    	"objc-cpp-output",
+    	"objc++-cpp-output",
+    	"objective-c-cpp-output",
+    	"objective-c++-cpp-output",
+    	NULL};
     
-    if (!strcmp(language, "c")) {
-        return "cpp-output";
-    } else if (!strcmp(language, "c++")) {
-        return "c++-cpp-output";
-    } else if (!strcmp(language, "objective-c")) {
-        return "objc-cpp-output";
-    } else if (!strcmp(language, "objective-c++")) {
-        return "objc++-cpp-output";
-    } else if (!strcmp(language, "cpp-output")
-               || !strcmp(language, "c++cpp-output")
-               || !strcmp(language, "objc-cpp-output")
-               || !strcmp(language, "objc++-cpp-output")) {
-        /* Preprocessed input is not preprocessed any further, so these
-         * modes can be passed straight through. */
-        return language;
-    } else {
-        return NULL;
+    static const char* old_transforms[] = {
+    	"cpp-output",
+    	"c++-cpp-output",
+    	"objc-cpp-output",
+    	"objc++-cpp-output",
+    	"cpp-output",
+    	"c++-cpp-output",
+    	"objc-cpp-output",
+    	"objc++-cpp-output",
+    	"objc-cpp-output",
+    	"objc++-cpp-output",
+    	NULL};
+
+    static const char* new_transforms[] = {
+    	"cpp-output",
+    	"c++-cpp-output",
+    	"objective-c-cpp-output",
+    	"objective-c++-cpp-output",
+    	"cpp-output",
+    	"c++-cpp-output",
+    	"objective-c-cpp-output",
+    	"objective-c++-cpp-output",
+    	"objective-c-cpp-output",
+    	"objective-c++-cpp-output",
+    	NULL};
+
+    char** transform = (char**)(use_new_names ? new_transforms : old_transforms);
+    char* cur_key = (char*)keys[0];
+    unsigned int i = 0;
+    do
+    {
+    	if(!strcmp(language, cur_key)) {
+			rs_trace("mapped cpp language (new style: %i) %s to %s", use_new_names, language, transform[i]);
+    		return transform[i];
+    	}
     }
+    while((cur_key = (char*)keys[i++]) != NULL);
+
+	return NULL;
 }
 
 /* Send a request across to the already-open server.
@@ -170,11 +204,14 @@ dcc_send_header(int net_fd,
     } else if (host->cpp_where == DCC_CPP_ON_CLIENT) {
         /* Fix up the -x argument in new_argv, if any, to account for
          * preprocessing having been done. */
+        int using_clang = 0;
         for (i = 0; new_argv[i]; i++) {
+        	if (strstr(new_argv[i], "/usr/bin/clang")) // this is a hack to enable using new-style objective-c transformations for clang
+        		using_clang = 1;
             if (!strcmp(new_argv[i], "-x") && new_argv[i+1]) {
-                new_lang = dcc_map_optx_language_for_cpp(new_argv[i+1]);
+                new_lang = dcc_map_optx_language_for_cpp(new_argv[i+1], using_clang);
                 if (!new_lang) {
-                    rs_log_error("got unsupported -x language");
+                    rs_log_error("got unsupported -x language: %s", new_argv[i+1]);
                     ret = EXIT_DISTCC_FAILED;
                     goto out_error;
                 }

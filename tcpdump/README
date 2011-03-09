@@ -1,3 +1,0 @@
-tcpdump is configured with the following:
---prefix=/usr
---enable-ipv6

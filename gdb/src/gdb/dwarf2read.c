@@ -4224,6 +4224,12 @@ dwarf2_kext_psymtab_to_symtab (struct partial_symtab *pst)
   if (PSYMTAB_OSO_NAME (pst) == NULL || pst->readin)
     return;
 
+  if (info_verbose)
+    {
+      printf_filtered (_("Reading in symbols for %s..."), pst->filename);
+      gdb_flush (gdb_stdout);
+    }
+
   /* oso_bfd is the 0-address-based kext bundle binary; its addresses
      match the dSYM addresses but have no relation to the actual
      kextload'ed addresses of the binary loaded in kernel memory.  */
@@ -4851,6 +4857,15 @@ process_full_comp_unit (struct dwarf2_per_cu_data *per_cu)
     {
       lowpc = cu->per_cu->psymtab->textlow;
       highpc = cu->per_cu->psymtab->texthigh;
+    }
+  else
+    {
+      /* If we didn't find a lowpc, set it to highpc to avoid complaints
+         from finish_block.  */
+      if (lowpc == ((CORE_ADDR) -1))
+        lowpc = highpc;
+      lowpc += baseaddr;
+      highpc += baseaddr;
     }
 
   symtab = end_symtab (highpc, objfile, SECT_OFF_TEXT (objfile));

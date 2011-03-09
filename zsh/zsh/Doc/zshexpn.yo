@@ -1,3 +1,0 @@
-manpage(ZSHEXPN)(1)(date())(zsh version())
-manpagename(zshexpn)(zsh expansion and substitution)
-includefile(Zsh/expn.yo)

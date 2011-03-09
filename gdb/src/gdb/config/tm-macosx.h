@@ -64,4 +64,7 @@ extern void macosx_add_shared_symbol_files ();
 const char *macosx_pc_solib (CORE_ADDR addr);
 #define PC_SOLIB(addr) ((char *) macosx_pc_solib (addr))
 
+#define target_pid_or_tid_to_str(PTID) \
+  macosx_pid_or_tid_to_str (PTID)
+
 #endif /* _TM_NEXTSTEP_H_ */

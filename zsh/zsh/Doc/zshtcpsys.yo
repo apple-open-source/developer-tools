@@ -1,3 +1,0 @@
-manpage(ZSHTCPSYS)(1)(date())(zsh version())
-manpagename(zshtcpsys)(zsh tcp system)
-includefile(Zsh/tcpsys.yo)

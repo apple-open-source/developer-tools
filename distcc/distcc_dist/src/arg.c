@@ -102,10 +102,12 @@ static const char *dcc_optx_ext_lookup(const char *language_name) {
                !strcmp(language_name, "c++-cpp-output")) {
         return ".ii";
     } else if (!strcmp(language_name, "objective-c") ||
-               !strcmp(language_name, "objc-cpp-output")) {
+               !strcmp(language_name, "objc-cpp-output") ||
+               !strcmp(language_name, "objective-c-cpp-output")) {
         return ".mi";
     } else if (!strcmp(language_name, "objective-c++") ||
-               !strcmp(language_name, "objc++-cpp-output")) {
+               !strcmp(language_name, "objc++-cpp-output") ||
+               !strcmp(language_name, "objective-c++-cpp-output")) {
         return ".mii";
     } else {
         return NULL;

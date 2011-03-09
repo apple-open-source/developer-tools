@@ -56,7 +56,7 @@ fast_show_stack_trace_prologue (unsigned int count_limit,
 				CORE_ADDR *sigtramp_end_ptr,
 				unsigned int *count,
 				struct frame_info **fi,
-				void (print_fun) (struct ui_out * uiout, int frame_num,
+				void (print_fun) (struct ui_out * uiout, int *frame_num,
 						  CORE_ADDR pc, CORE_ADDR fp));
 
 int
@@ -71,5 +71,7 @@ int
 macosx_get_kext_sect_addrs_from_kernel (const char *kext_filename, 
                                         uint8_t **kext_uuids, struct section_addr_info **sect_addrs,
                                         const char *kext_bundle_ident);
+char *
+macosx_pid_or_tid_to_str (ptid_t ptid);
 
 #endif /* __GDB_MACOSX_TDEP_H__ */

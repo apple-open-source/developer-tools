@@ -537,6 +537,8 @@ class IncludeAnalyzerMemoizingNode(include_analyzer.IncludeAnalyzer):
       (quote_includes, angle_includes, expr_includes, next_includes) = (
         self.file_cache[fp_real_idx])
 
+    if self.systemdir_prefix_cache.StartsWithSystemdir(fp_real_idx, self.realpath_map):
+      return node
 
     # Do the includes of the form #include "foo.h".
     for quote_filepath in quote_includes:

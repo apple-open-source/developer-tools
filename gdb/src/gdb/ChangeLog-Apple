@@ -1,3 +1,67 @@
+2011-01-26  Caroline Tice <ctice@apple.com>
+
+        * arm-tdep.c (arm_macosx_fast_show_stack):   Modify the frame_num
+        parameter for print_fun to be an int* rather than an int;  pass in
+        the address of i rather than i.
+        * config/arm/tm-arm-macosx.h (arm_macosx_fast_show_stack):  Modify the
+        frame_num parameter of print_fun to be an int* rather than an int.
+        * mi/mi-cmd-stack.c (stack_list_frames_lite): Pass addres of i to 
+        print_fun; update fi after call to print_fun to match the number of
+        frames printed (i).
+
+2011-01-21  Caroline Tice <ctice@apple.com>
+
+        * breakpoint.c (break_command_2) Don't call add_breakpoint_to_new_list
+        if new_breakpoints is NULL.
+        * inlining.c (print_inlined_frame): If the sal passed in and the
+        inlined call record differ as to which symtab to use, try to find a
+        sal whose symtab matches the one in the inlined call record.
+        (print_inlined_frames_lite): Start printing frames at the
+        current_pos of the stack_ptr rather than at the top.
+        * stack.c (print_frame): Only call at_inlined_call_site_p if we're
+        printing frame 0.
+
+2011-01-19  Jason Molenda  (jmolenda@apple.com)
+
+        * inlining.c (print_inlined_frames_lite): Add guard against
+        snprintf buffer overrun.  Don't leak function name + [inlined]
+        memory scratch buffer.
+
+2011-01-18  Caroline Tice <ctice@apple.com>
+
+	* breakpoint.c (break_command_2):  Add call to 
+        'add_breakpoint_to_new_list' after creating pending breakpoints, so 
+        that they can be returned properly in the new_breakpoints parameter.
+
+2011-01-18  Caroline Tice <ctice@apple.com>
+
+	* inlining.c (print_inlined_frames_lite):  New function.
+        * inlining.h (print_inlined_frames_lite):  New extern function decl.
+        * mi/mi-cmd-stack (mi_print_frame_info_lite):  Make frame_num
+        parameter an int* rather than an int, so it can be changed; add
+        call to print_inlined_frames_lite.
+        (mi_print_frame_info_with_names_lite): Make frame_num
+        parameter an int* rather than an int, so it can be changed.
+        (mi_print_frame_info_lite):  Ditto.
+        (mi_cmd_stack_list_frames_lite): Ditto for the signature of print_fun.
+
+2011-01-19  Jason Molenda  (jmolenda@apple.com)
+
+	* dwarf2read.c (process_full_comp_unit): Adjust comile unit
+	start/end addresses by the dSYM section offset, if any.
+
+2011-01-12  Jim Ingham  <jingham@apple.com>
+
+	* infrun.c (keep_going): Check if we should run the hand
+	call cleanups before resuming.
+	* config/tm-macosx.h: Define target_pid_or_tid_to_str
+	
+2011-01-11  Jason Molenda  (jmolenda@apple.com)
+
+	* dwarf2read.c (dwarf2_kext_psymtab_to_symtab): When in verbose mode,
+	print the name of the psymtab being expanded - like other psymtab to
+	symtab functions.
+
 2011-01-04  Jason Molenda  (jmolenda@apple.com)
 
 	* dwarf2read.c (find_debug_info_for_pst): Don't scan past the beginning

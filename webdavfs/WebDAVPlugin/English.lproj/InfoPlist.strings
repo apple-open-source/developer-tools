@@ -1,5 +1,0 @@
-/* Localized versions of Info.plist keys */
-
-CFBundleName = "WebDAV URLMount Plugin";
-NSHumanReadableCopyright = "Copyright (c) 2008 Apple Inc.";
-WebDAV = "WebDAV Servers";
