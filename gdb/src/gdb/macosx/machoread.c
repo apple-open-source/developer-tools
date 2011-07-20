@@ -531,6 +531,13 @@ macho_symfile_read (struct objfile *objfile, int mainline)
       mainline = 0;
     }
 
+  if (info_verbose
+      && macosx_bfd_is_in_memory (abfd) 
+      && target_is_remote () 
+      && !target_is_kdp_remote ())
+    {
+      warning ("Copying %s from device memory...", abfd->filename);
+    }
   macho_build_psymtabs (objfile, mainline,
                         "LC_SYMTAB.stabs", "LC_SYMTAB.stabstr",
                         "LC_SEGMENT.__TEXT.__text",

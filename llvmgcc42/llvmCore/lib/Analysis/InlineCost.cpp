@@ -24,6 +24,7 @@ using namespace llvm;
 unsigned InlineCostAnalyzer::FunctionInfo::
 CountCodeReductionForConstant(Value *V) {
   unsigned Reduction = 0;
+  bool indirectCallBonus = false;
   for (Value::use_iterator UI = V->use_begin(), E = V->use_end(); UI != E; ++UI)
     if (isa<BranchInst>(*UI) || isa<SwitchInst>(*UI)) {
       // We will be able to eliminate all but one of the successors.
@@ -37,11 +38,11 @@ CountCodeReductionForConstant(Value *V) {
     } else if (CallInst *CI = dyn_cast<CallInst>(*UI)) {
       // Turning an indirect call into a direct call is a BIG win
       if (CI->getCalledValue() == V)
-        Reduction += InlineConstants::IndirectCallBonus;
+	indirectCallBonus = true;
     } else if (InvokeInst *II = dyn_cast<InvokeInst>(*UI)) {
       // Turning an indirect call into a direct call is a BIG win
       if (II->getCalledValue() == V)
-        Reduction += InlineConstants::IndirectCallBonus;
+	indirectCallBonus = true;
     } else {
       // Figure out if this instruction will be removed due to simple constant
       // propagation.
@@ -75,6 +76,7 @@ CountCodeReductionForConstant(Value *V) {
       }
     }
 
+  if (indirectCallBonus) Reduction += InlineConstants::IndirectCallBonus;
   return Reduction;
 }
 

@@ -41,14 +41,12 @@ char *macosx_kext_info (const char *filename,
                   const char **bundle_executable_name_from_plist,
                   const char **bundle_identifier_name_from_plist);
 
-enum gdb_osabi
-generic_mach_o_osabi_sniffer (bfd *abfd, enum bfd_architecture arch, 
+enum gdb_osabi generic_mach_o_osabi_sniffer (bfd *abfd, enum bfd_architecture arch, 
 			      unsigned long mach_32,
 			      unsigned long mach_64,
 			      int (*query_64_bit_fn) ());
 
-int
-fast_show_stack_trace_prologue (unsigned int count_limit, 
+int fast_show_stack_trace_prologue (unsigned int count_limit, 
 				unsigned int print_start,
 				unsigned int print_end,
 				unsigned int wordsize,
@@ -59,19 +57,16 @@ fast_show_stack_trace_prologue (unsigned int count_limit,
 				void (print_fun) (struct ui_out * uiout, int *frame_num,
 						  CORE_ADDR pc, CORE_ADDR fp));
 
-int
-macosx_enable_exception_callback (enum exception_event_kind kind, int enable);
-struct symtabs_and_lines *
-macosx_find_exception_catchpoints (enum exception_event_kind kind,
-                                   struct objfile *restrict_objfile);
-struct exception_event_record *
-macosx_get_current_exception_event ();
+int macosx_enable_exception_callback (enum exception_event_kind kind, int enable);
 
-int
-macosx_get_kext_sect_addrs_from_kernel (const char *kext_filename, 
-                                        uint8_t **kext_uuids, struct section_addr_info **sect_addrs,
-                                        const char *kext_bundle_ident);
-char *
-macosx_pid_or_tid_to_str (ptid_t ptid);
+struct symtabs_and_lines *macosx_find_exception_catchpoints (enum exception_event_kind kind, struct objfile *restrict_objfile);
+
+struct exception_event_record *macosx_get_current_exception_event ();
+
+struct section_addr_info *get_section_addresses_for_macho_in_memory (CORE_ADDR mh_addr);
+
+struct section_addr_info *macosx_get_kext_sect_addrs_from_kernel (const char *kext_filename, uint8_t **kext_uuids, const char *kext_bundle_ident);
+
+char *macosx_pid_or_tid_to_str (ptid_t ptid);
 
 #endif /* __GDB_MACOSX_TDEP_H__ */

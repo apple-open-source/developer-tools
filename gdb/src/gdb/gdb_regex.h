@@ -21,15 +21,6 @@
 #ifndef GDB_REGEX_H
 #define GDB_REGEX_H 1
 
-#undef USE_INCLUDED_REGEX
-#define USE_INCLUDED_REGEX
-
-#ifdef USE_INCLUDED_REGEX
-# include "xregex.h"
-#else
-/* Request 4.2 BSD regex functions.  */
-# define _REGEX_RE_COMP
-# include <regex.h>
-#endif
+#include <regex.h>
 
 #endif /* not GDB_REGEX_H */

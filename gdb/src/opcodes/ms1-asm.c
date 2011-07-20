@@ -34,7 +34,7 @@
 #include "ms1-desc.h"
 #include "ms1-opc.h"
 #include "opintl.h"
-#include "xregex.h"
+#include <regex.h>
 #include "libiberty.h"
 #include "safe-ctype.h"
 

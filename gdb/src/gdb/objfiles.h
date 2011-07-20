@@ -23,6 +23,8 @@
 #if !defined (OBJFILES_H)
 #define OBJFILES_H
 
+#include <uuid/uuid.h>
+
 #include "gdb_obstack.h"	/* For obstack internals.  */
 #include "symfile.h"		/* For struct psymbol_allocation_list */
 /* APPLE LOCAL subroutine inlining  */
@@ -736,6 +738,8 @@ extern unsigned get_objfile_registry_num_registrations (void);
 /* APPLE LOCAL */
 struct objfile *find_objfile_by_name (const char *name, int exact);
 
+struct objfile *find_objfile_by_uuid (uuid_t uuid);
+
 /* APPLE LOCAL begin fix-and-continue */
 struct symtab *symtab_get_first (struct objfile *, int );
 struct symtab *symtab_get_next (struct symtab *, int );
@@ -868,6 +872,8 @@ void objfile_add_to_hitlist (struct objfile *);
 /* APPLE LOCAL begin differentiate arm & thumb msymbols */
 extern char *partial_symbol_special_info (struct objfile *objfile, 
                                           struct partial_symbol *psym);
+
+void sort_objfile_thumb_psyms (struct objfile *objfile);
 
 extern void objfile_add_special_psym (struct objfile *objfile,
                                       struct partial_symbol *psym,

@@ -34,7 +34,7 @@
 #include "frv-desc.h"
 #include "frv-opc.h"
 #include "opintl.h"
-#include "xregex.h"
+#include <regex.h>
 #include "libiberty.h"
 #include "safe-ctype.h"
 

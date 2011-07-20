@@ -1745,6 +1745,58 @@ find_objfile_by_name (const char *name, int exact)
          return o;
     }
 
+  // In the case of a core file or objfile read from memory the name
+  // of the objfile will be in the form of 
+  // [memory object "/usr/lib/libbz2.1.0.dylib" at 0x9a45b000]
+
+  const char *memobj_str = "[memory object \"";
+  int memobj_strlen = strlen (memobj_str);
+  char buf[PATH_MAX + 1];
+  ALL_OBJFILES_SAFE (o, temp)
+    {
+       if (o->name == NULL)
+         continue;
+       if (strncmp (memobj_str, o->name, memobj_strlen) != 0)
+         continue;
+       strcpy (buf, o->name + memobj_strlen);
+       buf[PATH_MAX] = '\0';
+       char *t = strchr (buf, '"');
+       if (t == NULL)
+         continue;
+       *t = '\0';
+
+       if (strcmp (buf, name) == 0)
+         return o;
+       if (exact == 0 && strstr (buf, name) != NULL)
+         return o;
+    }
+
+  return NULL;
+}
+
+/* APPLE LOCAL: Find an objfile with a Mach-O LC_UUID
+   128-bit UUID.
+   If there is a dSYM objfile, the actual executable objfile
+   is returned, not the dSYM.
+   NULL is returned if no match is found.  */
+
+struct objfile *
+find_objfile_by_uuid (uuid_t uuid)
+{
+  struct objfile *o, *temp;
+
+  ALL_OBJFILES_SAFE (o, temp)
+    {
+       uuid_t bfd_uuid;
+       if (bfd_mach_o_get_uuid (o->obfd, bfd_uuid, sizeof (uuid_t))
+           && memcmp (bfd_uuid, uuid, sizeof (uuid_t)) == 0)
+         {
+           if (o->separate_debug_objfile_backlink)
+             return o->separate_debug_objfile_backlink;
+           else
+             return o;
+         }
+    }
   return NULL;
 }
 
@@ -2275,7 +2327,10 @@ objfile_section_offset (struct objfile *objfile, int sect_idx)
 
   if (err_str != NULL)
     {
-      internal_error (__FILE__, __LINE__, "%s", err_str);
+      internal_error (__FILE__, __LINE__, "%s (exec_objfile '%s' objfile '%s')",
+                      err_str, 
+                      (exec_objfile ? exec_objfile->name : ""), 
+                      objfile->name);
       return (CORE_ADDR) -1;
     }
 
@@ -2443,21 +2498,65 @@ objfile_on_hitlist_p (struct objfile_hitlist *hitlist,
 
 /* APPLE LOCAL begin - Differentiate between arm & thumb  */
 
+static int
+compare_psymbol_ptrs (const void *s1p, const void *s2p)
+{
+  struct partial_symbol *s1 = *(struct partial_symbol **) s1p;
+  struct partial_symbol *s2 = *(struct partial_symbol **) s2p;
+
+  if (s1 < s2)
+    return -1;
+  if (s1 == s2)
+    return 0;
+  return 1;
+}
+
+void
+sort_objfile_thumb_psyms (struct objfile *objfile)
+{
+  if (objfile->num_thumb_psyms > 1)
+    {
+      qsort (objfile->thumb_psyms,
+             objfile->num_thumb_psyms,
+             sizeof (struct partial_symbol *),
+             compare_psymbol_ptrs);
+    }
+}
+
+
+// This constant value matches the value used in
+// MSYMBOL_SET_SPECIAL / MSYMBOL_IS_SPECIAL
+
+#define MSYMBOL_THUMB_FUNCTION 0x80000000
+
 char *
 partial_symbol_special_info (struct objfile *objfile,
                              struct partial_symbol *psym)
 {
-  char *ret_value = NULL;
-  int i;
-
   if (objfile->num_thumb_psyms == 0)
-    return ret_value;
+    return NULL;
 
-  for (i = 0; i < objfile->num_thumb_psyms; ++i)
-    if (objfile->thumb_psyms[i] == psym)
-      return (char *) (0x80000000); 
+  if (PSYMBOL_DOMAIN (psym) != VAR_DOMAIN
+      && PSYMBOL_DOMAIN (psym) != FUNCTIONS_DOMAIN
+      && PSYMBOL_DOMAIN (psym) != METHODS_DOMAIN)
+    return NULL;
 
-  return ret_value;
+  if (PSYMBOL_CLASS (psym) != LOC_BLOCK)
+    return NULL;
+
+  if (SYMBOL_VALUE_ADDRESS (psym) == 0
+      || SYMBOL_VALUE_ADDRESS (psym) == INVALID_ADDRESS)
+    return NULL;
+
+  struct partial_symbol *i;
+  i = bsearch (&psym, objfile->thumb_psyms, 
+              objfile->num_thumb_psyms, sizeof (struct partial_symbol *),
+              compare_psymbol_ptrs);
+
+  if (i)
+      return (char *) (MSYMBOL_THUMB_FUNCTION); 
+
+  return NULL;
 }
 
 void
@@ -2467,7 +2566,13 @@ objfile_add_special_psym (struct objfile *objfile,
 {
   int max_size = objfile->max_thumb_psyms;
   int size = objfile->num_thumb_psyms;
-  int index = size;
+
+  if (PSYMBOL_DOMAIN (psym) != VAR_DOMAIN
+      && PSYMBOL_DOMAIN (psym) != FUNCTIONS_DOMAIN
+      && PSYMBOL_DOMAIN (psym) != METHODS_DOMAIN)
+    return;
+  if (PSYMBOL_CLASS (psym) != LOC_BLOCK)
+    return;
 
   /* At the moment we only deal with DW_ISA_ARM_thumb  */
   if (isa_value != DW_ISA_ARM_thumb)
@@ -2489,8 +2594,7 @@ objfile_add_special_psym (struct objfile *objfile,
 
   objfile->max_thumb_psyms = max_size;
 
-  objfile->thumb_psyms[index] = psym;
-  size++;
+  objfile->thumb_psyms[size++] = psym;
   objfile->num_thumb_psyms = size;
 }
 /* APPLE LOCAL end - Differentiate between arm & thumb  */

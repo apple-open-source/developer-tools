@@ -3757,6 +3757,8 @@ bpstat_what (bpstat bs)
 	case bp_gnu_v3_catch_throw:
 	  if (bs->stop)
 	    bs_class = bs->print ? bp_noisy : bp_silent;
+          else
+            bs_class = bp_nostop;
 	  break;
 	  /* APPLE LOCAL end gnu_v3 */
 	case bp_call_dummy:
@@ -8567,7 +8569,18 @@ current_exception_should_stop (void)
 
   if (exception_type_regexp)
     {
+      /* Xcode sets the regexp to just "$" when it means match anything.
+         That doesn't work with the way re_exec works, since that demands
+         that the match have content.  So just shortcut the two cases of
+         empty string and just "$"... */
+
+      if (*exception_type_regexp == '\0' || strcmp (exception_type_regexp, "$") == 0)
+        return 1;
+
+      int old_syntax = re_set_syntax (REG_EXTENDED);
       msg = (char *) re_comp (exception_type_regexp);
+      re_set_syntax(old_syntax);
+
       if (msg) 
 	{
 	  warning ("Error compiling exception type regexp: %s", msg);

@@ -89,6 +89,8 @@ static void find_methods (struct symtab *symtab, char type,
                           const char *selector, struct symbol **syms,
                           unsigned int *nsym, unsigned int *ndebug);
 
+static int debug_objc;
+
 /* Should we lookup ObjC Classes as part of ordinary symbol resolution? */
 int lookup_objc_class_p = 1;
 
@@ -2746,7 +2748,11 @@ new_objc_runtime_class_getClass (struct value *infargs)
      looking it up again.  Classes can't move.  */
 
   if (class_valid_p (in_class_address))
+    {
+      if (debug_objc)
+        fprintf_unfiltered (gdb_stdlog, "Found class %s in our cache.\n", paddr_nz (in_class_address));
       return in_class_address;
+    }
 
   if (validate_function == NULL)
     {
@@ -2789,6 +2795,12 @@ new_objc_runtime_class_getClass (struct value *infargs)
       else
         {
           CORE_ADDR class_address = (CORE_ADDR) value_as_address (ret_value);
+          if (debug_objc)
+            fprintf_unfiltered (gdb_stdlog, 
+                                "Found class address: %s for %s.\n", 
+                                paddr_nz (class_address), 
+                                paddr_nz (in_class_address));
+
           add_class_to_cache (class_address);
           return class_address;
         }
@@ -2886,18 +2898,35 @@ new_objc_runtime_find_impl (CORE_ADDR class, CORE_ADDR sel, int stret)
       infargs[0] = classval;
       infargs[1] = selval;
       
+      if (debug_objc)
+        fprintf_unfiltered (gdb_stdlog, "new_objc_runtime_find_impl: Getting class from 0x%s.\n", paddr_nz (class));
+      
       retval = new_objc_runtime_class_getClass (classval);
+      
       if (retval == 0)
+        {
+          if (debug_objc)
+            fprintf_unfiltered (gdb_stdlog, "    new_objc_runtime_find_impl: Failed getting class from 0x%s.\n", paddr_nz (class));
 	  goto cleanups;
-
+        }
+      
+      if (debug_objc)
+        fprintf_unfiltered (gdb_stdlog, 
+                            "    new_objc_runtime_find_impl: Got class 0x%s from 0x%s.\n", 
+                            paddr_nz (retval), 
+                            paddr_nz (class));
+      
       ret_value = call_function_by_hand
-                  (lookup_cached_function (stret ? function_stret : function),
-                   2, infargs);
-
+        (lookup_cached_function (stret ? function_stret : function),
+         2, infargs);
+      
       do_cleanups (value_cleanup);
-
+      
       retval = (CORE_ADDR) value_as_address (ret_value);
       retval = gdbarch_addr_bits_remove (current_gdbarch, retval);
+      if (debug_objc)
+        fprintf_unfiltered (gdb_stdlog, "    new_objc_runtime_find_impl: Found implementation %s.\n", paddr_nz (retval));
+      
       /* If the current object doesn't respond to this selector, then
 	 the implementation function will be "_objc_msgForward" or
 	 "_objc_msgForward_stret".  We don't want to call those since
@@ -2961,6 +2990,10 @@ new_objc_runtime_find_impl (CORE_ADDR class, CORE_ADDR sel, int stret)
           retval = (CORE_ADDR) value_as_address (ret_value);
           retval = gdbarch_addr_bits_remove (current_gdbarch, retval);
     
+          if (debug_objc)
+            fprintf_unfiltered (gdb_stdlog, "new_objc_runtime_find_impl: Falling back on __cache_getImp - "
+                                "found implementation %s.\n", paddr_nz (retval));
+          
           if (retval != 0)
             {
               if (find_pc_partial_function_no_inlined (retval, 
@@ -3031,6 +3064,11 @@ read_objc_object (CORE_ADDR addr, struct objc_object *object)
   int addrsize = TARGET_ADDRESS_BYTES;
   int success;
 
+  if (debug_objc)
+    fprintf_unfiltered (gdb_stdlog, 
+                        "read_objc_object: examining object at address: %s.\n", 
+                        paddr_nz (addr));
+
   /* ADDR may be (1) uninitialized value, (2) pointer to ObjC object,
      or (3) tagged pointer aka invalid memory location.
      For (1), we want to set object->isa to 0 and return.
@@ -3048,6 +3086,11 @@ read_objc_object (CORE_ADDR addr, struct objc_object *object)
 
   success = safe_read_memory_unsigned_integer (addr, addrsize, 
                                                      &(object->isa));
+  if (debug_objc)
+    fprintf_unfiltered (gdb_stdlog, 
+                        "read_objc_object: success reading object: %d.\n", 
+                        success);
+
   gdb_stderr = prev_stderr;
   ui_file_rewind (gdb_null);
 
@@ -3106,6 +3149,12 @@ read_objc_object (CORE_ADDR addr, struct objc_object *object)
 					       (builtin_type_void_data_ptr), object->isa);
           CORE_ADDR class_addr;
 	  class_addr = new_objc_runtime_class_getClass (class_ptr_val);	  
+
+          if (debug_objc)
+            fprintf_unfiltered (gdb_stdlog, 
+                                "read_objc_object: gdb_class_getClass returned: %s.\n", 
+                                paddr_nz (class_addr));
+
           /* gdb_class_getClass for a Class address returns the class
              address, not the meta-class address.  So if we've 
 	     gotten back a valid address that is the same as the object
@@ -3159,6 +3208,10 @@ read_objc_object (CORE_ADDR addr, struct objc_object *object)
         {
 	  CORE_ADDR class_addr;
           class_addr = (CORE_ADDR) value_as_address (ret_value);
+          if (debug_objc)
+            fprintf_unfiltered (gdb_stdlog, 
+                                "read_objc_object: gdb_object_getClass returned: %s.\n", 
+                                paddr_nz (class_addr));
 	  /* gdb_object_getClass for a Class object returns the class
 	     object address, not the meta-class address.  So if we've 
 	     gotten back a valid address that is the same as the object
@@ -3166,8 +3219,12 @@ read_objc_object (CORE_ADDR addr, struct objc_object *object)
 	     we don't want to overwrite it with the meta-class address,
 	     which is currently in object->isa, since that's what we
 	     read in from memory.  */
-	  if (class_addr != 0 
-	      && class_addr != addr)
+	  if (class_addr == 0)
+            {
+              object->isa = class_addr;
+              goto do_cleanup;
+            }
+          else if (class_addr != addr)
 	      object->isa = class_addr;
 	  add_class_to_cache (object->isa);
         }
@@ -3307,9 +3364,17 @@ find_implementation_from_class (CORE_ADDR class, CORE_ADDR sel)
 
   sel_str[0] = '\0';
 
+  if (debug_objc)
+    fprintf_unfiltered (gdb_stdlog, "Looking up implementation for class: 0x%s selector: 0x%s.\n",
+                       paddr_nz (class), paddr_nz (sel));
+
    implementation = lookup_implementation_in_cache (class, sel);
    if (implementation != 0)
-     return implementation;
+     {
+       if (debug_objc)
+         fprintf_unfiltered (gdb_stdlog, "Found implementation 0x%s in cache.\n", paddr_nz (implementation));
+       return implementation;
+     }
 
   if (new_objc_runtime_internals ())
     return (new_objc_runtime_find_impl (class, sel, 0));
@@ -3568,6 +3633,12 @@ find_implementation (CORE_ADDR object, CORE_ADDR sel, int stret)
         {
           /* APPLE LOCAL begin use '[object class]' rather than isa  */
           real_class_addr = get_class_address_from_object (object);
+          if (debug_objc)
+            fprintf_unfiltered (gdb_stdlog, 
+                                "find_implementation: got class address 0x%s for object 0x%s.\n", 
+                                paddr_nz (real_class_addr), 
+                                paddr_nz (object));
+
           if (real_class_addr != ostr.isa)
 	    {
 	      resolves_to = lookup_implementation_in_cache (real_class_addr, 
@@ -3576,6 +3647,12 @@ find_implementation (CORE_ADDR object, CORE_ADDR sel, int stret)
 	        {
 	          add_implementation_to_cache (ostr.isa, sel, resolves_to);
                   do_cleanups (cleanup);
+                  
+                  if (debug_objc)
+                    fprintf_unfiltered (gdb_stdlog, 
+                                        "find_implementation: had a cached implementatin: 0x%s.\n", 
+                                        paddr_nz (resolves_to));
+                  
 	          return resolves_to;
 	        }
 	    }
@@ -3583,6 +3660,12 @@ find_implementation (CORE_ADDR object, CORE_ADDR sel, int stret)
       do_cleanups (cleanup);
 
       /* APPLE LOCAL use '[object class]' rather than isa  */
+
+
+      if (debug_objc)
+        fprintf_unfiltered (gdb_stdlog, 
+                            "find_implementation: Got real class, now call new_objc_runtime_find_impl.\n");
+                  
       resolves_to = new_objc_runtime_find_impl (real_class_addr, sel, stret);
       if (resolves_to != 0)
         {
@@ -3748,15 +3831,23 @@ resolve_newruntime_objc_msgsendsuper (CORE_ADDR pc, CORE_ADDR *new_pc,
     }
 
   /* OBJECT is the address of a two-word struct.
-     The second word is the address of the super class.  */
-  object = read_memory_unsigned_integer (object + addrsize, addrsize);
+     The second word is the address of the class we are starting from, then
+     we get the super class by grabbing the second word of the class:  */
+  //  object = read_memory_unsigned_integer (object + addrsize, addrsize);
+  //  object = read_memory_unsigned_integer (object + addrsize, addrsize);
 
   read_objc_super (object, &sstr);
+  // The header file on objc_super says the second field in ObjC 2 is the super_class,
+  // but that doesn't actually seem to be true, that seems in fact to be the class.
+  // So we have to grab the super class from that.
 
-  res = lookup_implementation_in_cache (sstr.class, sel);
+  object = read_memory_unsigned_integer (sstr.class + addrsize, addrsize);
+
+  res = lookup_implementation_in_cache (object, sel);
   if (res != 0)
     return res;
-  res = new_objc_runtime_find_impl (sstr.class, sel, 0);
+  res = new_objc_runtime_find_impl (object, sel, 0);
+
   if (new_pc != 0)
     *new_pc = res;
   if (res == 0)
@@ -4601,6 +4692,8 @@ do_end_debugger_mode (void *arg)
     start_timer (&debug_mode_timer, "objc-debug-mode", 
                  "Turning off debugger mode");
 
+  struct breakpoint *hidden_step_resume_bp = hide_step_resume_breakpoint();
+
   debug_mode_set_p = debug_mode_okay;
   debug_mode_set_reason = objc_debugger_mode_success;
 
@@ -4613,6 +4706,7 @@ do_end_debugger_mode (void *arg)
   if (debug_handcall_setup)
     fprintf_unfiltered (gdb_stdout, "Ended debugger mode.\n");
 
+  restore_step_resume_breakpoint (hidden_step_resume_bp);
   debug_mode_set_p = debug_mode_not_checked;
   debug_mode_set_reason = objc_debugger_mode_unknown;
   do_cleanups (scheduler_cleanup);
@@ -5104,11 +5198,21 @@ get_class_address_from_object (CORE_ADDR object_addr)
   
   /* Read the object, to find the isa pointer.  */
 
+  if (debug_objc)
+    fprintf_unfiltered (gdb_stdlog, 
+                        "get_class_address_from_object: looking at object at address 0x%s.\n", 
+                        paddr_nz (object_addr));
+  
   read_objc_object (object_addr, &orig_object);
 
   ret_addr = lookup_real_class_in_cache (orig_object.isa);
   if (ret_addr != 0x0)
     {
+      if (debug_objc)
+        fprintf_unfiltered (gdb_stdlog, 
+                            "get_class_address_from_object: found class 0x%s in cache.\n", 
+                            paddr_nz (ret_addr));
+  
       return ret_addr;
     }
 
@@ -5120,38 +5224,58 @@ get_class_address_from_object (CORE_ADDR object_addr)
 
   /* Try to find the selector for the object's 'class' method.  */
 
+  if (debug_objc)
+    fprintf_unfiltered (gdb_stdlog, 
+                        "get_class_address_from_object: looking up selector for 'class'.\n");
+  
   class_sel = lookup_child_selector (class_selname);
+
+  if (debug_objc)
+    fprintf_unfiltered (gdb_stdlog, 
+                        "get_class_address_from_object: found selector for 'class' 0x%s.\n", 
+                        paddr_nz (class_sel));
 
   /* Lookup the address for the 'class' method.  */
 
   if (class_sel != 0)
-    class_method_addr = new_objc_runtime_find_impl (orig_object.isa, 
-						    class_sel, 
-						    0);
-
+    {
+      if (debug_objc)
+        fprintf_unfiltered (gdb_stdlog, 
+                            "get_class_address_from_object: looking up implementation for 'class' from object 0x%s.\n", 
+                            paddr_nz (object_addr));
+      
+      class_method_addr = new_objc_runtime_find_impl (orig_object.isa, 
+                                                      class_sel, 
+                                                      0);
+      if (debug_objc)
+        fprintf_unfiltered (gdb_stdlog, 
+                            "get_class_address_from_object: found implementation for 'class' at 0x%s.\n", 
+                            paddr_nz (class_method_addr));
+    }
+  
   if (class_method_addr != 0)
     {
       struct cleanup *scheduler_cleanup;
       enum objc_debugger_mode_result objc_retval;
-
+      
       /* We have found the method "class" that will return the address
 	 of the original class for the object; now we need to call
 	 that method by hand, passing it both the object address, and
 	 the selector address.  */
-
+      
       /* Lock the scheduler before calling this so the other threads
 	 don't make progress while you are running this.  */
-
+      
       scheduler_cleanup = make_cleanup_set_restore_scheduler_locking_mode 
-	                                                (scheduler_locking_on);
-
+        (scheduler_locking_on);
+      
       make_cleanup_set_restore_unwind_on_signal (1);
-
-
+      
+      
       /* This isn't called directly by the user, so we should not
 	 tell her if something goes wrong, we should just clean up and
 	 handle the error appropriately.  */
-
+      
       make_cleanup_ui_out_suppress_output (uiout);
 
       objc_retval = make_cleanup_set_restore_debugger_mode (NULL, 1);
@@ -5194,6 +5318,11 @@ get_class_address_from_object (CORE_ADDR object_addr)
 
 	  ret_addr = (CORE_ADDR) value_as_address (retval);
 	  ret_addr = gdbarch_addr_bits_remove (current_gdbarch, ret_addr);
+          if (debug_objc)
+            fprintf_unfiltered (gdb_stdlog, 
+                                "get_class_address_from_object: returned from calling [object class] with address: 0x%s.\n", 
+                                paddr_nz (ret_addr));
+  
 	}
       do_cleanups (scheduler_cleanup);
     }
@@ -5308,4 +5437,10 @@ _initialize_objc_lang ()
 			   "??",
 			   set_non_blocking_mode_func, NULL,
 			   &setlist, &showlist);
+  add_setshow_zinteger_cmd ("objc", class_maintenance, &debug_objc, "Set objc debugging.", 
+                            "Show objc debugging.", 
+                            "When non-zero, objc specific debugging is enabled.",
+			    NULL,
+			    NULL,
+			    &setdebuglist, &showdebuglist);
 }

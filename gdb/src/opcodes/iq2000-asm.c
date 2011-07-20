@@ -34,7 +34,7 @@
 #include "iq2000-desc.h"
 #include "iq2000-opc.h"
 #include "opintl.h"
-#include "xregex.h"
+#include <regex.h>
 #include "libiberty.h"
 #include "safe-ctype.h"
 

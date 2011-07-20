@@ -5,12 +5,14 @@
 ##---------------------------------------------------------------------
 PROJECT = glibtool
 ORIGNAME = libtool
-VERSION = 2.2.4
+VERSION = 2.2.10
 SRCDIR = $(OBJROOT)/SRCDIR
 SOURCES = $(SRCDIR)/$(PROJECT)
 FIX = $(SRCDIR)/fix
 NAMEVERS = $(ORIGNAME)-$(VERSION)
-TARBALL = $(NAMEVERS).tar.bz2
+TARBALL = $(NAMEVERS).tar.gz
+
+export PATH := $(SRCROOT)/bin:$(PATH)
 
 no_target:
 	@$(MAKE) -f Makefile
@@ -28,13 +30,16 @@ install:
 	@set -x && if [ ! -d $(SRCDIR) ]; then \
 	    ditto $(SRCROOT) $(SRCDIR) && \
 	    cd $(SRCDIR) && \
-	    gnutar xojf $(TARBALL) && \
+	    gnutar xozf $(TARBALL) && \
 	    rm -rf $(PROJECT) && \
 	    mv $(NAMEVERS) $(PROJECT) && \
 	    cd $(SOURCES) && \
+	    ed - configure.ac < $(FIX)/configure.ac.ed && \
+	    ./bootstrap && \
 	    for i in `find . -name aclocal.m4`; do \
 		ed - $$i < $(FIX)/aclocal.m4.ed || exit 1; \
 	    done && \
+	    automake --add-missing && \
 	    sync && \
 	    sleep 2 && \
 	    for i in `find . -name configure -o -name libtool.m4`; do \
@@ -43,7 +48,6 @@ install:
 	fi
 	$(MAKE) -f Makefile install SRCROOT=$(SRCDIR)
 	find $(DSTROOT)/usr/lib -type f | xargs strip -S
-	bzcat $(SRCROOT)/libltdl.3.tar.bz2 | (cd $(DSTROOT); tar xf -)
 	rm -f $(DSTROOT)/usr/share/info/dir
 
 .DEFAULT:

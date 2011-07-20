@@ -626,6 +626,9 @@ is_root_p (struct varobj *var)
 static enum varobj_join_type 
 get_join_type (struct type *in_type)
 {
+  if (in_type == NULL)
+    return VAROBJ_AS_DUNNO;
+
   struct type *type = check_typedef (in_type);
 
   switch (TYPE_CODE (type))
@@ -979,7 +982,12 @@ varobj_create (char *objname,
          looking up member variables in objective C.  The global block_found
          could still be set from a previous expression evaluation and 
          accidentally get used incorrectly during evaluation.  */
-      block_found = NULL;
+      /* But if we were explicitly passed in a block, then use that one here.  */
+      if (block)
+        block_found = block;
+      else
+        block_found = NULL;
+
       /* Wrap the call to parse expression, so we can 
          return a sensible error.  For use_selected_frame variables
          create a dummy here that will get filled in later when 
@@ -1627,6 +1635,9 @@ varobj_update (struct varobj **varp, struct varobj_changelist **changelist)
      in order to evaluate expressions. */
   old_fid = get_frame_id (deprecated_selected_frame);
 
+  if (varobjdebug)
+    fprintf_unfiltered (gdb_stdlog, "Updating variable: %s (%s).\n", (*varp)->name, (*varp)->obj_name);
+
   /* Update the root variable. value_of_root can return NULL
      if the variable is no longer around, i.e. we stepped out of
      the frame in which a local existed.  We are letting the 
@@ -1634,6 +1645,15 @@ varobj_update (struct varobj **varp, struct varobj_changelist **changelist)
      has changed. */
   type_changed = VAROBJ_TYPE_CHANGED;
   new = value_of_root (varp, &type_changed);
+
+  if (varobjdebug)
+    {
+      if (new != NULL)
+        fprintf_unfiltered (gdb_stdlog, "Updating variable: %s (%s) got new value.\n", (*varp)->name, (*varp)->obj_name);
+      else
+        fprintf_unfiltered (gdb_stdlog, "Updating variable: %s (%s) got new value.\n", (*varp)->name, (*varp)->obj_name);
+    }
+
   if (new != NULL && value_lazy (new))
     {
       if (!gdb_value_fetch_lazy (new))
@@ -1696,6 +1716,9 @@ varobj_update (struct varobj **varp, struct varobj_changelist **changelist)
            || (varobj_value_is_changeable_p (*varp)
 	       && ((*varp)->updated || !my_value_equal ((*varp)->value, new, &error2))))
     {
+      if (varobjdebug)
+        fprintf_unfiltered (gdb_stdlog, "Updating variable: %s (%s) has changed.\n", (*varp)->name, (*varp)->obj_name);
+
       varobj_add_to_changelist (result, *varp, type_changed);
       (*varp)->updated = 0;
       changed++;
@@ -1730,12 +1753,22 @@ varobj_update (struct varobj **varp, struct varobj_changelist **changelist)
 
       /* Update this variable */
       new = value_of_child (v->parent, v->index, &child_type_changed);
+      if (varobjdebug)
+        {
+          if (new != NULL)
+            fprintf_unfiltered (gdb_stdlog, "Updating child variable: %s (%s) found a value.\n", v->name, v->obj_name);
+          else
+            fprintf_unfiltered (gdb_stdlog, "Updating child variable: %s (%s) could not get a value.\n", v->name, v->obj_name);
+        }
+
       if ((child_type_changed != VAROBJ_TYPE_UNCHANGED)
 	  || came_in_scope
           || (varobj_value_is_changeable_p (v) 
 	      && (v->updated || !my_value_equal (v->value, new, &error2))))
 	{
 	  /* Note that it's changed */
+          if (varobjdebug)
+            fprintf_unfiltered (gdb_stdlog, "Updating variable: %s (%s) has changed.\n", v->name, v->obj_name);
 	  varobj_add_to_changelist (result, v, child_type_changed);
 	  v->updated = 0;
 	  changed++;
@@ -4576,12 +4609,12 @@ Set to run all threads when evaluating varobjs."), NULL,
 			   &setlist, &showlist);
   /* APPLE LOCAL end varobj */
 
-  add_setshow_zinteger_cmd ("debugvarobj", class_maintenance,
+  add_setshow_zinteger_cmd ("varobj", class_maintenance,
 			    &varobjdebug, _("\
 Set varobj debugging."), _("\
 Show varobj debugging."), _("\
 When non-zero, varobj debugging is enabled."),
 			    NULL,
 			    show_varobjdebug,
-			    &setlist, &showlist);
+			    &setdebuglist, &showdebuglist);
 }

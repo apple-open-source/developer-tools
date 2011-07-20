@@ -168,7 +168,7 @@ static const char *dcc_map_optx_language_for_cpp(const char *language, int use_n
     		return transform[i];
     	}
     }
-    while((cur_key = (char*)keys[i++]) != NULL);
+    while((cur_key = (char*)keys[++i]) != NULL);
 
 	return NULL;
 }

@@ -1,3 +1,16 @@
+2011-04-28  Jason Molenda  (jmolenda@apple.com)
+
+	* mi-main.c (mi_execute_command): If we have a NULL error message text,
+	substitute in a generic unknown error message instead of crashing.
+
+2011-04-28  Jason Molenda  (jmolenda@apple.com)
+
+	* mi-cmd-stack.c: Use POSIX regex api calls instead of the old BSD ones.
+
+2011-01-31  Jason Molenda  (jmolenda@apple.com)
+
+	* mi-cmd-stack.c: Don't include objfiles.c.
+
 2010-12-12  Jim Ingham  <jingham@apple.com>
 
 	* mi-cmd-stack.c (mi_print_info_lite_base): Come up with a simpler way to

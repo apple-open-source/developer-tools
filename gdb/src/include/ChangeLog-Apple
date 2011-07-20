@@ -1,3 +1,8 @@
+2011-04-28  Jason Molenda  (jmolenda@apple.com)
+
+	* xregex.h: Removed.
+	* xregex2.h: Removed.
+
 2010-05-11  Jason Molenda  (jmolenda@apple.com)
 
 	* elf/dwarf2.h (DW_AT_APPLE_omit_frame_ptr): Add new attribute which

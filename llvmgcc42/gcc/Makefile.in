@@ -1177,14 +1177,13 @@ endif
 # If in BUILD_LLVM_INTO_A_DYLIB mode, always link in the x86/ppc backends.
 # See below for more details.
 ifdef BUILD_LLVM_INTO_A_DYLIB
-LLVMTARGETOBJ := $(sort $(LLVMTARGETOBJ) x86 powerpc arm)
+LLVMTARGETOBJ := $(sort $(LLVMTARGETOBJ) x86 arm)
 
 
 ## Target symbols to force linking.  This is to ensure that the code generators
 ## and asm printers actually get linked into libllvmgcc<stage>.dylib.
 LLVMTARGETSYMBOLS := \
   _LLVMInitializeARMTarget _LLVMInitializeARMAsmPrinter \
-  _LLVMInitializePowerPCTarget _LLVMInitializePowerPCAsmPrinter\
   _LLVMInitializeX86Target _LLVMInitializeX86AsmPrinter \
 
 endif

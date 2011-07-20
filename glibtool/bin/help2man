@@ -1,0 +1,213 @@
+#!/usr/bin/perl
+##############################################################################
+# This is a quick and dirty version of help2man.  It doesn't work on
+# arbitrary (GNU style) --version and --help output, but is good enough
+# for glibtool.
+#
+# It also has two enviroment variables, which modify the output.  These are
+# needed because we can't patch the man page after installation, because the
+# TexInfo document will have already been generated from the (unpatched)
+# man page.
+#
+# HELP2MAN_CHANGE: a semicolon-separated list of (comma-separated)
+# from-string/to-string pair(s).  The from-string will match on word boundaries.
+#
+# HELP2MAN_SEE_ALSO: a string that is appended to the SEE ALSO section.  The
+# character pair @@ is replaced with a newline.
+##############################################################################
+
+use strict;
+use File::Basename ();
+use Getopt::Long qw(:config gnu_compat);
+use IO::File;
+use IO::String;
+
+my $MyName = File::Basename::basename($0);
+my $Section = '1';
+my $OutputFile;
+
+Getopt::Long::GetOptions(
+    's|section=s' => \$Section,
+    'o|output=s' => \$OutputFile,
+);
+
+die "Usage: $MyName [-o|--output outfile] [-s|--section section] executable\n" unless scalar(@ARGV) == 1;
+
+my $output;
+if(defined($OutputFile)) {
+    $output = IO::File->new($OutputFile, "w") or die "$MyName: Can't open $OutputFile: $!\n";
+} else {
+    $output = IO::File->new_from_fd(fileno(STDOUT), "w") or die "$MyName: Can't duplicate STDOUT: $!\n";
+}
+my $cmd = $ARGV[0];
+my $cmdversion = `$cmd --version`;
+die "$MyName: $cmd --version failed\n" if $@;
+my $cmdhelp = `$cmd --help`;
+die "$MyName: $cmd --help failed\n" if $@;
+$cmd = File::Basename::basename($cmd);
+
+if(defined($ENV{HELP2MAN_CHANGE})) {
+    foreach my $c (split(';', $ENV{HELP2MAN_CHANGE})) {
+	my($from, $to) = split(',', $c, 2);
+	$to = '' unless defined($to);
+	$cmd =~ s/\b$from\b/$to/g;
+	$cmdversion =~ s/\b$from\b/$to/g;
+	$cmdhelp =~ s/\b$from\b/$to/g;
+    }
+}
+
+my @pg = split("\n\n", $cmdversion);
+my @lines = split("\n", shift(@pg));
+my $version = shift(@lines);
+
+my $date;
+if(($date = $version) =~ s/^.*\D(\d{4}-\d{2}-\d{2})(\D.*|$)/\1/) {
+    my @month = qw(Jan Feb Mar Apr May Jun Jul Aug Sep Oct Nov Dec);
+    my($y, $m, $d) = split('-', $date);
+    $m = $month[int($m) - 1];
+    die "$MyName: date $date has illegal month\n" unless defined($m);
+    $d =~ s/^0//;
+    $date = "$m $d, $y";
+} else {
+    $date = localtime;
+    $date =~ s/^\S+\s+//; # get rid of weekday
+    $date =~ s/\s+\d\d:\d\d:\d\d/,/; # replace time with comma
+}
+
+my $written;
+for(@lines) {
+    if(/^Written/i) {
+	$written = $_;
+	last;
+    }
+}
+
+my $copyright;
+for my $p (@pg) {
+    chomp($p);
+    if($p =~ /^Copyright/i) {
+	$copyright = $p;
+	next;
+    }
+    for(split("\n", $p)) {
+	if(/^Written/i) {
+	    $written = $_;
+	    last;
+	}
+    }
+}
+
+$output->print(".Dd $date\n");
+(my $uppercmd = $cmd) =~ tr/a-z/A-Z/;
+$output->print(".Dt $uppercmd $Section\n");
+$output->print(".Os \"Mac OS X\"\n");
+$output->print(".Sh NAME\n");
+$output->print(".Nm $cmd\n");
+$output->print(".Nd manual page for $version\n");
+$output->print(".Sh SYNOPSIS\n");
+
+@pg = split("\n\n", $cmdhelp);
+my $usage = shift(@pg);
+chomp($usage);
+$usage =~ s/^Usage: \S+\s+//i;
+$output->print(".Nm\n");
+for(split(/(\[[^]]*\])/, $usage)) { # no nested square brackets
+    if(s/^\[(.*)\]$/\1/) {
+	if(/^-/) {
+	    s/ (\w)/ Ar \1/g;
+	    s/--/@@/g; # temporary
+	    s/-/Fl /g;
+	    s/@@/Fl \\-/g;
+	}
+	$output->print(".Op $_\n");
+    } elsif(length($_) > 0) {
+	$output->print("\\&$_\n");
+    }
+}
+$output->print(".Sh DESCRIPTION\n");
+my $inPp = 0;
+my $report;
+my $out = $output;
+for my $p (@pg) {
+    chomp($p);
+    if($p =~ /[^.](  |	)/) { # a table
+	$out->print(".Pp\n") if $inPp;
+	$inPp = 1;
+	my @table;
+	my $len = 0;
+	my $next = 0;
+	my($k, $v, $l, $long);
+	for(split("\n", $p)) {
+	    s/^\s+//;
+	    if($next) {
+		$next = 0;
+		$v = $_;
+	    } else {
+		($k, $v) = split(/(?: \s+|	\s*)/, $_, 2);
+		$l = length($k);
+		if($l > $len) {
+		    $long = $k;
+		    $len = $l;
+		}
+		if(!defined($v) || $v eq '') {
+		    $next++;
+		    next;
+		}
+	    }
+	    push(@table, [$k, $v]);
+	}
+	$long =~ s/-/\\-/g;
+	$out->print(".Bl -tag -compact -width \"$long\"\n");
+	for(@table) {
+	    my($k, $v) = @$_;
+	    if($k =~ /^-/) {
+		$k =~ s/(\w)-(\w)/\1@@\2/g; # temporary
+		$k =~ s/--/@@@/g; # temporary
+		$k =~ s/-/Fl /g;
+		$k =~ s/@@@/Fl \\-/g;
+		$k =~ s/@@/-/g;
+		$k =~ s/,/ ,/g;
+	    }
+	    $out->print(".It $k\n");
+	    $out->print("\\&$v\n");
+	}
+	$out->print(".El\n");
+    } elsif(!defined($report) && ($p =~ /^When reporting a bug/ || $p =~ /^Report bugs/)) {
+	$report = IO::String->new() or die "$MyName: IO::String->new failed\n";
+	$out = $report;
+	$inPp = 1;
+	$out->print("$p\n");
+    } else {
+	$out->print(".Pp\n") if $inPp;
+	$inPp = 1;
+	$out->print("$p\n");
+    }
+}
+if(defined($written)) {
+    $output->print(".Sh AUTHOR\n");
+    $output->print("$written\n");
+}
+if(defined($report) > 0) {
+    $output->print(".Sh REPORTING BUGS\n");
+    $output->print(${$report->string_ref});
+}
+if(defined($copyright)) {
+    $output->print(".Sh COPYRIGHT\n");
+    $output->print("$copyright\n");
+}
+$output->print(".Sh SEE ALSO\n");
+$output->print(<<EOF);
+The equivalent documentation for
+.Nm
+is maintained as a TexInfo manual,
+and can be accessed with:
+.Pp
+.Dl info $cmd
+.Pp
+EOF
+
+if(defined($ENV{HELP2MAN_SEE_ALSO})) {
+    (my $seealso = $ENV{HELP2MAN_SEE_ALSO}) =~ s/@@/\n/g;
+    chomp($seealso);
+    $output->print($seealso, "\n");
+}

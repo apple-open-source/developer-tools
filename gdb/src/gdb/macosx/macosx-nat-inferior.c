@@ -146,6 +146,8 @@ int macosx_fake_resume = 0;
 
 static int announce_attach = 1;
 
+extern int disable_aslr_flag;
+
 enum macosx_source_type
 {
   NEXT_SOURCE_NONE = 0x0,
@@ -2362,6 +2364,7 @@ macosx_ptrace_him (int pid)
       CHECK_FATAL (!macosx_status->stopped_in_ptrace);
       CHECK_FATAL (!macosx_status->stopped_in_softexc);
     }
+  target_post_startup_inferior (pid_to_ptid (pid));
 }
 
 #if defined (TARGET_ARM)
@@ -2476,9 +2479,19 @@ macosx_child_create_inferior (char *exec_file, char *allargs, char **env,
   if (retval != 0)
     error ("Couldn't initialize attributes for posix_spawn, error: %d", retval);
 
-  retval = posix_spawnattr_setflags(&attr, POSIX_SPAWN_START_SUSPENDED);
+  int ps_flags = 0;
+
+#ifndef _POSIX_SPAWN_DISABLE_ASLR
+#define _POSIX_SPAWN_DISABLE_ASLR 0x0100
+#endif
+
+  ps_flags = POSIX_SPAWN_START_SUSPENDED;
+  if (disable_aslr_flag)
+    ps_flags |= _POSIX_SPAWN_DISABLE_ASLR;
+
+  retval = posix_spawnattr_setflags (&attr, ps_flags);
   if (retval != 0)
-    error ("Couldn't add POSIX_SPAWN_SETEXEC to attributes, error: %d", retval);
+    error ("Couldn't add _POSIX_SPAWN_DISABLE_ASLR and POSIX_SPAWN_START_SUSPENDED to posix_spawn flags, got return value %d", retval);
 
   if (cpu != 0)
     {

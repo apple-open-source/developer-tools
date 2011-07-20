@@ -636,7 +636,7 @@ thumb_expand_imm_c (uint32_t insn)
 /* Addresses for calling Thumb functions have the bit 0 set and if
    bit 1 is set, it has to be thumb since it isn't a mutliple of four.
    Here are some macros to test, set, or clear bit 0 of addresses.  */
-#define IS_THUMB_ADDR(addr)	((addr) & 3)
+#define IS_THUMB_ADDR(addr)	((addr) & 1)
 #define MAKE_THUMB_ADDR(addr)	((addr) | 1)
 #define UNMAKE_THUMB_ADDR(addr) ((addr) & ~1)
 
@@ -2921,7 +2921,7 @@ arm_unwind_pc (struct gdbarch *gdbarch, struct frame_info *this_frame)
      previous PC.  */
   pc = arm_unwind_pc_using_fp(this_frame, pc);
 #endif
-  if (IS_THUMB_ADDR (pc))
+  if (arm_pc_is_thumb (pc))
     {
       if (cache)
 	cache->prev_pc_is_thumb = 1;
@@ -4489,6 +4489,9 @@ thumb_get_next_pc (CORE_ADDR pc)
 	    }
 	}
     }
+  if (arm_debug)
+    fprintf_unfiltered (gdb_stdlog, "thumb_get_next_pc (%s):  next pc is %s\n",
+                        paddr (pc), paddr (nextpc));
   return nextpc;
 }
 
@@ -4780,6 +4783,10 @@ arm_get_next_pc (CORE_ADDR pc)
 	}
     }
 
+  if (arm_debug)
+    fprintf_unfiltered (gdb_stdlog, "thumb_get_next_pc (%s):  next pc is %s\n",
+                        paddr (pc), paddr (nextpc));
+
   return nextpc;
 }
 
@@ -4976,10 +4983,18 @@ arm_breakpoint_from_pc (CORE_ADDR *pcptr, int *lenptr)
     {
       *pcptr = UNMAKE_THUMB_ADDR (*pcptr);
       *lenptr = tdep->thumb_breakpoint_size;
+      if (arm_debug > 3)
+        fprintf_filtered (gdb_stdlog, "arm_breakpoint_from_pc using thumb "
+                          "%d byte breakpoint at addr 0x%s\n",
+                          tdep->thumb_breakpoint_size, paddr_nz (*pcptr));
       return tdep->thumb_breakpoint;
     }
   else
     {
+      if (arm_debug > 3)
+        fprintf_filtered (gdb_stdlog, "arm_breakpoint_from_pc using arm "
+                          "%d byte breakpoint at addr 0x%s\n",
+                          tdep->arm_breakpoint_size, paddr_nz (*pcptr));
       *lenptr = tdep->arm_breakpoint_size;
       return tdep->arm_breakpoint;
     }

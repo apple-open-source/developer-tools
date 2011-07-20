@@ -69,6 +69,7 @@ the Free Software Foundation, 675 Mass Ave, Cambridge, MA 02139, USA.  */
 #include <sys/stat.h>
 #include <sys/param.h>
 #include <mach/machine.h>
+#include <mach/kmod.h>
 
 #include <CoreFoundation/CoreFoundation.h>
 #include <CoreFoundation/CFPropertyList.h>
@@ -80,7 +81,7 @@ the Free Software Foundation, 675 Mass Ave, Cambridge, MA 02139, USA.  */
 #include "x86-shared-tdep.h"
 
 #include <mach-o/loader.h>
-#include "macosx-nat-dyld.c" // for target_read_mach_header()
+#include "macosx-nat-dyld.h" // for target_read_mach_header()
 
 int disable_aslr_flag = 1;
 
@@ -94,6 +95,8 @@ extern CFArrayRef DBGCopyMatchingUUIDsForURL (CFURLRef path,
 extern CFURLRef DBGCopyDSYMURLForUUID (CFUUIDRef uuid);
 extern CFDictionaryRef DBGCopyDSYMPropertyLists (CFURLRef dsym_url);
 #endif
+
+static void get_uuid_t_for_uuidref (CFUUIDRef uuid_in, uuid_t *uuid_out);
 
 static const char dsym_extension[] = ".dSYM";
 static const char dsym_bundle_subdir[] = "Contents/Resources/DWARF/";
@@ -756,6 +759,38 @@ get_uuidref_for_bfd (struct bfd *abfd)
  return NULL;
 }
 
+/* Helper function for gdb_DBGCopyMatchingUUIDsForURL.
+   Given a uuid_t (16-bytes of uint8_t's) return that uuid in an 
+   allocated CFUUIDRef.
+   It is the caller's responsibility to release the memory via CFRelease. */
+
+static CFUUIDRef
+get_uuidref_for_uuid_t (uint8_t *uuid)
+{
+ if (uuid == NULL)
+   return NULL;
+
+ return CFUUIDCreateWithBytes (kCFAllocatorDefault,
+           uuid[0], uuid[1], uuid[2], uuid[3], uuid[4], uuid[5],
+           uuid[6], uuid[7], uuid[8], uuid[9], uuid[10], uuid[11],
+           uuid[12], uuid[13], uuid[14], uuid[15]);
+}
+
+/* Given a CFUUIDRef return that uuid in a uuid_t. 
+   UUID_OUT is a pointer to allocated memory uuid_t large.  */
+
+static void
+get_uuid_t_for_uuidref (CFUUIDRef uuid_in, uuid_t *uuid_out)
+{
+  assert (sizeof (uuid_t) == sizeof (CFUUIDBytes));
+
+  CFUUIDBytes ret;
+  ret = CFUUIDGetUUIDBytes (uuid_in);
+
+  memcpy ((uint8_t *) uuid_out, (uint8_t *) &ret, sizeof (uuid_t));
+}
+
+
 /* This is an implementation of the DebugSymbols framework's
    DBGCopyMatchingUUIDsForURL function.  Given the path to a
    dSYM file (not the bundle directory but the actual dSYM dwarf
@@ -1358,7 +1393,16 @@ strtrunc (char *str, const char *substr)
   if (!match)
     return NULL;
 
-  len = (match - str) + strlen (substr);
+  // Try to find the LAST occurrence of substr
+  char *best_match = match;
+  while (match && *match != '\0' && *(match + 1) != '\0')
+    {
+      match = strcasestr (match + 1, substr);
+      if (match)
+        best_match = match;
+    }
+
+  len = (best_match - str) + strlen (substr);
   str[len] = '\0';
   return str;
 }
@@ -1377,8 +1421,6 @@ locate_kext_executable_by_dsym_plist (CFDictionaryRef dsym_info, CFUUIDRef uuid_
   CFStringRef kext_path;
   CFStringRef uuid_string = NULL;
   char path[PATH_MAX];
-  char *tmp;
-  u_long len;
 
   uuid_string = CFUUIDCreateString(kCFAllocatorDefault, uuid_ref);
   if (!uuid_string)
@@ -1401,6 +1443,23 @@ locate_kext_executable_by_dsym_plist (CFDictionaryRef dsym_info, CFUUIDRef uuid_
   if (!CFStringGetFileSystemRepresentation (kext_path, path, sizeof(path)))
     {
       goto finish;
+    }
+
+  // expand any tilde characters that might be in the path
+  const char *path_tilde_expand = tilde_expand (path);
+  if (path_tilde_expand)
+    {
+      strcpy (path, path_tilde_expand);
+      xfree ((char *) path_tilde_expand);
+    }
+
+  char real_path[PATH_MAX];
+  real_path[0] = '\0';
+  if (realpath (path, real_path))
+    {
+      real_path[sizeof (real_path) - 1] = '\0';
+      if (file_exists_p (real_path))
+        strcpy (path, real_path);
     }
 
   if (!file_exists_p (path))
@@ -1429,7 +1488,6 @@ locate_kext_executable_by_dsym_url (CFURLRef dsym_url)
   const char * exec_name = NULL;
   char * bundle_path = NULL;
   char * tmp;
-  u_long len;
 
   if (!CFURLGetFileSystemRepresentation (dsym_url, 1, path, sizeof(path)))
     {
@@ -1444,6 +1502,8 @@ locate_kext_executable_by_dsym_url (CFURLRef dsym_url)
 
   if (!dir_exists_p (path))
     {
+      if (*path != '\0')
+        warning ("No kext at path '%s'", path);
       goto finish;
     }
 
@@ -1479,17 +1539,19 @@ finish:
   return result;
 }
 
-/* Given a kextutil- or kextcache-generated .sym file, returns the path to the
-   kext's corresponding symbol-rich executable, or NULL on error. Caller is
-   responsible for freeing the returned xmalloc'd filename. */
+/* Given a UUIDRef for a kext, returns the path to the kext's corresponding 
+   symbol-rich executable, or NULL on error. 
+   KEXT_NAME is the bundle ID, reverse-dns style name, for the kext, used for
+   error reporting.
+   Caller is responsible for freeing the returned xmalloc'd filename. */
 
-char *
-macosx_locate_kext_executable_by_symfile (bfd *abfd)
+static char *
+macosx_locate_kext_executable_by_symfile_helper (CFUUIDRef kext_uuid, 
+                                                 const char *kext_name)
 {
 #if USE_DEBUG_SYMBOLS_FRAMEWORK
   char *result = NULL;
-  CFUUIDRef symfile_uuid = NULL;
-  CFUUIDBytes symfile_uuid_bytes;
+  CFUUIDBytes kext_uuid_bytes;
   CFDictionaryRef dsym_info = NULL;
   CFURLRef dsym_url = NULL;
   char *kext_executable_name = NULL;
@@ -1497,16 +1559,18 @@ macosx_locate_kext_executable_by_symfile (bfd *abfd)
   CFUUIDRef kext_executable_uuid = NULL;
   CFUUIDBytes kext_executable_uuid_bytes;
 
-  symfile_uuid = get_uuidref_for_bfd (abfd);
-  if (symfile_uuid == NULL) 
-    goto finish;
-
   /* Find the dSYM using the DebugSymbols framework */
 
-  dsym_url = DBGCopyDSYMURLForUUID (symfile_uuid);
+  dsym_url = DBGCopyDSYMURLForUUID (kext_uuid);
   if (!dsym_url)
     {
-      warning ("Can't find dSYM for .sym file %s", abfd->filename);
+      const char *basep = strrchr (kext_name, '/');
+      const char *name = kext_name;
+      if (basep && *basep != '\0' && *(basep + 1) != '\0')
+        name = ++basep;
+      uint8_t uuid[16];
+      get_uuid_t_for_uuidref (kext_uuid, &uuid);
+      warning ("Can't find dSYM for %s (%s)", name, puuid (uuid));
       goto finish;
     }
 
@@ -1518,7 +1582,7 @@ macosx_locate_kext_executable_by_symfile (bfd *abfd)
   dsym_info = DBGCopyDSYMPropertyLists (dsym_url);
   if (dsym_info)
     {
-      kext_executable_name = locate_kext_executable_by_dsym_plist (dsym_info, symfile_uuid);
+      kext_executable_name = locate_kext_executable_by_dsym_plist (dsym_info, kext_uuid);
     }
   else
     {
@@ -1558,9 +1622,9 @@ macosx_locate_kext_executable_by_symfile (bfd *abfd)
   if (!kext_executable_uuid) 
     goto finish;
 
-  symfile_uuid_bytes = CFUUIDGetUUIDBytes(symfile_uuid);
-  kext_executable_uuid_bytes = CFUUIDGetUUIDBytes(kext_executable_uuid);
-  if (memcmp (&symfile_uuid_bytes, &kext_executable_uuid_bytes,
+  kext_uuid_bytes = CFUUIDGetUUIDBytes (kext_uuid);
+  kext_executable_uuid_bytes = CFUUIDGetUUIDBytes (kext_executable_uuid);
+  if (memcmp (&kext_uuid_bytes, &kext_executable_uuid_bytes,
               sizeof (CFUUIDBytes)))
     {
       goto finish;
@@ -1569,8 +1633,6 @@ macosx_locate_kext_executable_by_symfile (bfd *abfd)
   result = kext_executable_name;
   kext_executable_name = NULL;
 finish:
-  if (symfile_uuid) 
-    CFRelease (symfile_uuid);
   if (dsym_url) 
     CFRelease (dsym_url);
   if (dsym_info) 
@@ -1588,6 +1650,26 @@ finish:
   warning("DebugSymbols framework unavailable.  Can't locate kext bundle and dSYM.");
   return NULL;
 #endif
+}
+
+/* Given a kextutil- or kextcache-generated .sym file, returns the path to the
+   kext's corresponding symbol-rich executable, or NULL on error. Caller is
+   responsible for freeing the returned xmalloc'd filename. */
+
+char *
+macosx_locate_kext_executable_by_symfile (bfd *abfd)
+{
+  if (abfd == NULL)
+    return NULL;
+  CFUUIDRef symfile_uuid = get_uuidref_for_bfd (abfd);
+  if (symfile_uuid == NULL) 
+    return NULL;
+
+  char *ret;
+  ret = macosx_locate_kext_executable_by_symfile_helper (symfile_uuid, 
+                                                         abfd->filename);
+  CFRelease (symfile_uuid);
+  return ret;
 }
 
 struct objfile *
@@ -1608,7 +1690,7 @@ macosx_find_objfile_matching_dsym_in_bundle (char *dsym_bundle_path, char **out_
   ALL_OBJFILES (objfile)
   {
     /* Extract the UUID from the objfile.  */
-    CFUUIDRef uuid_ref = get_uuidref_for_bfd(objfile->obfd);
+    CFUUIDRef uuid_ref = get_uuidref_for_bfd (objfile->obfd);
     if (uuid_ref == NULL)
       continue;
     results.test_uuid = uuid_ref;
@@ -1723,6 +1805,17 @@ find_info_plist_filename_from_bundle_name (const char *bundle,
 
   /* Is BUNDLE in the form "/a/b/c/Foo.kext/Contents/MacOS/Foo"?  */
   t = strstr (bundle_copy, bundle_suffix);
+
+  // Find the last possible ".kext" or ".app" in the path
+  char *best_t = t;
+  while (t)
+    {
+      t = strstr (t + 1, bundle_suffix);
+      if (t)
+        best_t = t;
+    }
+  t = best_t;
+
   if (t != NULL && t > bundle_copy)
     {
       t += strlen (bundle_suffix);
@@ -1736,13 +1829,28 @@ find_info_plist_filename_from_bundle_name (const char *bundle,
 
    /* Is BUNDLE in the form "/a/b/c/Foo.kext"?  */
    t = strstr (bundle_copy, bundle_suffix);
+
+  // Find the last possible ".kext" or ".app" in the path
+   best_t = t;
+   while (t)
+     {
+       t = strstr (t + 1, bundle_suffix);
+       if (t)
+         best_t = t;
+     }
+   t = best_t;
+
    if (t != NULL && t > bundle_copy && t[strlen (bundle_suffix)] == '\0')
      {
           strcpy (tmp_path, bundle_copy);
      }
 
    if (tmp_path[0] == '\0')
-     return NULL;
+     {
+       if (bundle && *bundle != '\0')
+         warning ("No Info.plist found under %s", bundle);
+       return NULL;
+     }
 
    /* Now let's find the Info.plist in the bundle.  */
 
@@ -1763,7 +1871,11 @@ find_info_plist_filename_from_bundle_name (const char *bundle,
      }
 
    if (retval == NULL)
-     return retval;
+     {
+       if (*tmp_path != '\0')
+         warning ("No Info.plist found under %s", tmp_path);
+       return retval;
+     }
 
    tmp_path[0] = '\0';  /* Not necessary; just to make it clear. */
 
@@ -1986,7 +2098,6 @@ fast_show_stack_trace_prologue (unsigned int count_limit,
 
       ALL_OBJFILES_SAFE (ofile, temp)
         {
-          enum objfile_matches_name_return r;
           struct objfile *libsystem_objfile = NULL;
 
 	  if (ofile->name == NULL 
@@ -2246,222 +2357,396 @@ actually_do_stack_frame_prologue (unsigned int count_limit,
   return more_frames;
 }
 
-static void
-maintenance_list_kexts (char *arg, int from_tty)
+struct loaded_kext_info {
+  char     name[KMOD_MAX_NAME];
+  uuid_t   uuid;
+  uint64_t address;
+};
+
+struct loaded_kexts_table {
+  uint32_t  version;
+  uint32_t  entry_size;          // the size of the OSKextLoadedKextSummary struct
+  uint32_t  count;
+  struct loaded_kext_info *kexts;
+};
+
+struct loaded_kexts_table *
+get_list_of_loaded_kexts ()
 {
+  struct loaded_kexts_table *kext_table;
   ULONGEST val;
   struct minimal_symbol *msym = lookup_minimal_symbol ("gLoadedKextSummaries", NULL, NULL);
   if (msym == NULL)
-    error ("No gLoadedKextSummaries symbol found.");
+    return NULL;
 
   // gLoadedKextSummaries points to a 
   // OSKextLoadedKextSummaryHeader structure.
   if (!safe_read_memory_unsigned_integer (SYMBOL_VALUE_ADDRESS (msym), TARGET_PTR_BIT / 8, &val))
-    error ("Could not read the value of gLoadedKextSummaries from address 0x%s", paddr_nz (SYMBOL_VALUE_ADDRESS (msym)));
-
-  // p has the address of the OSKextLoadedKextSummaryHeader struct.
-  CORE_ADDR p = val;
-  printf_filtered ("OSKextLoadedKextSummaryHeader is at address 0x%s\n", paddr_nz (p));
+    return NULL;
 
   if (val == 0)
     error ("gLoadedKextSummaries has an address of 0x0 - you must be attached to a live kernel or debugging with a core file.");
 
-  // Skip over the uint32_t version field
-  p += 4;
+  kext_table = (struct loaded_kexts_table*) xmalloc (sizeof (struct loaded_kexts_table));
+  if (kext_table == NULL)
+    return NULL;
+
+  // p has the address of the OSKextLoadedKextSummaryHeader struct.
+  CORE_ADDR p = val;
+
+  // Read the uint32_t version field
+  if (!safe_read_memory_unsigned_integer (p, 4, &val))
+    {
+      xfree (kext_table);
+      return NULL;
+    }
+  kext_table->version = (uint32_t) val;
+  p += sizeof (uint32_t);
+
+  // version 1 does not include an entry_size field.
+  // versions 2 and later do.
+  if (kext_table->version == 1)
+    {
+      // The version 1 OSKextLoadedKextSummary struct was
+      // 64 + 16 + 8 + 8 + 8 + 4 + 4
+      kext_table->entry_size = 112;
+    }
+  else
+    {
+      if (!safe_read_memory_unsigned_integer (p, 4, &val))
+        {
+          xfree (kext_table);
+          return NULL;
+        }
+      kext_table->entry_size = (uint32_t) val;
+      p += sizeof (uint32_t);
+    }
 
   // Read the uint32_t kext count field
   if (!safe_read_memory_unsigned_integer (p, 4, &val))
-    error ("Unable to read kext count field at address 0x%s", paddr_nz (p));
-  int kextcount = (int) val;
-
-  printf_filtered ("There are %d kexts loaded.\n", kextcount);
+    {
+      xfree (kext_table);
+      return NULL;
+    }
+  kext_table->count = (uint32_t) val;
   p += sizeof (uint32_t);
 
-  int padcount = 0;
-  if (kextcount > 9)
-    padcount = 2;
-  if (kextcount > 99)
-    padcount = 3;
+  
+  // Skip a 4-byte reserved field on v2-and-later tables.
+  if (kext_table->version > 1)
+    p += sizeof (uint32_t);
 
-  // Now read through the array of OSKextLoadedKextSummary's.
-  CORE_ADDR mh_addr = INVALID_ADDRESS;
-  int i = 0;
-  while (i < kextcount)
+  // quick sanity check on the off chance we're looking at uninitialized
+  // memory - don't do anything crazy.
+  if (kext_table->count == 0 || kext_table->count > 65535)
+    return NULL;
+
+  uint8_t *tmpbuf = (uint8_t*) xmalloc (kext_table->entry_size * kext_table->count);
+  kext_table->kexts = (struct loaded_kext_info *) xmalloc 
+                (sizeof (struct loaded_kext_info) * kext_table->count);
+
+  if (kext_table->kexts == NULL || tmpbuf == NULL)
     {
-      // First field is a 64-byte name which is of no interest to us.
-      char kextname[64];
-      if (target_read_memory (p, kextname, sizeof (kextname)))
-        error ("Unable to read kext name at 0x%s", paddr_nz (p));
-      kextname[sizeof (kextname) - 1] = '\0';
-      p += 64;
-
-      // now is a LC_UUID
-      gdb_byte buf16[16];
-      if (target_read_memory (p, buf16, 16))
-        error ("Unable to read kext uuid at 0x%s", paddr_nz (p));
-      p += 16;
-
-      if (!safe_read_memory_unsigned_integer (p, 8, &val) != 0)
-        error ("Unable to read Mach-O load address of kext %d", i);
-      mh_addr = (uint64_t) val;
-
-      printf_filtered ("%*d 0x%s %s %s\n",
-                       padcount, i,
-                       paddr_nz (mh_addr),
-                       puuid (buf16),
-                       kextname);
-      p += 8 + 8 + 8 + 4 + 4;
-      i++;
+      xfree (kext_table);
+      xfree (tmpbuf);
+      error ("Unable to allocate space to load kext infos.");
     }
+
+  // Read the kext entries from kernel memory into TMPBUF.
+  if (target_read_memory (p, (uint8_t *) tmpbuf, 
+                        kext_table->entry_size * kext_table->count))
+    {
+      xfree (tmpbuf);
+      xfree (kext_table->kexts);
+      xfree (kext_table);
+      error ("Unable to read kext infos from kernel.");
+    }
+
+  // Copy the fields we care about (swapping as we go) into our internal
+  // representation.
+
+  uint8_t *raw_kext_p = tmpbuf;
+  int i;
+  for (i = 0; i < kext_table->count; i++)
+    {
+      uint8_t *start_of_kext_entry = raw_kext_p;
+
+      strlcpy ((char *) kext_table->kexts[i].name, (char *) raw_kext_p, KMOD_MAX_NAME);
+      raw_kext_p += KMOD_MAX_NAME;
+
+      memcpy (kext_table->kexts[i].uuid, raw_kext_p, sizeof (uuid_t));
+      raw_kext_p += sizeof (uuid_t);
+
+      kext_table->kexts[i].address = (uint64_t) extract_unsigned_integer (raw_kext_p, 8);
+
+      raw_kext_p = start_of_kext_entry + kext_table->entry_size;
+    }
+  xfree (tmpbuf);
+
+  return kext_table;
 }
 
-/* Given an array of Mach-O LC_UUIDs to search for, look in the target
-   (assumes target is the mach_kernel) for the array of loaded kexts, find
-   the first kext with an LC_UUID that matches one of the entries in the array,
-   fill in the SECT_ADDRS section addresses based on the in-memory load 
-   commands.
-
-   The caller is responsible for freeing *SECT_ADDRS - best done via
-   a call to free_section_addr_info().
-
-   Returns 0 if there was a problem or no matching kext was found.
-
-   Returns 1 if a matching kext was found and SECT_ADDRS was initialized.  */
-
-int
-macosx_get_kext_sect_addrs_from_kernel (const char *filename,
-                                        uint8_t **kext_uuids, 
-                                        struct section_addr_info **sect_addrs,
-                                        const char *kext_bundle_ident)
+void
+free_list_of_loaded_kexts (struct loaded_kexts_table *lks)
 {
-  ULONGEST val;
-  struct minimal_symbol *msym = lookup_minimal_symbol ("gLoadedKextSummaries", NULL, NULL);
-  if (msym == NULL)
-    return 0;
-  if (kext_uuids == NULL || kext_uuids[0] == NULL)
-    return 0;
+  if (lks && lks->kexts)
+    xfree (lks->kexts);
+  if (lks)
+    xfree (lks);
+}
 
-  // gLoadedKextSummaries points to a 
-  // OSKextLoadedKextSummaryHeader structure.
-  if (!safe_read_memory_unsigned_integer (SYMBOL_VALUE_ADDRESS (msym), TARGET_PTR_BIT / 8, &val))
-    return 0;
+/* Given the address of a Mach-O file header in memory, iterate over
+   all of the load commands and use their addresses to create a 
+   section_addr_info structure.
 
-  if (val == 0)
-    error ("gLoadedKextSummaries has an address of 0x0 - you must be attached to a live kernel or debugging with a core file.");
+   The caller is responsible for freeing the section_addr_info returned;
+   best done via a call to free_section_addr_info().
 
-  // p has the address of the OSKextLoadedKextSummaryHeader struct.
-  CORE_ADDR p = val;
-  // Skip over the uint32_t version field
-  p += 4;
+   Returns NULL if there was a problem or no matching kext was found. */
 
-  // Read the uint32_t kext count field
-  if (!safe_read_memory_unsigned_integer (p, 4, &val))
-    return 0;
-  int kextcount = (int) val;
-  p += sizeof (uint32_t);
-
-  // Now read through the array of OSKextLoadedKextSummary's.
-  CORE_ADDR mh_addr = INVALID_ADDRESS;
-  int i = 0;
-  while (i < kextcount && mh_addr == INVALID_ADDRESS)
-    {
-      // First field is a 64-byte name which is of no interest to us.
-      char kextname[64];
-      if (target_read_memory (p, kextname, sizeof (kextname)))
-        return 0;
-      kextname[sizeof (kextname) - 1] = '\0';
-      p += 64;
-
-      // now is a LC_UUID
-      gdb_byte buf16[16];
-      if (target_read_memory (p, buf16, 16))
-        return 0;
-      p += 16;
-      int j = 0;
-      while (kext_uuids[j] != 0)
-        {
-          if (memcmp (kext_uuids[j], buf16, sizeof (buf16)) == 0)
-            {
-              if (!safe_read_memory_unsigned_integer (p, 8, &val) != 0)
-                return 0;
-              mh_addr = (uint64_t) val;
-              break;
-            }
-          j++;
-        }
-      if (kext_bundle_ident
-          && strcasecmp (kext_bundle_ident, kextname) == 0
-          && mh_addr == INVALID_ADDRESS)
-        {
-          warning ("Found an entry for \"%s\" in the\n"
-                   "kernel but it has a Mach-O LC_UUID of %s\n"
-                   "which does not match any of the UUIDs in the kext\n"
-                   "\"%s\"",
-                   kext_bundle_ident,
-                   puuid (buf16), filename);
-        }
-      p += 8 + 8 + 8 + 4 + 4;
-      i++;
-    }
-  if (mh_addr == INVALID_ADDRESS)
-    return 0;
-
-  // We found a matching UUID.
-  // Now look at the load commands in memory (create a temporary
-  // memory bfd) to get the load addresses of each text/data section.
-
+struct section_addr_info *
+get_section_addresses_for_macho_in_memory (CORE_ADDR mh_addr)
+{
   struct bfd_section *mem_sect;
   struct cleanup *bfd_cleanups;
   bfd *mem_bfd = NULL;
   struct mach_header h;
   if (target_read_mach_header (mh_addr, &h) != 0)
-    return 0;
+    return NULL;
   int header_size = target_get_mach_header_size (&h);
   gdb_byte *buf = (gdb_byte *) xmalloc (h.sizeofcmds + header_size);
   bfd_cleanups = make_cleanup (xfree, buf);
   if (target_read_memory (mh_addr, buf, h.sizeofcmds + header_size))
     {
       do_cleanups (bfd_cleanups);
-      return 0;
+      return NULL;
     }
 
   mem_bfd = bfd_memopenr ("tempbfd", NULL, buf, h.sizeofcmds + header_size);
   if (mem_bfd == NULL)
     {
       do_cleanups (bfd_cleanups);
-      return 0;
+      return NULL;
     }
   make_cleanup_bfd_close (mem_bfd);
 
   if (!bfd_check_format (mem_bfd, bfd_object))
-    return 0;
+    return NULL;
 
   int section_count = 0;
   for (mem_sect = mem_bfd->sections; mem_sect; mem_sect = mem_sect->next)
     if (mem_sect->name)
       section_count++;
 
-  *sect_addrs = alloc_section_addr_info (section_count);
-  (*sect_addrs)->num_sections = section_count;
-  (*sect_addrs)->addrs_are_offsets = 0;
+  struct section_addr_info *sect_addrs = alloc_section_addr_info (section_count);
+  sect_addrs->num_sections = section_count;
+  sect_addrs->addrs_are_offsets = 0;
 
   int sectnum = 0;
   for (mem_sect = mem_bfd->sections; mem_sect; mem_sect = mem_sect->next)
     {
-      if (mem_sect->name 
-          && (strstr (mem_sect->name, "__TEXT") 
-              || strstr (mem_sect->name, "__DATA")))
-        {
-          (*sect_addrs)->other[sectnum].sectindex = mem_sect->index;
-          (*sect_addrs)->other[sectnum].name = xstrdup (mem_sect->name);
-          (*sect_addrs)->other[sectnum].addr = mem_sect->vma;
-          sectnum++;
-        }
+      sect_addrs->other[sectnum].sectindex = mem_sect->index;
+      sect_addrs->other[sectnum].name = xstrdup (mem_sect->name);
+      sect_addrs->other[sectnum].addr = mem_sect->vma;
+      sectnum++;
     }
   do_cleanups (bfd_cleanups);
 
-  return 1;
+  return sect_addrs;
 }
+
+/* Given an array of Mach-O LC_UUIDs to search for, look in the target
+   (assumes target is the mach_kernel) for the array of loaded kexts, find
+   the first kext with an LC_UUID that matches one of the entries in the array,
+   return a section_addr_info structure based on the in-memory load commands.
+
+   The caller is responsible for freeing *SECT_ADDRS - best done via
+   a call to free_section_addr_info().
+
+   Returns NULL if there was a problem or no matching kext was found.  */
+
+struct section_addr_info *
+macosx_get_kext_sect_addrs_from_kernel (const char *filename,
+                                        uint8_t **kext_uuids, 
+                                        const char *kext_bundle_ident)
+{
+  struct loaded_kexts_table *loaded_kexts = get_list_of_loaded_kexts ();
+  if (loaded_kexts == NULL)
+    return NULL;
+
+  CORE_ADDR mh_addr = INVALID_ADDRESS;
+  int found_match;
+  int i;
+  for (found_match = 0, i = 0; i < loaded_kexts->count && found_match == 0; i++)
+    {
+      int j = 0;
+      while (kext_uuids[j] != 0)
+        {
+          if (memcmp (kext_uuids[j], loaded_kexts->kexts[i].uuid, sizeof (uuid_t)) == 0)
+            {
+              mh_addr = loaded_kexts->kexts[i].address;
+              found_match = 1;
+              break;
+            }
+          j++;
+        }
+    }
+  if (mh_addr == INVALID_ADDRESS)
+    return NULL;
+
+  free_list_of_loaded_kexts (loaded_kexts);
+
+  // We found a matching UUID.
+  // Now look at the load commands in memory (create a temporary
+  // memory bfd) to get the load addresses of each text/data section.
+
+  return get_section_addresses_for_macho_in_memory (mh_addr);
+}
+
+static void
+add_all_kexts_command (char *args, int from_tty)
+{
+#if !defined (USE_DEBUG_SYMBOLS_FRAMEWORK)
+  error ("DebugSymbols framework not available, add-all-kexts command not unavailable.");
+#else
+  struct loaded_kexts_table *lks = get_list_of_loaded_kexts ();
+  if (lks == NULL)
+    error ("Unable to read list of kexts from the kernel memroy.");
+
+  int i;
+  for (i = 0; i < lks->count; i++)
+    {
+      // If we've already added the kext, don't add it a second time
+      if (find_objfile_by_uuid (lks->kexts[i].uuid))
+        continue;
+
+      CFUUIDRef kext_uuid_ref = get_uuidref_for_uuid_t (lks->kexts[i].uuid);
+      if (kext_uuid_ref == NULL)
+        continue;
+      const char *symbol_rich = macosx_locate_kext_executable_by_symfile_helper
+                                           (kext_uuid_ref, lks->kexts[i].name);
+      int have_symbol_rich_exe = 0;
+      if (symbol_rich && file_exists_p (symbol_rich))
+        have_symbol_rich_exe = 1;
+
+      CFURLRef dsym_url = DBGCopyDSYMURLForUUID (kext_uuid_ref);
+      char dsym_path[PATH_MAX];
+      dsym_path[0] = '\0';
+      int have_dsym_path = 0;
+      if (dsym_url)
+        if (CFURLGetFileSystemRepresentation (dsym_url, 1, (UInt8*) dsym_path, PATH_MAX))
+          {
+            dsym_path[PATH_MAX - 1] = '\0';
+            if (file_exists_p (dsym_path))
+              have_dsym_path = 1;
+          }
+      CFRelease (kext_uuid_ref);
+
+      // At this point we may have the pathanme to the kext bundle executable
+      // file (the "symbol rich executable") and we may have the pathname to
+      // a dSYM ("dsym_path").
+
+      struct section_addr_info *sect_addrs;
+      sect_addrs = get_section_addresses_for_macho_in_memory (lks->kexts[i].address);
+      if (sect_addrs == NULL)
+        continue;
+
+      if (have_symbol_rich_exe)
+        {
+          struct section_offsets *sect_offsets;
+          int num_offsets;
+          sect_offsets = convert_sect_addrs_to_offsets_via_on_disk_file
+                        (sect_addrs, symbol_rich,
+                         &num_offsets);
+          symbol_file_add_name_with_addrs_or_offsets (symbol_rich, from_tty, NULL, sect_offsets, num_offsets, 0, OBJF_USERLOADED, OBJF_SYM_ALL, 0, NULL, NULL);
+           xfree (sect_offsets);
+        }
+      else
+        {
+// Reading the kext out of kernel memory has several problems.
+// The first of which is the fact that the in-kernel MachO load commands
+// look like an object file (i.e. with no __TEXT segment) so just doing
+// a bfd_memopenr() and adding that as an objfile will not work.
+// You'll need to make changes in macho_calculate_offsets_for_dsym(),
+// macho_calculate_dsym_offset(), macho_symfile_offsets() and maybe others
+// to even get close.
+// Also, this code path should probably not be executed for remote
+// targets -- reading these out of kernel memory over a USB cable would be
+// slow.
+#if 0
+          uint8_t *buf = (uint8_t*) xmalloc (lks->kexts[i].size);
+          if (buf == NULL)
+            {
+              free_section_addr_info (sect_addrs);
+              continue;
+            }
+           if (target_read_memory (lks->kexts[i].address, buf, lks->kexts[i].size))
+            {
+              free_section_addr_info (sect_addrs);
+              continue;
+            }
+          const char *bfd_target_name = NULL;
+          if (gdbarch_byte_order (current_gdbarch) == BFD_ENDIAN_LITTLE)
+            bfd_target_name = "mach-o-le";
+          if (gdbarch_byte_order (current_gdbarch) == BFD_ENDIAN_BIG)
+            bfd_target_name = "mach-o-be";
+
+          // note that we never free the kext memory we just transferred....
+          bfd *abfd = bfd_memopenr (lks->kexts[i].name, bfd_target_name, 
+                                    buf, lks->kexts[i].size);
+          if (abfd == NULL || !bfd_check_format (abfd, bfd_object))
+            {
+              free_section_addr_info (sect_addrs);
+              xfree (buf);
+              continue;
+            }
+          symbol_file_add_bfd_safe (abfd, 0,
+                                    0, NULL, 0,
+                                    OBJF_USERLOADED, 
+                                    OBJF_SYM_ALL,
+                                    0, NULL, NULL);
+#endif
+        }
+      free_section_addr_info (sect_addrs);
+    }
+
+  update_section_tables ();
+  update_current_target ();
+  breakpoint_update ();
+
+  /* Getting new symbols may change our opinion about what is
+     frameless.  */
+  reinit_frame_cache ();
+
+  free_list_of_loaded_kexts (lks);
+#endif // USE_DEBUG_SYMBOLS_FRAMEWORK
+}
+
+static void
+maintenance_list_kexts (char *arg, int from_tty)
+{
+  struct loaded_kexts_table *kexts = get_list_of_loaded_kexts ();
+
+  if (kexts == NULL)
+    return;
+
+  int padcount = 0;
+  if (kexts->count > 9)
+    padcount = 2;
+  if (kexts->count > 99)
+    padcount = 3;
+
+  int i;
+  for (i = 0; i < kexts->count; i++)
+    printf_filtered ("%*d 0x%s %s %s\n",
+                     padcount, i,
+                     paddr_nz (kexts->kexts[i].address),
+                     puuid (kexts->kexts[i].uuid),
+                     kexts->kexts[i].name);
+
+  free_list_of_loaded_kexts (kexts);
+}
+
 
 #ifdef NM_NEXTSTEP
 #include "macosx-nat-infthread.h"
@@ -2522,5 +2807,14 @@ Set if GDB should disable shared library address randomization."), _("\
 Show if GDB should disable shared library address randomization."), NULL,
 			   NULL, NULL,
 			   &setlist, &showlist);
+
+  c = add_cmd ("add-all-kexts", class_files, add_all_kexts_command, _("\
+Usage: add-all-kexts\n\
+Load the dSYMs for all of the kexts loaded in a live kernel/kernel coredump.\n\
+You must be attached to a live kernel (usually via kdp) or be debugging a\n\
+kernel coredump to use this command -- gdb will examine the kernel memory\n\
+to find the list of kexts and what addresses they are loaded at.\n"),
+               &cmdlist);
+  set_cmd_completer (c, filename_completer);
 
 }

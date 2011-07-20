@@ -34,7 +34,7 @@
 #include "fr30-desc.h"
 #include "fr30-opc.h"
 #include "opintl.h"
-#include "xregex.h"
+#include <regex.h>
 #include "libiberty.h"
 #include "safe-ctype.h"
 

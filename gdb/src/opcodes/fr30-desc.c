@@ -32,7 +32,7 @@ with this program; if not, write to the Free Software Foundation, Inc.,
 #include "fr30-opc.h"
 #include "opintl.h"
 #include "libiberty.h"
-#include "xregex.h"
+#include <regex.h>
 
 /* Attributes.  */
 

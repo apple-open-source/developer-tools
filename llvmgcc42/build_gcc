@@ -256,7 +256,11 @@ if [ "$ENABLE_LLVM" == true ]; then
   MAKEFLAGS="$MAKEFLAGS BUILD_LLVM_APPLE_STYLE=1"
   # Build llvm-gcc in 'dylib mode'.
   MAKEFLAGS="$MAKEFLAGS BUILD_LLVM_INTO_A_DYLIB=1"
-  MAKEFLAGS="$MAKEFLAGS LLVM_VERSION_INFO=$LLVM_SUBMIT_VERSION"
+  if [ x$LLVM_SUBMIT_SUBVERSION == x ]; then
+      MAKEFLAGS="$MAKEFLAGS LLVM_VERSION_INFO=$LLVM_SUBMIT_VERSION"
+  else
+      MAKEFLAGS="$MAKEFLAGS LLVM_VERSION_INFO=$LLVM_SUBMIT_VERSION.$LLVM_SUBMIT_SUBVERSION"
+  fi
 fi
 # LLVM LOCAL end
 
@@ -631,19 +635,20 @@ for t in $TARGETS ; do
 done
 
 # LLVM LOCAL begin
-# Compress manpages
-gzip -f $MDIR/*
-
 if [ "x$RC_ProjectName" = "xllvmgcc42_Embedded" ]; then
 MAN1_DIR=${DEST_DIR}${ARM_PLATFORM}/Developer/usr/share/man/man1
 else
 MAN1_DIR=$DEST_DIR/Developer/usr/share/man/man1
 fi
 mkdir -p ${MAN1_DIR}
+for i in gcc.1 g++.1 ; do
+    cp $DIR/obj-$BUILD-$BUILD/gcc/doc/$i ${MAN1_DIR}/$i
+done
 cp $ORIG_SRC_DIR/gcc/doc/llvm-gcc.1 ${MAN1_DIR}/llvm-gcc.1
+# llvm-g++ manpage is a dup of llvm-gcc manpage
 cp $ORIG_SRC_DIR/gcc/doc/llvm-gcc.1 ${MAN1_DIR}/llvm-g++.1
-gzip -f ${MAN1_DIR}/llvm-gcc.1
-gzip -f ${MAN1_DIR}/llvm-g++.1
+# Compress manpages
+gzip -f $MDIR/* ${MAN1_DIR}/*
 # LLVM LOCAL end
 
 # Build driver-driver using fully-named drivers
@@ -798,6 +803,10 @@ if [ "$INSTALL_LIBLTO" == yes ]; then
   cd $DEST_DIR/usr/lib && \
     ln -s ../../Developer/usr/lib/libLTO.dylib ./libLTO.dylib
 fi
+
+# Remove lto.h from the install directory; clang will supply.
+# Also remove ppc_intrinsics.h.  Note that this breaks PPC support.
+find $DEST_DIR \( -name lto.h -o -name ppc_intrinsics.h \) -delete -print || exit 1
 
 # LLVM LOCAL end
 

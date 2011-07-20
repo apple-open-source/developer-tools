@@ -142,7 +142,9 @@ static const bfd_arch_info_type arch_info_struct[] =
   N (bfd_mach_arm_iWMMXt2, "iwmmxt2", FALSE, & arch_info_struct[13]),
   /* APPLE LOCAL: Add armv6 and armv7 */
   N (bfd_mach_arm_6,	  "armv6",   FALSE, & arch_info_struct[14]),
-  N (bfd_mach_arm_7,      "armv7",   FALSE, NULL)
+  N (bfd_mach_arm_7,      "armv7",   FALSE, & arch_info_struct[15]),
+  N (bfd_mach_arm_7f,     "armv7f",  FALSE, & arch_info_struct[16]),
+  N (bfd_mach_arm_7k,     "armv7k",  FALSE, NULL)
 };
 
 const bfd_arch_info_type bfd_arm_arch =
@@ -369,7 +371,9 @@ architectures[] =
   { "iWMMXt2", bfd_mach_arm_iWMMXt2 },
   /* APPLE LOCAL: Add armv6 and armv7 */
   { "armv6",   bfd_mach_arm_6 },
-  { "armv7",   bfd_mach_arm_7 }
+  { "armv7",   bfd_mach_arm_7 },
+  { "armv7f",   bfd_mach_arm_7f },
+  { "armv7k",   bfd_mach_arm_7k }
 };
 
 /* Extract the machine number stored in a note section.  */

@@ -44,6 +44,8 @@
 #include "defs.h"
 #include "value.h"
 #include "infcall.h"  /* For inferior_function_calls_disabled_p.  */
+#include "gdbarch.h"
+#include "arch-utils.h"
 
 #if KDP_TARGET_POWERPC
 #include "ppc-macosx-thread-status.h"
@@ -492,6 +494,17 @@ kdp_attach (char *args, int from_tty)
           }
         error ("kdp_attach: unable to determine host type: %s",
                kdp_return_string (kdpret));
+      }
+
+    if (c.response->hostinfo_reply.cpu_type == CPU_TYPE_X86_64)
+      {
+        struct gdbarch_info info;
+        gdbarch_info_init (&info);
+        gdbarch_info_fill (current_gdbarch, &info);
+        info.byte_order = gdbarch_byte_order (current_gdbarch);
+        info.osabi = GDB_OSABI_DARWIN64;
+        info.bfd_arch_info = bfd_lookup_arch (bfd_arch_i386, bfd_mach_x86_64);
+        gdbarch_update_p (info);
       }
 
     kdp_cpu_type = c.response->hostinfo_reply.cpu_type;

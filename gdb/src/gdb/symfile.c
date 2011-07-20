@@ -204,9 +204,8 @@ void _initialize_symfile (void);
    actual need for that?  */
 static char *kext_symbol_file_path = NULL;
 
-static void
+static struct section_addr_info *
 find_kext_loadaddrs_from_kernel (const char *filename,
-                                 struct section_addr_info **sect_addrs,
                                  char **kext_bundle_executable_filename);
 
 /* APPLE LOCAL: Need to declare this one:  */
@@ -953,7 +952,6 @@ syms_from_objfile (struct objfile *objfile,
   else
     {
       struct obj_section *osect;
-      int idx = 0;
       size_t size = SIZEOF_N_SECTION_OFFSETS (num_offsets);
 
       /* Just copy in the offset table directly as given to us.  */
@@ -964,6 +962,8 @@ syms_from_objfile (struct objfile *objfile,
       memcpy (objfile->section_offsets, offsets, size);
 
       init_objfile_sect_indices (objfile);
+
+      int idx = 0;
       /* APPLE LOCAL: I'm unclear where the section_offsets are
 	 supposed to actually get applied to the sections.  If you read
 	 in from a disk file, but the library itself isn't loaded at that
@@ -1188,8 +1188,6 @@ void
 append_psymbols_as_msymbols (struct objfile *objfile)
 {
   int i;
-  struct partial_symbol *psym;
-  struct partial_symtab *psymtab;
   struct obj_section *psym_osect;
   CORE_ADDR psym_addr;
   const char* psym_linkage_name;
@@ -1201,104 +1199,108 @@ append_psymbols_as_msymbols (struct objfile *objfile)
   init_minimal_symbol_collection ();
   back_to = make_cleanup_discard_minimal_symbols ();
 
-  /* Iterate through all psymtabs within the dSYM objfile.  */
-  ALL_OBJFILE_PSYMTABS (dsym_objfile, psymtab)
-    {
-      /* Append msymbols for all global partial symbols that are functions.  */
-      for (i = 0; i < psymtab->n_global_syms; i++)
-	{
-	  psym = dsym_objfile->global_psymbols.list[psymtab->globals_offset + i];
-	  psym_osect = NULL;
-          /* APPLE LOCAL - Differentiate between arm & thumb  */
-          char *psym_to_msym_info = partial_symbol_special_info (dsym_objfile, 
-                                                                 psym);
-	  if (PSYMBOL_DOMAIN (psym) == VAR_DOMAIN
-	      && PSYMBOL_CLASS (psym) == LOC_BLOCK)
-	    {
-	      psym_addr = SYMBOL_VALUE_ADDRESS (psym);
-	      psym_osect = find_section_for_addr (objfile, psym_addr);
-	      
-	      if (psym_osect != NULL)
-		{
-		  struct minimal_symbol *msym;
-		  
-		  /* Don't overwrite an extant msym, since we might lose information
-		     that isn't known in the psymbol (like the "is_special" info.)  */
-		  msym = lookup_minimal_symbol_by_pc_section_from_objfile (psym_addr, 
-									   psym_osect->the_bfd_section, 
-									   objfile);
-		  if (msym != NULL
-		      && SYMBOL_VALUE_ADDRESS (msym) == psym_addr)
-		    continue;
 
-		  if (add_prefix)
-		    {
-		      psym_linkage_name = 
-					add_objfile_prefix (objfile, 
-							    SYMBOL_LINKAGE_NAME (psym));
-		    }
-		  else
-		    psym_linkage_name = SYMBOL_LINKAGE_NAME (psym);
-							  
+  /* Append msymbols for all global partial symbols that are functions.  */
+  if (dsym_objfile->global_psymbols.list && dsym_objfile->global_psymbols.next)
+    {
+      int symcount = dsym_objfile->global_psymbols.next - dsym_objfile->global_psymbols.list;
+      for (i = 0; i < symcount; i++)
+        {
+          struct partial_symbol *psym = dsym_objfile->global_psymbols.list[i];
+          psym_osect = NULL;
+          if (PSYMBOL_DOMAIN (psym) == VAR_DOMAIN
+              && PSYMBOL_CLASS (psym) == LOC_BLOCK)
+            {
+              psym_addr = SYMBOL_VALUE_ADDRESS (psym);
+              psym_osect = find_section_for_addr (objfile, psym_addr);
+              
+              if (psym_osect != NULL)
+                {
+                  struct minimal_symbol *msym;
+                  
+                  /* Don't overwrite an extant msym, since we might lose information
+                     that isn't known in the psymbol (like the "is_special" info.)  */
+                  msym = lookup_minimal_symbol_by_pc_section_from_objfile (psym_addr, 
+                                                                           psym_osect->the_bfd_section, 
+                                                                           objfile);
+                  if (msym != NULL
+                      && SYMBOL_VALUE_ADDRESS (msym) == psym_addr)
+                    continue;
+    
+                  if (add_prefix)
+                    {
+                      psym_linkage_name = 
+                                        add_objfile_prefix (objfile, 
+                                                            SYMBOL_LINKAGE_NAME (psym));
+                    }
+                  else
+                    psym_linkage_name = SYMBOL_LINKAGE_NAME (psym);
+
+                  char *armthumb_info = partial_symbol_special_info (dsym_objfile, 
+                                                                     psym);
+                                                          
                   /* APPLE LOCAL - Differentiate between arm & thumb  */
-		  msym = prim_record_minimal_symbol_and_info (psym_linkage_name,
+                  msym = prim_record_minimal_symbol_and_info (psym_linkage_name,
                                                               psym_addr,
                                                               mst_text,
-                                                              psym_to_msym_info,
+                                                              armthumb_info,
                                                               SECT_OFF_TEXT (objfile),
                                                               psym_osect->the_bfd_section,
                                                               objfile);
-		}
-	    }
-	}
+                }
+            }
+        }
+    }
 
-      /* Append msymbols for all static partial symbols that are functions.  */
-      for (i = 0; i < psymtab->n_static_syms; i++)
-	{
-	  psym = dsym_objfile->static_psymbols.list[psymtab->statics_offset + i];
-          /* APPLE LOCAL - Differentiate between arm & thumb  */
-          char *psym_to_msym_info = partial_symbol_special_info (dsym_objfile,
-                                                                 psym);
-	  if (PSYMBOL_DOMAIN (psym) == VAR_DOMAIN
-	      && PSYMBOL_CLASS (psym) == LOC_BLOCK)
-	    {
-	      psym_addr = SYMBOL_VALUE_ADDRESS (psym);
-	      psym_osect = find_section_for_addr (objfile, psym_addr);
-
-	      if (psym_osect != NULL)
-		{
-		  struct minimal_symbol *msym;
-		  
-		  /* Don't overwrite an extant msym, since we might lose information
-		     that isn't known in the psymbol (like the "is_special" info.  */
-		  msym = lookup_minimal_symbol_by_pc_section_from_objfile (psym_addr, 
-									   psym_osect->the_bfd_section, 
-									   objfile);
-		  if (msym != NULL
-		      && SYMBOL_VALUE_ADDRESS (msym) == psym_addr)
-		    continue;
-
-		  if (add_prefix)
-		    {
-		      psym_linkage_name = 
-					add_objfile_prefix (objfile, 
-							    SYMBOL_LINKAGE_NAME (psym));
-		    }
-		  else
-		    psym_linkage_name = SYMBOL_LINKAGE_NAME (psym);
-							  
-							  
+  /* Append msymbols for all static partial symbols that are functions.  */
+  if (dsym_objfile->static_psymbols.list && dsym_objfile->static_psymbols.next)
+    {
+      int symcount = dsym_objfile->static_psymbols.next - dsym_objfile->static_psymbols.list;
+      for (i = 0; i < symcount; i++)
+        {
+          struct partial_symbol *psym = dsym_objfile->static_psymbols.list[i];
+          if (PSYMBOL_DOMAIN (psym) == VAR_DOMAIN
+              && PSYMBOL_CLASS (psym) == LOC_BLOCK)
+            {
+              psym_addr = SYMBOL_VALUE_ADDRESS (psym);
+              psym_osect = find_section_for_addr (objfile, psym_addr);
+    
+              if (psym_osect != NULL)
+                {
+                  struct minimal_symbol *msym;
+                  
+                  /* Don't overwrite an extant msym, since we might lose information
+                     that isn't known in the psymbol (like the "is_special" info.  */
+                  msym = lookup_minimal_symbol_by_pc_section_from_objfile (psym_addr, 
+                                                                           psym_osect->the_bfd_section, 
+                                                                           objfile);
+                  if (msym != NULL
+                      && SYMBOL_VALUE_ADDRESS (msym) == psym_addr)
+                    continue;
+    
+                  if (add_prefix)
+                    {
+                      psym_linkage_name = 
+                                        add_objfile_prefix (objfile, 
+                                                            SYMBOL_LINKAGE_NAME (psym));
+                    }
+                  else
+                    psym_linkage_name = SYMBOL_LINKAGE_NAME (psym);
+                                                          
+                  char *armthumb_info = partial_symbol_special_info (dsym_objfile, 
+                                                                     psym);
+                                                          
                   /* APPLE LOCAL - Differentiate between arm & thumb  */
-		  msym = prim_record_minimal_symbol_and_info (psym_linkage_name,
+                  msym = prim_record_minimal_symbol_and_info (psym_linkage_name,
                                                               psym_addr,
                                                               mst_file_text,
-                                                              psym_to_msym_info,
+                                                              armthumb_info,
                                                               SECT_OFF_TEXT (objfile),
                                                               psym_osect->the_bfd_section,
                                                               objfile);
-		}
-	    }
-	}
+                }
+            }
+        }
     }
     
   install_minimal_symbols (objfile);
@@ -1742,7 +1744,7 @@ symbol_file_add_with_addrs_or_offsets (bfd *abfd, int from_tty,
 }
 
 /* APPLE LOCAL begin symfile */
-static struct objfile *
+struct objfile *
 symbol_file_add_name_with_addrs_or_offsets (const char *name, int from_tty,
 					    struct section_addr_info *addrs,
 					    struct section_offsets *offsets,
@@ -2948,7 +2950,7 @@ add_kext_command (char *args, int from_tty)
        if ((!kextload_symbol_filename || !file_exists_p (kextload_symbol_filename))
            && lookup_minimal_symbol ("gLoadedKextSummaries", NULL, NULL))
          {
-           find_kext_loadaddrs_from_kernel (filename, &section_addrs, 
+           section_addrs = find_kext_loadaddrs_from_kernel (filename,
                                             &kext_bundle_executable_filename);
            if (section_addrs)
              make_cleanup_free_section_addr_info (section_addrs);
@@ -2962,11 +2964,29 @@ add_kext_command (char *args, int from_tty)
   else
       error (usage_string, "supplied file must have a .kext or .sym extension");
 
+    if (kext_bundle_executable_filename == NULL)
+      {
+        // Try to print just the basename here
+        const char *bname = strrchr (filename, '/');
+        if (bname && *bname == '/' && *(bname + 1) != '\0')
+          bname++;
+        else
+          bname = filename;
+        printf_filtered ("No .kext bundle binary found for %s -- not adding kext.\n\n", bname);
+        return;
+      }
+
   if (section_addrs)
     {
+      struct section_offsets *sect_offsets;
+      int num_offsets;
+      sect_offsets = convert_sect_addrs_to_offsets_via_on_disk_file 
+                        (section_addrs, kext_bundle_executable_filename, 
+                         &num_offsets);
       o = symbol_file_add_name_with_addrs_or_offsets
-                 (kext_bundle_executable_filename, from_tty, section_addrs, 
-                  NULL, 0, 0, flags, symflags, 0, NULL, NULL);
+                 (kext_bundle_executable_filename, from_tty, NULL, 
+                  sect_offsets, num_offsets, 0, flags, symflags, 0, NULL, NULL);
+      xfree (sect_offsets);
     }
   else
     {
@@ -3127,18 +3147,18 @@ find_kext_files_by_bundle (const char *filename,
    is adding the symbol file and/or debug info for one of
    the loaded kexts.  It looks in the kernel memory at the
    list of currently loaded kexts, get the load addresses of
-   each section and fills in the SECT_ADDRS array.
+   each section and fills in a section_addr_info structure.
+
+   It is the responsibility of the caller to free the 
+   section_addr_info structure.  free_section_addr_info()
+   is the best way to do this.  
 
    An error will be thrown if there are any problems finding
-   the kext load addresses in the kernel's memory.
+   the kext load addresses in the kernel's memory.  
+*/
 
-   It is the responsibility of the caller to free
-   SECT_ADDRS which is xmalloced.  free_section_addr_info()
-   is the best way to do this.  */
-
-static void 
+static struct section_addr_info *
 find_kext_loadaddrs_from_kernel (const char *filename, 
-                                 struct section_addr_info **sect_addrs,
                                  char **kext_bundle_executable_filename)
 {
   const char *bundle_identifier_name_from_plist;
@@ -3160,12 +3180,25 @@ find_kext_loadaddrs_from_kernel (const char *filename,
                                       *kext_bundle_executable_filename);
   struct cleanup *clean = make_cleanup (free_uuids_array, kext_uuids);
 
-  if (!macosx_get_kext_sect_addrs_from_kernel (*kext_bundle_executable_filename,
-                                               kext_uuids, sect_addrs,
-                                               bundle_identifier_name_from_plist))
+  int i = 0;
+  while (kext_uuids[i] != NULL)
+    {
+      if (find_objfile_by_uuid (kext_uuids[i]))
+        error ("%s has already been added.", filename);
+      i++;
+    }
+
+  struct section_addr_info *sect_addrs;
+  sect_addrs = macosx_get_kext_sect_addrs_from_kernel 
+                                   (*kext_bundle_executable_filename,
+                                    kext_uuids, 
+                                    bundle_identifier_name_from_plist);
+  if (sect_addrs == NULL)
     error ("Unable to find the kext '%s' loaded in this kernel.", filename);
 
   do_cleanups (clean);
+
+  return sect_addrs;
 }
 
 static void
@@ -3192,9 +3225,22 @@ find_kext_files_by_symfile (const char *filename,
 
   *kext_bundle_executable_filename = macosx_locate_kext_executable_by_symfile (abfd);
   if (*kext_bundle_executable_filename == NULL)
-    warning ("Can't find symbol-rich executable for kext sym file %s", filename);
+    {
+      // Try to print just the basename here if we have a uuid
+      const char *bname = strrchr (filename, '/');
+      if (bname && *bname == '/' && *(bname + 1) != '\0')
+        bname++;
+      else
+        bname = filename;
 
-  bfd_close(abfd);
+      uint8_t uuid[16];
+      if (bfd_mach_o_get_uuid (abfd, uuid, sizeof (uuid)))
+        warning ("Can't find .kext bundle for %s (%s)", bname, puuid (uuid));
+      else
+        warning ("Can't find .kext bundle for %s", filename);
+    }
+
+  bfd_close (abfd);
 }
 
 /* APPLE LOCAL: This command adds the space-separated list of dSYMs
@@ -5563,6 +5609,77 @@ symfile_bfd_open_safe(const char *filename, int mainline, enum gdb_osabi osabi)
 }
 /* APPLE LOCAL end symfile */
 
+/* APPLE LOCAL:  gdb ends up doubling the offsets included in
+   a section_addr_info array -- it's easier to follow the
+   section_offsets code path instead.  This converts a 
+   section_addr_info array into a section_offsets by looking
+   at the executable disk on the local filesystem for 
+   comparison.  This would be called before you try to add that
+   executable file as an objfile.
+
+   A section_offsets array is returned, or NULL.  It is the responsibility
+   of the caller to xfree the array.  */
+
+struct section_offsets *
+convert_sect_addrs_to_offsets_via_on_disk_file (struct section_addr_info *sect_addrs, 
+                                                const char *file, int *num_offsets)
+{
+  struct section_offsets *sect_offsets;
+  struct bfd_section *this_sect;
+  CORE_ADDR slide = INVALID_ADDRESS;
+
+  struct cleanup *cleanup;
+  if (sect_addrs == NULL || file == NULL || !file_exists_p (file))
+    return NULL;
+
+  bfd *abfd = symfile_bfd_open_safe (file, 0, gdbarch_osabi (current_gdbarch));
+  if (abfd == NULL)
+    return NULL;
+  cleanup = make_cleanup_bfd_close (abfd);
+
+  sect_offsets = (struct section_offsets *)
+    xmalloc (SIZEOF_N_SECTION_OFFSETS (abfd->section_count));
+
+  int i, cur_section;
+  for (i = 0; i < abfd->section_count; i++)
+    sect_offsets->offsets[i] = INVALID_ADDRESS;
+
+  *num_offsets = abfd->section_count;
+
+  for (i = 0; i < sect_addrs->num_sections; i++)
+    {
+      if (sect_addrs->other[i].name == NULL
+          || sect_addrs->other[i].name[0] == '\0'
+          || sect_addrs->other[i].addr == 0)
+        continue;
+
+      for (this_sect = abfd->sections, cur_section = 0;
+           this_sect != NULL;
+           this_sect = this_sect->next, ++cur_section)
+        {
+          if (this_sect->name == NULL || this_sect->name[0] == '\0')
+            continue;
+
+          if (strcmp (sect_addrs->other[i].name, this_sect->name) == 0)
+            {
+              sect_offsets->offsets[cur_section] = 
+                          sect_addrs->other[i].addr - this_sect->vma; 
+              if (slide == INVALID_ADDRESS)
+                slide = sect_offsets->offsets[cur_section];
+            }
+        }
+    }
+
+  if (slide != INVALID_ADDRESS)
+    for (i = 0; i < abfd->section_count; i++)
+      if (sect_offsets->offsets[i] == INVALID_ADDRESS)
+        sect_offsets->offsets[i]  = slide;
+
+  do_cleanups (cleanup);
+
+  return sect_offsets;
+}
+
 /* APPLE LOCAL: This routine opens the slice of a fat file (faking as a
    bfd_archive) that matches OSABI if OSABI is set to a valid value, or it will
    open the best architecture according to the user specified osabi, or fall 
@@ -5637,6 +5754,8 @@ open_bfd_matching_arch (bfd *archive_bfd, bfd_format expected_format,
 		case GDB_OSABI_DARWIN:
 		case GDB_OSABI_DARWINV6:
 		case GDB_OSABI_DARWINV7:
+		case GDB_OSABI_DARWINV7K:
+		case GDB_OSABI_DARWINV7F:
 	fallback = abfd;
 		  fallback_osabi = this_osabi;
 		  break;

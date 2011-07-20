@@ -366,7 +366,21 @@ dwarf2_evaluate_loc_desc (struct symbol *var, struct frame_info *frame,
     {
       CORE_ADDR dwarf_regnum = dwarf_expr_fetch (ctx, 0);
       int gdb_regnum = DWARF2_REG_TO_REGNUM (dwarf_regnum);
-      retval = value_from_register (SYMBOL_TYPE (var), gdb_regnum, frame);
+
+      // llvm-gcc / clang are emitting DW_OP_regx 0xffffffff for
+      // an 8-byte value stored across two 4-byte regs instead of
+      // DW_OP_piece'ing it.  gdb will internal_error on a regnum
+      // of -1 so work around that for now.  <rdar://problem/9309221>
+      if (gdb_regnum == -1)
+        {
+          retval = allocate_value (SYMBOL_TYPE (var));
+          VALUE_LVAL (retval) = not_lval;
+          set_value_optimized_out (retval, opt_other);
+        }
+      else
+        {
+          retval = value_from_register (SYMBOL_TYPE (var), gdb_regnum, frame);
+        }
     }
   else
     {

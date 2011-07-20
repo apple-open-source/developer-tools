@@ -4307,13 +4307,11 @@ build_range_check (tree type, tree exp, int in_p, tree low, tree high)
 
       if (TREE_INT_CST_HIGH (high) == hi && TREE_INT_CST_LOW (high) == lo)
 	{
-	  if (TYPE_UNSIGNED (etype))
-	    {
-	      etype = lang_hooks.types.signed_type (etype);
-	      exp = fold_convert (etype, exp);
-	    }
-	  return fold_build2 (GT_EXPR, type, exp,
-			      build_int_cst (etype, 0));
+          /* LLVM LOCAL begin 9186245 */
+          if (!TYPE_UNSIGNED(etype))
+            return fold_build2 (GT_EXPR, type, exp,
+                                build_int_cst (etype, 0));
+          /* LLVM LOCAL end 9186245 */
 	}
     }
 

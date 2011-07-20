@@ -8,7 +8,7 @@
 /* #undef ENABLE_RFC2553 */
 
 /* Your gnu-style host triple */
-#define GNU_HOST "i386-apple-darwin10.4.0"
+#define GNU_HOST "i386-apple-darwin10.7.0"
 
 /* Define to 1 if you have the <alloca.h> header file. */
 #define HAVE_ALLOCA_H 1

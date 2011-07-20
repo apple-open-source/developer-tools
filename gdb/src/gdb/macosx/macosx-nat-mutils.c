@@ -204,21 +204,6 @@ mach_xfer_memory_remainder (CORE_ADDR memaddr, gdb_byte *myaddr,
 
 	 If we figure out that not writing whole pages causes problems
 	 of it's own, then we will have to revisit this.  */
-
-#if defined (TARGET_POWERPC)
-      vm_machine_attribute_val_t flush = MATTR_VAL_CACHE_FLUSH;
-      /* This vm_machine_attribute only works on PPC, so no reason
-	 to keep failing on x86... */
-
-      kret = vm_machine_attribute (mach_task_self (), mempointer,
-                                   pagesize, MATTR_CACHE, &flush);
-      if (kret != KERN_SUCCESS)
-        {
-          mutils_debug
-            ("Unable to flush GDB's address space after memcpy prior to vm_write: %s (0x%lx)\n",
-             MACH_ERROR_STRING (kret), kret);
-        }
-#endif
       kret =
         mach_vm_write (macosx_status->task, memaddr, (pointer_t) myaddr, len);
       if (kret != KERN_SUCCESS)
@@ -228,6 +213,32 @@ mach_xfer_memory_remainder (CORE_ADDR memaddr, gdb_byte *myaddr,
              paddr_nz (memaddr), (unsigned long) len,
              MACH_ERROR_STRING (kret), kret);
           return 0;
+        }
+
+      // We need to use mach_vm_read to get a pointer to the memory page in
+      // the target's memory space so we can force the caches to be cleared.
+
+      kret = mach_vm_read (macosx_status->task, pageaddr, pagesize,
+			   &mempointer, &memcopied);
+      if (kret != KERN_SUCCESS)
+        {
+          mutils_debug
+	    ("Unable to read page for region at 0x%s with length %lu from inferior to reset cache: %s (0x%lx)\n",
+	     paddr_nz (pageaddr), (unsigned long) len,
+	     MACH_ERROR_STRING (kret), kret);
+        }
+      else
+        {
+          vm_machine_attribute_val_t flush = MATTR_VAL_CACHE_FLUSH;
+          kret = vm_machine_attribute (mach_task_self (), mempointer,
+                                       pagesize, MATTR_CACHE, &flush);
+          if (kret != KERN_SUCCESS)
+            {
+              mutils_debug
+                ("Unable to flush GDB's address space after memcpy prior to vm_write: %s (0x%lx)\n",
+                 MACH_ERROR_STRING (kret), kret);
+            }
+	  vm_deallocate (mach_task_self (), mempointer, memcopied);
         }
     }
 

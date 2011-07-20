@@ -1,3 +1,36 @@
+2011-03-28  Jason Molenda  (jmolenda@apple.com)
+
+	* gdb.apple/r5414488.exp: Loosen the startup regexp so it
+	doesn't fail needlessly.
+
+2011-02-09  Jason Molenda  (jmolenda@apple.com)
+
+	* shared-cache-sym.exp: Loosen regexp for breakpoint number
+	on sleep; different c libraries may have a different
+	number of slep variants.
+
+2011-02-09  Jason Molenda  (jmolenda@apple.com)
+
+	* shared-cache-sym.c: Add an extra statement before/after
+	sleep() call so debug info linetables that aren't completely
+	trustworthy don't invalidate the point of the test.
+
+2011-02-03  Jason Molenda  (jmolenda@apple.com)
+
+	* gdb.apple/shared-cache-sym.c, gdb.apple/shared-cache-sym.exp:
+	New test case to make sure symbols in the shared cache are
+	correctly found and have their symbols relocated.
+
+2011-02-02  Jason Molenda  (jmolenda@apple.com)
+
+	* gdb.apple/objc-rbreak.exp: Fix this test file to work correctly
+	with newer OS libraries and their symbol names.
+
+2011-02-02  Jason Molenda  (jmolenda@apple.com)
+
+	* gdb.apple/scoped-typedefs.exp: Fix regexp to expect the correct
+	value.
+
 2010-04-12  Jason Molenda  (jmolenda@apple.com)
 
 	* gdb.mi/gdb669.exp: Update expected output of -thread-list-ids to

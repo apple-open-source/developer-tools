@@ -34,7 +34,7 @@
 #include "@prefix@-desc.h"
 #include "@prefix@-opc.h"
 #include "opintl.h"
-#include "xregex.h"
+#include <regex.h>
 #include "libiberty.h"
 #include "safe-ctype.h"
 

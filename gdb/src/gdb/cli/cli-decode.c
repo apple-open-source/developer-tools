@@ -674,7 +674,7 @@ add_com_alias (char *name, char *oldname, enum command_class class,
 */
 void 
 apropos_cmd (struct ui_file *stream, struct cmd_list_element *commandlist,
-			 struct re_pattern_buffer *regex, char *prefix)
+			 regex_t *regex, char *prefix)
 {
   struct cmd_list_element *c;
   int returnvalue=1; /*Needed to avoid double printing*/
@@ -683,8 +683,8 @@ apropos_cmd (struct ui_file *stream, struct cmd_list_element *commandlist,
     {
       if (c->name != NULL)
 	{
-	  /* Try to match against the name*/
-	  returnvalue=re_search(regex,c->name,strlen(c->name),0,strlen(c->name),NULL);
+	  /* Try to match against the name */
+	  returnvalue = re_search_oneshot (regex, c->name, strlen(c->name), 0, strlen (c->name), NULL);
 	  if (returnvalue >= 0)
 	    {
 	      /* Stolen from help_cmd_list. We don't directly use
@@ -700,7 +700,7 @@ apropos_cmd (struct ui_file *stream, struct cmd_list_element *commandlist,
       if (c->doc != NULL && returnvalue != 0)
 	{
 	  /* Try to match against documentation */
-	  if (re_search(regex,c->doc,strlen(c->doc),0,strlen(c->doc),NULL) >=0)
+	  if (re_search_oneshot (regex, c->doc, strlen (c->doc), 0, strlen (c->doc), NULL) >=0)
 	    {
 	      /* Stolen from help_cmd_list. We don't directly use
 	       * help_cmd_list because it doesn't let us print out

@@ -1,3 +1,265 @@
+2011-06-30  Jason Molenda  (jmolenda@apple.com)
+
+	* macosx-nat-dyld.c (macosx_locate_dyld_via_taskinfo): For the special
+	case of remote debugging when targetting an arm device, if the remote
+	stub couldn't find the start of the all_image_infos struct, check if
+	dyld is at its old hard-coded location and try to use that.  Should
+	help older devices where there was limited aslr.
+
+2011-06-22  Jason Molenda  (jmolenda@apple.com)
+
+	* machoread.c (macho_symfile_read): Add a warning when copying a
+	binary out of memory on a remote device if set verbose 1.
+
+2011-05-25  Jason Molenda  (jmolenda@apple.com)
+
+	* macosx-nat-dyld.c (target_is_kdp_remote): New function.
+	(macosx_locate_dyld_via_taskinfo): Don't try any of the
+	dyld locating methods if this is a kdp debug session.
+	* macosx-nat-dyld.h (target_is_kdp_remote): Prototype.
+
+2011-06-20  Jim Ingham  <jingham@apple.com>
+
+	* macosx-nat-excthread.c (macosx_exception_thread_create): Add an 
+	option to not watch EXC_BAD_ACCESS when we watch exceptions in the target
+	program.  
+	
+2011-05-14  Jason Molenda  (jmolenda@apple.com)
+
+	* macosx-tdep.c (get_list_of_loaded_kexts): Update to handle new
+	format of this structure in the kernel's memory, generalize so it
+	will continue to work if new fields are added to the struct in
+	the future.
+	(locate_kext_executable_by_dsym_url,
+	find_info_plist_filename_from_bundle_name): Fix compiler warnings.
+
+2011-05-11  Jason Molenda  (jmolenda@apple.com)
+
+        * macosx-nat-dyld-process.c (dyld_load_library): Add a warning for
+        remote debugging when a copy of the binary isn't found on the debugger
+        system, to the effect that this may slow down the debug session as
+        the binary is copied from the remote system's memory.
+
+2011-05-11  Jason Molenda  (jmolenda@apple.com)
+
+        * macosx-nat-mutils.c (mach_xfer_memory_remainder): After the
+        write has been completed, get a pointer to the page in the inferior's
+        address space and call vm_machine_attribute() to clear any of that
+        page's contents which might be in the icache/dcache.  This call was
+        originally commented out for x86 but I think we were passing in a
+        bad page reference which was the real problem.
+
+2011-04-23  Jason Molenda  (jmolenda@apple.com)
+
+        * macosx-nat-dyld.c (struct dyld_raw_infos): Remove the
+        dyld_notify_address_slide field - this should only be used when
+        adjusting the addresses in the dyld_all_image_infos struct itself.
+        Add dyld_intended_load_address field.  Rename dyld_image_load_address
+        to dyld_actual_load_address to make it clearer what this field is.
+        (macosx_init_addresses): Use the fields of the dyld_raw_infos struct
+        correctly.
+        (macosx_locate_dyld_via_taskinfo): Try to use the gdb remote packet
+        to get the dyld info struct if remote debugging.  Update calculation
+        of dyld_slide value to use new values returned by dyld_read_raw_infos().
+        (dyld_read_raw_infos): Update struct to include all fields of
+        dyld all image infos struct through version 12.  Adjust the dyld
+        addresses in the dyld_all_image_info struct internally before returning
+        any of them to caller functions.  Compute the dyld_intended_load_addr
+        if possible in addition to dyld_actual_load_addr so the caller can
+        easily calculate the dyld slide value.
+
+2011-04-12  Jason Molenda  (jmolenda@apple.com)
+
+        * macosx-nat-dyld-info.c (dyld_print_entry_info): When verbose mode,
+        print the UUIDs of the dylibs.
+
+        * macosx-nat-dyld.c (dyld_info_read): When getting the name of dyld,
+        run it through dyld_fix_path to apply the shlib pathname substitutions
+        before trying to open the on-disk file.
+        * macosx-nat-dyld-process.c (dyld_load_library_from_file): Revert 
+        previous change to run the library filename through dyld_fix_path.
+        It will already have been run through dyld_fix_path before getting
+        to this function.
+
+2011-04-05  Jason Molenda  (jmolenda@apple.com)
+
+        * macosx-nat-dyld.c (macosx_dyld_init): Fix logic to use deteced
+        load address/slide of dyld obtained via remote protocol packet.
+        (macosx_solib_add): Add clarifying message about needing the
+        packet log.
+        (macosx_get_osabi_from_dyld_entry): Update search to match based
+        on both the filename and on the translated filename, if there are
+        path substitutions being used.
+        (dyld_fix_path): Change to always return newly xmalloc'ed memory,
+        even if no pathname translation was done.  Check the passed-in
+        pathname to verify it hasn't already been through this substitution.
+        Only look for pathnames to substitute at the start of the string
+        (strcmp) instead of anywhere in the string (strstr).
+        (macosx_lookup_dyld_name): Update use of dyld_fix_path.
+        (dyld_info_process_raw): Update use of dyld_fix_path.
+        * macosx-nat-dyld.h (dyld_fix_path): update prototype.
+
+        * macosx-nat-dyld-process.c (dyld_load_library_from_file): Add new
+        call to dyld_fix_path to translate the filename before opening it
+        on the debug host.
+        (dyld_add_inserted_libraries): Update use of dyld_fix_path.
+        (dyld_add_image_libraries): Update use of dyld_fix_path.  Clear out
+        the 'name' local after it has been xfreed so we don't double-free.
+        (dyld_load_library_from_file): Update use of dyld_fix_path.
+
+2011-03-28  Jason Molenda  (jmolenda@apple.com)
+
+	* macosx-nat-dyld.c (macosx_solib_add): If we hit the shared lib
+	breakpoint but can't figure out why, and this is a remote target,
+	dump the packet log before issuing the internal error message to
+	aid in post-mortem debugging.
+
+2011-03-21  Jason Molenda  (jmolenda@apple.com)
+
+	* arm-macosx-tdep.c (arm_mach_o_osabi_sniffer): Update to handle
+	the new armv7* variants, picking the best executable slice for the
+	different host archs.
+
+2011-03-15  Jason Molenda  (jmolenda@apple.com)
+
+	* macosx-nat-dyld.c (macosx_dyld_mourn_inferior): When removing 
+	in-memory objfiles after the target has been killed, don't remove
+	shared cache libraries - if we restart they will still be present
+	at the same addresses and we end up doing extra work on restarts
+	re-discovering the libraries each time.
+
+2011-03-15  Jason Molenda  (jmolenda@apple.com)
+
+	* remote-kdp (kdp_attach): Initialize the osabi to Darwin64 if
+	this is an x86_64 kernel.
+
+2011-03-14  Jim Ingham  <jingham@apple.com>
+
+	* macosx-tdep.c (get_section_addresses_for_macho_in_memory): Make
+	offsets for ALL the segments in the in memory bfd, not just the
+	__DATA & __TEXT ones.
+	
+2011-03-14  Jason Molenda  (jmolenda@apple.com)
+
+	* macosx-nat-dyld.c (macosx_init_dyld_from_core): Call 
+	reinitialize_objc() after we've removed the current inferior
+	and are about to create a new one.
+
+2011-03-08  Jason Molenda  (jmolenda@apple.com)
+
+	* macosx-nat-dyld-info.c: Add support for new cpusubtypes,
+	ARM_7{F,K}.
+	* macosx-nat-dyld.c: Ditto.
+	* arm-macosx-tdep.c: Add preliminary support for new cpu
+	subtypes, ARM_7{F,K}.  More work needed to get
+	slice selection strictly correct.
+
+2011-03-08  Jason Molenda  (jmolenda@apple.com)
+
+	* macosx-tdep.c (strtrunc): Try to find the LAST matching suffix
+	before truncating the string.
+	(locate_kext_executable_by_dsym_url): Add warning if a kext
+	bundle couldn't be found.
+	(find_info_plist_filename_from_bundle_name): Find the LAST matching
+	.kext suffix in the string.  Add warning if kext bundle couldn't
+	be found.
+
+2011-03-01  Jason Molenda  (jmolenda@apple.com)
+
+	* macosx-tdep.c (get_uuid_t_for_uuidref): New utility function.
+	(macosx_locate_kext_executable_by_symfile): Only list the basename
+	of the .sym file when reporting that the dSYM can't be found.  
+	Include the UUID of the .sym file in the error message.
+
+2011-02-18  Jason Molenda  (jmolenda@apple.com)
+
+	* macosx-nat-dyld.c (macosx_solib_add): Include current pc value
+	in internal_error() when we're stopped for a dylib-load notification
+	but the pc is not what we expect it to be.
+
+2011-02-17  Jason Molenda  (jmolenda@apple.com)
+
+	* macosx-nat-inferior.c (macosx_child_create_inferior): Update the
+	arm-native specific version of macosx_child_create_inferior to
+	honor the disable-aslr setting.
+
+2011-02-17  Jason Molenda  (jmolenda@apple.com)
+
+	* macosx-tdep.c (add_all_kexts_command): Don't call 
+	DBGCopyDSYMURLForUUID unless USE_DEBUG_SYMBOLS_FRAMEWORK
+	is defined.
+
+2011-02-16  Jason Molenda  (jmolenda@apple.com)
+
+	* macosx-nat-dyld.c (macosx_dyld_mourn_inferior): Call
+	dyld_objfile_info_pack() directly to completely remove
+	the old in-memory dyld_objfile_entries instead of the
+	heavier-handed macosx_dyld_update call.
+
+2011-02-15  Jason Molenda  (jmolenda@apple.com)
+
+	* macosx-nat-dyld.c (macosx_dyld_mourn_inferior): Correctly clear out
+	the dyld_objfile_entries for in-memory bfd's when the inferior dies.
+
+2011-02-11  Jim Ingham  <jingham@apple.com>
+
+	* macosx-nat-inferior.c (macosx_ptrace_him): Call the
+	post_startup_inferior hook.
+	* i386_macosx_nat_exec.c (i386_macosx_child_post_startup_inferior):
+	New function.
+	(macosx_complete_child_target): Set the post_startup_inferior
+	hook to the new function.
+	
+2011-02-10  Jim Ingham  <jingham@apple.com>
+
+	* i386-macosx-nat-exec.c (fetch_inferior_registers): Don't use
+	printf for output, use printf_unfiltered so it goes out to the
+	correct MI form.
+	
+2011-02-10  Jason Molenda  (jmolenda@apple.com)
+
+	* macosx-nat-dyld.c (macosx_dyld_mourn_inferior): Remove any
+	in-memory-only objfiles.
+
+2011-02-09  Jason Molenda  (jmolenda@apple.com)
+
+	* macosx-nat-dyld-process.c (dyld_load_library_from_file): Don't
+	issue the file-not-found warning for in-memory cl_kernels
+	MH_BUNDLES.
+
+2011-02-08  Jason Molenda  (jmolenda@apple.com)
+
+	* macosx-nat-dyld.c (macosx_dyld_init): Take into account the dyld
+	slide of the static dyld addr (from the bfd) v. the in-memory dyld
+	addr so dyld syms are relocated correctly.
+	(macosx_init_dyld_from_core): Don't keep the executable file around
+	from the command line; get it out of memory like any other objfile.
+	If this doesn't work correctly, some special code is going to be needed
+	to add the correct slide to the main executable to support pie 
+	coredumps correctly.
+
+2011-02-01  Jason Molenda  (jmolenda@apple.com)
+
+        * macosx-nat-dyld.c (get_sectoffs_for_shared_cache_dylib): Rewrite
+        this function; use get_section_addresses_for_macho_in_memory() to
+        parse the Mach-O load commands in memory, simplfy the logic for
+        applying the shared cache slide and setting the offsets.
+        * macosx-tdep.c (get_section_addresses_for_macho_in_memory): Change
+        to return a section_addr_info pointer instead of an integer indicating
+        success or failure.
+        (macosx_get_kext_sect_addrs_from_kernel): Ditto.
+        (add_all_kexts_command): Update to use new call signature.  Convert
+        section_addr_info structure into sect_offsets before adding the 
+        kexts.
+        * macosx-tdep.h (get_section_addresses_for_macho_in_memory): Newly
+        exported function.
+        (macosx_get_kext_sect_addrs_from_kernel): Update prototype.
+
+2011-01-31  Jason Molenda  (jmolenda@apple.com)
+
+	* macosx-tdep.c (add_all_kexts_command): Don't add a kext that has
+	already been loaded.
+
 2011-01-22  Caroline Tice <ctice@apple.com>
 
 	* macosx-nat-inferior-util.c (macosx_inferior_resume_ptrace):  Change 

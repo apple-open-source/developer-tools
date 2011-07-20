@@ -977,7 +977,8 @@ fill_symbuf (struct objfile *objfile)
       && objfile_symbuf_size != 0 
       && objfile_symbuf_size != symbuf_size)
     {
-      warning ("Inconsistent DBX_SYMBOL_SIZE\n");
+      warning ("Inconsistent DBX_SYMBOL_SIZE (nlist record size was %d, is now %d with %s)\n",
+               (int)symbuf_size / 4096, (int)objfile_symbuf_size / 4096, objfile->name);
       xfree (symbuf);
       symbuf = NULL;
     }

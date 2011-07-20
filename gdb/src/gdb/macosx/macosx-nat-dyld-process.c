@@ -159,11 +159,8 @@ dyld_add_inserted_libraries (struct dyld_objfile_info *info,
 
       tmp_name = savestring (s1, (s2 - s1));
       char *fixed_name = dyld_fix_path (tmp_name);
-      if (fixed_name != tmp_name)
-	{
-	  xfree (tmp_name);
-	  tmp_name = fixed_name;
-	}
+      xfree (tmp_name);
+      tmp_name = fixed_name;
 
       real_name = xmalloc (PATH_MAX + 1);
       if (realpath (tmp_name, real_name) != NULL)
@@ -247,11 +244,8 @@ dyld_add_image_libraries (struct dyld_objfile_info *info, bfd *abfd)
                     }
 		  name[dcmd->name_len] = '\0';
 		  fixed_name = dyld_fix_path (name);
-		  if (fixed_name != name)
-		    {
-		      xfree (name);
-		      name = fixed_name;
-		    }
+                  xfree (name);
+                  name = fixed_name;
                   break;
                 }
               case BFD_MACH_O_LC_LOAD_DYLIB:
@@ -269,6 +263,7 @@ dyld_add_image_libraries (struct dyld_objfile_info *info, bfd *abfd)
                       warning
                         ("Unable to find library name for LC_LOAD_DYLIB, LC_LOAD_UPWARD_DYLIB, LC_LOAD_WEAK_DYLIB or LC_REEXPORT_DYLIB command; ignoring");
                       xfree (name);
+                      name = NULL;
                       continue;
                     }
 		  name[dcmd->name_len] = '\0';
@@ -288,11 +283,8 @@ dyld_add_image_libraries (struct dyld_objfile_info *info, bfd *abfd)
                     }
 
 		  fixed_name = dyld_fix_path (name);
-		  if (fixed_name != name)
-		    {
-		      xfree (name);
-		      name = fixed_name;
-		    }
+                  xfree (name);
+                  name = fixed_name;
                   break;
                 }
               default:
@@ -351,6 +343,7 @@ dyld_add_image_libraries (struct dyld_objfile_info *info, bfd *abfd)
                 if (skip_this_dylib)
                   {
                     xfree (name);
+                    name = NULL;
                     continue;
                   }
               }
@@ -359,6 +352,10 @@ dyld_add_image_libraries (struct dyld_objfile_info *info, bfd *abfd)
             e->text_name = name;
             e->text_name_valid = 1;
             e->reason = dyld_reason_init;
+
+            // don't accidentally xfree() this now that e->text_name
+            // is holding a pointer to it
+            name = NULL;
 
             switch (cmd->type)
               {
@@ -1116,7 +1113,6 @@ dyld_load_library_from_file (const struct dyld_path_info *d,
 			     int print_errors)
 {
   const char *name = NULL;
-  struct stat dummy;
 
   name = dyld_entry_filename (e, d, DYLD_ENTRY_FILENAME_LOADED);
   if (name == NULL)
@@ -1136,40 +1132,56 @@ dyld_load_library_from_file (const struct dyld_path_info *d,
      exists, and avoid printing a warning if a weak file is not
      found.  */
 
-  if (stat (name, &dummy) != 0)
+  if (!file_exists_p (name))
     {
-      if ((print_errors) && (! (e->reason & dyld_reason_weak_mask)))
-	{
-      /* On the phone we read everything from the shared cached and need not
-         worry about when we aren't able to read files from disk.  */
-#if !(defined (TARGET_ARM) && defined (NM_NEXTSTEP))
-	  warning ("Unable to read symbols for %s (file not found).", name);
+      int issue_warning = 0;
+
+      if (print_errors)
+        issue_warning = 1;
+
+      // Don't warn about missing libraries if they're only linked
+      // against weakly.
+      if (e->reason & dyld_reason_weak_mask)
+        issue_warning = 0;
+
+      // an MH_BUNDLE with file mod time 0 (can't check that here) with the
+      // name cl_kernels is something we shouldn't warn about not finding on
+      // disk; it's just noise to the developer and there will be many of them
+      // with certain programs, e.g. Mail.app on Lion and later.
+      if (e->mem_header.filetype == MH_BUNDLE 
+          && strcmp (name, "cl_kernels") == 0)
+        {
+          issue_warning = 0;
+        }
+
+      /* Running natively on the phone we read everything from the 
+         shared cached and need not worry about when we aren't able to read 
+         files from disk.  */
+#if defined (TARGET_ARM) && defined (NM_NEXTSTEP)
+       issue_warning = 0;
 #endif
-	}
+
+      if (issue_warning)
+        warning ("Unable to read symbols for %s (file not found).", name);
+
       return;
     }
 
-  {
-    struct ui_file *prev_stderr = gdb_stderr;
+  struct ui_file *prev_stderr = gdb_stderr;
 
-    gdb_stderr = gdb_null;
-    CHECK_FATAL (e->abfd == NULL);
+  gdb_stderr = gdb_null;
+  CHECK_FATAL (e->abfd == NULL);
 
-    e->abfd = symfile_bfd_open_safe (name, 0, GDB_OSABI_UNKNOWN);
+  e->abfd = symfile_bfd_open_safe (name, 0, GDB_OSABI_UNKNOWN);
 
-    gdb_stderr = prev_stderr;
+  gdb_stderr = prev_stderr;
 
-    if (e->abfd == NULL)
-      {
-	/* APPLE MERGE error_last_message went away */
-#if 0
-	if (print_errors)
-	  warning (error_last_message ());
-#endif
-	return;
-      }
-  }
-    
+  if (e->abfd == NULL)
+    {
+      xfree (name);
+      return;
+    }
+
   e->loaded_name = bfd_get_filename (e->abfd);
   e->loaded_from_memory = 0;
   e->loaded_error = 0;
@@ -1282,6 +1294,35 @@ dyld_load_library (const struct dyld_path_info *d,
 	  if (target_is_remote ())
 	    {
 	      e->load_flag = OBJF_SYM_CONTAINER;
+              const char *n = NULL;
+              if (e->dyld_name)
+                n = e->dyld_name;
+              else if (e->image_name)
+                n = e->image_name;
+              else if (e->user_name)
+                n = e->user_name;
+              // print the bundle name
+              // or if not a bundle, print the basename.
+              if (n)
+                {
+                  const char *m;
+                  m = bundle_basename (n);
+                  if (m && m != n)
+                    {
+                      n = m;
+                    }
+                  else
+                    {
+                      m = lbasename (n);
+                      if (m)
+                        n = m;
+                    }
+                }
+              else
+                {
+                  n = "<No file name>";
+                }
+              warning ("No copy of %s found locally, reading from memory on remote device.  This may slow down the debug session.", n);
 	    }
 	  goto try_again_please;
 	}

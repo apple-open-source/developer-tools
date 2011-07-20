@@ -2173,6 +2173,8 @@ mi_execute_command (char *cmd, int from_tty)
           ui_out_cleanup_after_error (saved_uiout);
 	  fputs_unfiltered (command->token, raw_stdout);
 	  fputs_unfiltered ("^error,msg=\"", raw_stdout);
+          if (result.message == NULL)
+            result.message = "<Unknown Error>";
 	  fputstr_unfiltered (result.message, '"', raw_stdout);
 	  fputs_unfiltered ("\"", raw_stdout);
           mi_out_put (saved_uiout, raw_stdout);

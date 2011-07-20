@@ -3035,8 +3035,8 @@ find_pc_sect_symtab (CORE_ADDR pc, asection *section)
 	   continue, so let's not.  */
 	   
 	warning (_("\
-(Internal error: pc 0x%s in read in psymtab, but not in symtab.)\n"),
-		 paddr_nz (pc));
+(Internal error: pc 0x%s in read in psymtab '%s', but not in symtab.)\n"),
+		 paddr_nz (pc), ps->filename? ps->filename : "");
       s = PSYMTAB_TO_SYMTAB (ps);
     }
   /* APPLE LOCAL cache lookup values for improved performance  */
@@ -4950,6 +4950,10 @@ rbreak_command (char *regexp, int from_tty)
   search_symbols (regexp, FUNCTIONS_DOMAIN, 0, (char **) NULL, &ss);
   old_chain = make_cleanup_free_search_symbols (ss);
 
+  // a buffer big enough to hold any function name or any
+  // shlib + function name
+  char string[4096 + 4096 + 32];
+
   for (p = ss; p != NULL; p = p->next)
     {
       /* We don't want to make people wade through dyld_stub trampolines;
@@ -4973,10 +4977,6 @@ rbreak_command (char *regexp, int from_tty)
 		+ strlen("-shlib \"\" ");
 	    }
 
-	  char *string = alloca (shlib_len
-				 + strlen (p->symtab->filename)
-				 + strlen (SYMBOL_LINKAGE_NAME (p->symbol))
-				 + 4);
           /* APPLE LOCAL: To make it easier for decode_line_1() to decode
              ObjC function names, instead of making the canonical names
                /path/name:'symbol-name'
@@ -4989,10 +4989,11 @@ rbreak_command (char *regexp, int from_tty)
              be OK.  cf
                  http://sources.redhat.com/ml/gdb-patches/2003-09/msg00053.html
           */
+          string[0] = '\0';
 	  if (shlib_ptr != NULL) 
 	    {
 	      strcpy (string, "-shlib \"");
-	      strcat (string, p->symtab->objfile->name);
+	      strlcat (string, p->symtab->objfile->name, 4096);
 	      strcat (string, "\" \"");
 	    }
 	  else
@@ -5002,7 +5003,7 @@ rbreak_command (char *regexp, int from_tty)
 
 	  strcat (string, p->symtab->filename);
 	  strcat (string, ":");
-	  strcat (string, SYMBOL_LINKAGE_NAME (p->symbol));
+	  strlcat (string, SYMBOL_LINKAGE_NAME (p->symbol), 4096);
 	  strcat (string, "\"");
 	  /* APPLE LOCAL radar 6366048 search both minsyms & syms for bps.  */
 	  rbr_break_command (string, from_tty, 0);
@@ -5034,9 +5035,7 @@ rbreak_command (char *regexp, int from_tty)
 		+ strlen("-shlib \"\" ");
 	    }
 	  
-	  char *string = alloca (shlib_len
-				 + strlen (SYMBOL_LINKAGE_NAME (p->msymbol))
-				 + 4);
+          string[0] = '\0';
 	  if (shlib_ptr != NULL) 
 	    {
 	      strcpy (string, "-shlib \"");
@@ -5048,7 +5047,7 @@ rbreak_command (char *regexp, int from_tty)
 	      strcpy (string, "'");
 	    }
 	  
-	  strcat (string, SYMBOL_LINKAGE_NAME (p->msymbol));
+	  strlcat (string, SYMBOL_LINKAGE_NAME (p->msymbol), 4096);
 	  strcat (string, "'");
 
           allow_objc_selectors_flag = 0;

@@ -150,6 +150,8 @@ typedef enum bfd_mach_o_cpu_subtype
     BFD_MACH_O_CPU_SUBTYPE_ARM_4T = 5,
     BFD_MACH_O_CPU_SUBTYPE_ARM_6 = 6,
     BFD_MACH_O_CPU_SUBTYPE_ARM_7 = 9,
+    BFD_MACH_O_CPU_SUBTYPE_ARM_7F = 10,
+    BFD_MACH_O_CPU_SUBTYPE_ARM_7K = 12,
     BFD_MACH_O_CPU_SUBTYPE_POWERPC_970 = 100
   }
 bfd_mach_o_cpu_subtype;

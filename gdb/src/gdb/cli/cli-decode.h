@@ -22,7 +22,7 @@
 
 #include "command.h"
 
-struct re_pattern_buffer;
+#include <regex.h>
 
 #if 0
 /* FIXME: cagney/2002-03-17: Once cmd_type() has been removed, ``enum
@@ -294,7 +294,7 @@ extern void help_list (struct cmd_list_element *, char *,
 		       enum command_class, struct ui_file *);
 
 extern void apropos_cmd (struct ui_file *, struct cmd_list_element *,
-                         struct re_pattern_buffer *, char *);
+                         regex_t *, char *);
 
 /* Used to mark commands that don't do anything.  If we just leave the
    function field NULL, the command is interpreted as a help topic, or

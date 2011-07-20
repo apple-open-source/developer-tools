@@ -494,4 +494,13 @@ struct cleanup *make_cleanup_suppress_hook_stop ();
 /* APPLE LOCAL: This is a debugging variable for the setup we do for
    hand call functions.  */
 extern int debug_handcall_setup;
+
+/* APPLE LOCAL: When we are using the debugger mode to do the work to figure out the
+   target of an ObjC method lookup, we implement the result by setting the step_resume_breakpoint,
+   unfortunately, we still need to run some code to end the debugger mode before we proceed,
+   and running that code deletes the step_resume_breakpoint.  So we need a way to suspend the
+   current step_resume_breakpoint, and then restore it when we actually start up.  */
+extern struct breakpoint *hide_step_resume_breakpoint();
+extern void restore_step_resume_breakpoint (struct breakpoint *bp);
+
 #endif /* !defined (INFERIOR_H) */

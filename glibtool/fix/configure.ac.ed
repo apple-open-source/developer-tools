@@ -1,0 +1,6 @@
+/^AC_PREREQ(2.62)/c
+AC_PREREQ(2.61)dnl Latest on Mac OS X
+.
+/^AM_INIT_AUTOMAKE/s/1\.10\.1/1.10/
+s/ dist-lzma//
+w

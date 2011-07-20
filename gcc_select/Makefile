@@ -1,26 +1,38 @@
 #
 ## B & I Makefile for gcc_select
 #
-# Copyright Apple Inc. 2002, 2003, 2007
+# Copyright Apple Inc. 2002, 2003, 2007, 2009, 2011
 
-#---------------------------------------------------------------------#
+#------------------------------------------------------------------------------#
 
-# Set V to what we wish to switch to when this project is "built".
-# Note, you can set V from the buildit command line by specifying V=2
-# or V=3[.x] after the pathname to the gcc_select source folder.
+# Set V to what we wish to switch to when this project is "built".  Note, you
+# can set V from the buildit command line by specifying V=LLVM.
 
-V = 4.2
+V = LLVM
 
-#---------------------------------------------------------------------#
+#------------------------------------------------------------------------------#
 
 SRCROOT = .
 SRC = `cd $(SRCROOT) && pwd | sed s,/private,,`
 
-PROGS=gcc g++ gcov c++
+ifeq ($(shell echo $V | tr "[:lower:]" "[:upper:]"),LLVM)
+PREFIX=/usr/bin/llvm-
+else
+PREFIX=
+endif
 
 .PHONY: all install installhdrs installsrc installdoc clean mklinks installsym
+.PHONY: Embedded
 
 all: install
+
+Embedded: installhdrs
+	ARM_PLATFORM=`xcodebuild -version -sdk iphoneos PlatformPath` && \
+	$(MAKE) DSTROOT=$(DSTROOT)$$ARM_PLATFORM PREFIX=llvm- \
+	    installhdrs mklinks && \
+	$(MAKE) DSTROOT=$(DSTROOT)$$ARM_PLATFORM/Developer PREFIX=llvm- \
+	    installhdrs mklinks
+	ln -s gcc/darwin/default/stdint.h $(DSTROOT)/usr/include/stdint.h
 
 $(OBJROOT)/c89.o : $(SRCROOT)/c89.c
 	$(CC) -c $^ -Wall -Os -g $(RC_CFLAGS) -o $@
@@ -47,10 +59,11 @@ installsym: $(OBJROOT)/c99.dSYM $(OBJROOT)/c89.dSYM
 
 mklinks:
 	mkdir -p $(DSTROOT)/usr/bin
-	for prog in $(PROGS) ; do \
-	  ln -s $${prog}-$V $(DSTROOT)/usr/bin/$${prog} || exit 1 ; \
-	done
-	ln -s gcc-$V $(DSTROOT)/usr/bin/cc
+	ln -s llvm-gcc-4.2 $(DSTROOT)/usr/bin/gcc
+	ln -s llvm-g++-4.2 $(DSTROOT)/usr/bin/g++
+	ln -s llvm-g++-4.2 $(DSTROOT)/usr/bin/c++
+	ln -s llvm-gcc-4.2 $(DSTROOT)/usr/bin/cc
+	ln -s gcov-4.2 $(DSTROOT)/usr/bin/gcov
 
 installsrc:
 	if [ $(SRCROOT) != . ]; then  \
@@ -61,16 +74,15 @@ installdoc:
 	mkdir -p $(DSTROOT)/usr/share/man/man1
 	install -c -m 444 $(SRCROOT)/c99.1 $(DSTROOT)/usr/share/man/man1/c99.1
 	install -c -m 444 $(SRCROOT)/c89.1 $(DSTROOT)/usr/share/man/man1/c89.1
-	for prog in $(PROGS) cpp ; do \
-	  ln -s $${prog}-$(V).1 $(DSTROOT)/usr/share/man/man1/$${prog}.1 || \
+	for prog in gcc g++ c++ gcov cpp ; do \
+	  ln -s $${prog}-4.2.1 $(DSTROOT)/usr/share/man/man1/$${prog}.1 || \
 	    exit 1 ; \
 	done
 	ln -s gcc.1 $(DSTROOT)/usr/share/man/man1/cc.1
 
 installhdrs:
 	mkdir -p $(DSTROOT)/usr/include/gcc/darwin
-	ln -s $V $(DSTROOT)/usr/include/gcc/darwin/default
-	ln -s gcc/darwin/default/stdint.h $(DSTROOT)/usr/include/stdint.h
+	ln -s 4.2 $(DSTROOT)/usr/include/gcc/darwin/default
 
 clean:
 	rm -rf $(OBJROOT)/c[89]9{,.dSYM}

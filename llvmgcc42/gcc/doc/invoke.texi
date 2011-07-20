@@ -47,9 +47,8 @@ remainder.  @samp{g++} accepts mostly the same options as @samp{gcc}.
 
 @c APPLE LOCAL begin manual
 In Apple's version of GCC, both @samp{cc} and @samp{gcc} are actually
-symbolic links to a compiler named like gcc-@var{version}.
-Similarly, @samp{c++} and @samp{g++} are links to a compiler named like
-g++-@var{version}.
+symbolic links to the @samp{llvm-gcc} compiler.
+Similarly, @samp{c++} and @samp{g++} are links to @samp{llvm-g++}.
 
 Note that Apple's GCC includes a number of extensions to standard GCC
 (flagged below with ``APPLE ONLY''), and that not all generic GCC
@@ -5072,18 +5071,16 @@ Not all optimizations are controlled directly by a flag.  Only
 optimizations that have a flag are listed.
 
 @table @gcctabopt
-@item -O
-@itemx -O1
-@opindex O
+@item -O1
 @opindex O1
 Optimize.  Optimizing compilation takes somewhat more time, and a lot
 more memory for a large function.
 
-With @option{-O}, the compiler tries to reduce code size and execution
+With @option{-O1}, the compiler tries to reduce code size and execution
 time, without performing any optimizations that take a great deal of
 compilation time.
 
-@option{-O} turns on the following optimization flags:
+@option{-O1} turns on the following optimization flags:
 @gccoptlist{-fdefer-pop @gol
 -fdelayed-branch @gol
 -fguess-branch-probability @gol
@@ -5103,18 +5100,22 @@ compilation time.
 -funit-at-a-time @gol
 -fmerge-constants}
 
-@option{-O} also turns on @option{-fomit-frame-pointer} on machines
+@option{-O1} also turns on @option{-fomit-frame-pointer} on machines
 where doing so does not interfere with debugging.
 
-@item -O2
+@item -O
+@opindex O
+@itemx -O2
 @opindex O2
 Optimize even more.  GCC performs nearly all supported optimizations
 that do not involve a space-speed tradeoff.  The compiler does not
 perform loop unrolling or function inlining when you specify @option{-O2}.
-As compared to @option{-O}, this option increases both compilation time
+As compared to @option{-O1}, this option increases both compilation time
 and the performance of the generated code.
 
-@option{-O2} turns on all optimization flags specified by @option{-O}.  It
+LLVM-GCC's @option{-O} is a synonym for @option{-O2}.
+
+@option{-O2} turns on all optimization flags specified by @option{-O1}.  It
 also turns on the following optimization flags:
 @gccoptlist{-fthread-jumps @gol
 -fcrossjumping @gol
@@ -6477,6 +6478,16 @@ The default is @option{-fno-signaling-nans}.
 
 This option is experimental and does not currently guarantee to
 disable all GCC optimizations that affect signaling NaN behavior.
+
+@item -fno-honor-nans
+@opindex fno-honor-nans
+Allow optimizations for floating-point arithmetic that assume that arguments and results are not NaNs.
+The default is -fhonor-nans.
+
+@item -fno-honor-infinites
+@opindex fno-honor-infinites
+Allow optimizations for floating-point arithmetic that assume that arguments and results are not +-Infs.
+The default is -fhonor-infinites.
 
 @item -fsingle-precision-constant
 @opindex fsingle-precision-constant

@@ -409,5 +409,9 @@ bfd *open_bfd_matching_arch (bfd *archive_bfd, bfd_format expected_format,
 
 struct objfile *symbol_file_add_with_addrs_or_offsets_using_objfile (struct objfile *, bfd *, int, struct section_addr_info *, struct section_offsets *, int, int, int, int, CORE_ADDR, const char *, char *);
 
+struct objfile * symbol_file_add_name_with_addrs_or_offsets (const char *name, int from_tty, struct section_addr_info *addrs, struct section_offsets *offsets, int num_offsets, int mainline, int flags, int symflags, CORE_ADDR mapaddr, const char *prefix, char *kext_bundle);
+
+struct section_offsets * convert_sect_addrs_to_offsets_via_on_disk_file (struct section_addr_info *sect_addrs, const char *file, int *num_offsets);
+
 
 #endif /* !defined(SYMFILE_H) */

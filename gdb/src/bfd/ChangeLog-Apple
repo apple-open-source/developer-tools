@@ -1,3 +1,11 @@
+2011-03-08  Jason Molenda  (jmolenda@apple.com)
+
+	* archures.c: Add bfd_mach_arm_7{f,k}.
+	* bfd-in2.h: Add bfd_mach_arm_7{f,k}.
+	* cpu-arm.c: Add bfd_mach_arm_7{f,k}.
+	* mach-o.c: Map CPU_SUBTYPEs to bfd_mach's for armv7{f,k}.
+	* mach-o.h: Add new defines for CPU_SUBTYPE_7{F,K}.
+
 2010-10-29  Jason Molenda  (jmolenda@apple.com)
 
 	* macho-o.c (bfd_mach_o_scan_read_command): Don't warn about recognized

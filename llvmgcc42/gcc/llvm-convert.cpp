@@ -8529,13 +8529,27 @@ Constant *TreeConstantToLLVM::ConvertUnionCONSTRUCTOR(tree exp) {
   // Convert the constant itself.
   Constant *Val = Convert(VEC_index(constructor_elt, elt, 0)->value);
 
-  // Unions are initialized using the first member field.  Find it.
+  // Unions are initialized using the first non-anonymous member field.  Find it.
   tree Field = TYPE_FIELDS(TREE_TYPE(exp));
+  tree namedField = Field;
+  tree first_field_decl = 0;
   assert(Field && "cannot initialize union with no fields");
-  while (TREE_CODE(Field) != FIELD_DECL) {
-    Field = TREE_CHAIN(Field);
-    assert(Field && "cannot initialize union with no fields");
+  while (namedField && (TREE_CODE(namedField) != FIELD_DECL ||
+                        DECL_NAME(namedField) == NULL_TREE)) {
+    // Remember the first field_decl we encounter.
+    if (!first_field_decl && TREE_CODE(namedField) == FIELD_DECL)
+      first_field_decl = namedField;
+    namedField = TREE_CHAIN(namedField);
   }
+  // If we located a legitimate, named field, prefer it;
+  // failing that, use the first_field_decl we found...
+  if (namedField)
+    Field = namedField;
+  else if (first_field_decl)
+    Field = first_field_decl;
+  // ...else, failing all of the above, use whatever we found at the top.
+
+  assert(Field && "cannot initialize union with no fields");
 
   // If this is a non-bitfield value, just slap it onto the end of the struct
   // with the appropriate padding etc.  If it is a bitfield, we have more

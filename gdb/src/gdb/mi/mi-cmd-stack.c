@@ -39,7 +39,6 @@
 #include "gdb_regex.h"
 /* APPLE LOCAL - subroutine inlining  */
 #include "inlining.h"
-#include "objfiles.c"
 
 /* FIXME: There is no general mi header to put this kind of utility function.*/
 extern void mi_report_var_creation (struct ui_out *uiout, struct varobj *var);
@@ -55,7 +54,7 @@ void mi_interp_context_hook (int thread_id);
    psymtab->symtab code uses it to do C++ method detection.  So I am going
    to keep a separate one here.  */
 
-struct re_pattern_buffer mi_symbol_filter;
+regex_t mi_symbol_filter;
 
 static char *print_values_bad_input_string = 
            "Unknown value for PRINT_VALUES: must be: 0 or \"--no-values\", "
@@ -79,14 +78,14 @@ static void print_syms_for_block (struct block *block,
 				  int locals, 
 				  int consts,
 				  enum print_values values,
-				  struct re_pattern_buffer *filter);
+				  regex_t *filter);
 
 static void
 print_globals_for_symtab (struct symtab *file_symtab, 
 			  struct ui_stream *stb,
 			  enum print_values values,
 			  int consts,
-			  struct re_pattern_buffer *filter);
+			  regex_t *filter);
 
 /* Print a list of the stack frames. Args can be none, in which case
    we want to print the whole backtrace, or a pair of numbers
@@ -725,7 +724,7 @@ list_args_or_locals (int locals, enum print_values values,
 
 static int
 parse_statics_globals_args (char **argv, int argc, char **filename_ptr, char ** shlibname_ptr, 
-			    enum print_values *values_ptr, struct re_pattern_buffer **filterp_ptr,
+			    enum print_values *values_ptr, regex_t **filterp_ptr,
 			    int *consts_ptr)
 {
   char *filter_arg;
@@ -803,8 +802,7 @@ parse_statics_globals_args (char **argv, int argc, char **filename_ptr, char ** 
     {
       const char *msg;
 
-      msg = re_compile_pattern (filter_arg, strlen (filter_arg), &mi_symbol_filter);
-      if (msg)
+      if (regcomp (&mi_symbol_filter, filter_arg, REG_EXTENDED) != 0)
 	error ("Error compiling regexp: \"%s\"", msg);
       *filterp_ptr = &mi_symbol_filter;
     }
@@ -824,7 +822,7 @@ mi_cmd_file_list_statics (char *command, char **argv, int argc)
   struct symtab *file_symtab;
   struct cleanup *cleanup_list;
   struct ui_stream *stb;
-  struct re_pattern_buffer *filterp = NULL;
+  regex_t *filterp = NULL;
   int consts = 1;
 
 
@@ -939,7 +937,7 @@ print_globals_for_symtab (struct symtab *file_symtab,
 			  struct ui_stream *stb,
 			  enum print_values values,
 			  int consts,
-			  struct re_pattern_buffer *filter)
+			  regex_t *filter)
 {
   struct block *block;
   struct cleanup *cleanup_list;
@@ -973,7 +971,7 @@ mi_cmd_file_list_globals (char *command, char **argv, int argc)
   struct partial_symtab *file_ps;
   struct symtab *file_symtab;
   struct ui_stream *stb;
-  struct re_pattern_buffer *filterp;
+  regex_t *filterp;
   int consts = 1;
 
   if (!parse_statics_globals_args (argv, argc, &filename, &shlibname, &values, 
@@ -1132,7 +1130,7 @@ mi_cmd_file_list_globals (char *command, char **argv, int argc)
    always printed anyway.
    STB is the ui-stream to which the results are printed.  
    And FI, if non-null, is the frame to bind the varobj to.  
-   If FILTER is non-null, then we only print expressions matching
+   If FILTER is non-null, then we skip symbols matching
    that compiled regexp.  */
 
 static void
@@ -1142,7 +1140,7 @@ print_syms_for_block (struct block *block,
 		      int locals, 
 		      int consts,
 		      enum print_values values,
-		      struct re_pattern_buffer *filter)
+		      regex_t *filter)
 {
   int print_me;
   struct symbol *sym;
@@ -1222,8 +1220,9 @@ print_syms_for_block (struct block *block,
           struct symbol *sym2;
 	  int len = strlen (SYMBOL_NATURAL_NAME (sym));
 
-	  /* If we are about to print, compare against the regexp.  */
-	  if (filter && re_search (filter, SYMBOL_NATURAL_NAME (sym), 
+	  /* If we are about to print, compare against the regexp.  
+             If there's a match, skip this symbol.  */
+	  if (filter && re_search_oneshot (filter, SYMBOL_NATURAL_NAME (sym), 
 				   len, 0, len, 
 				   (struct re_registers *) 0) >= 0)
 	    continue;

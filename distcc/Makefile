@@ -30,11 +30,11 @@ CPPFLAGS =  -DHAVE_CONFIG_H -D_GNU_SOURCE ${DIR_DEFS} \
 	   -Isrc -I"$(srcdir)/src" -I"$(srcdir)/lzo" $(POPT_INCLUDES)
 PYTHON_SETUP_CFLAGS = -g -O2  -W -Wall -Wimplicit -Wshadow -Wpointer-arith -Wcast-align -Wwrite-strings -Waggregate-return -Wstrict-prototypes -Wmissing-prototypes -Wnested-externs -Wmissing-declarations -Wuninitialized -D_THREAD_SAFE 
 
-srcdir = /private/tmp/submission/58098/distcc/distcc_dist
-top_srcdir = /private/tmp/submission/58098/distcc/distcc_dist
+srcdir = /var/folders/+0/+0M2Sod-HTSlDDZSOPPQHE+++TI/-Tmp-/p4HhmiJwf6/57851/distcc/distcc_dist
+top_srcdir = /var/folders/+0/+0M2Sod-HTSlDDZSOPPQHE+++TI/-Tmp-/p4HhmiJwf6/57851/distcc/distcc_dist
 builddir = .
 top_builddir = .
-VPATH = /private/tmp/submission/58098/distcc/distcc_dist
+VPATH = /var/folders/+0/+0M2Sod-HTSlDDZSOPPQHE+++TI/-Tmp-/p4HhmiJwf6/57851/distcc/distcc_dist
 prefix = /usr
 exec_prefix = ${prefix}
 
@@ -1064,6 +1064,11 @@ install-programs: $(bin_PROGRAMS)
 # Also, on Cygwin the --record output is in DOS text file format (CR LF
 # line endings), so we need to convert it from DOS text file format to
 # Unix text file format (LF line endings); we use sed for that too.
+ifdef PYTHON_SETUP_HOME
+SETUP_OPT = --home="$(PYTHON_SETUP_HOME)"
+else # !PYTHON_SETUP_HOME
+SETUP_OPT = --prefix="$(prefix)"
+endif # !PYTHON_SETUP_HOME
 install-include-server: include-server pump
 	if test -z "$(INCLUDESERVER_PYTHON)"; then	\
 	  echo "Not building $@: No suitable python found"; \
@@ -1081,7 +1086,7 @@ install-include-server: include-server pump
 	        --build-base="$(include_server_builddir)" \
 	        --build-temp="$(include_server_builddir)" \
 	      install 					\
-	         --prefix="$(prefix)" 			\
+	         $(SETUP_OPT)	 			\
 	         --record="$(include_server_builddir)/install.log.pre" \
 	         --root="$$DESTDIR"                     \
 	    || exit 1; \

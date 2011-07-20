@@ -42,6 +42,11 @@
 #include <stdlib.h>
 #include <string.h>
 #include <unistd.h>
+extern char *optarg;
+extern int optind;
+extern int optopt;
+extern int opterr;
+extern int optreset;
 
 char **args;
 u_int cargs, nargs;
@@ -65,11 +70,11 @@ int
 main(int argc, char *argv[])
 {
 	int ch, i;
-
+        int m_32_64_set = 0;
 	args = NULL;
 	cargs = nargs = 0;
 
-	while ((ch = getopt(argc, argv, "cD:EgI:L:o:O:sU:l:")) != -1) {
+	while ((ch = getopt(argc, argv, "cD:EgI:L:o:O:sU:W:l:")) != -1) {
 		if (ch == 'l') {
 			/* Gone too far. Back up and get out. */
 			if (argv[optind - 1][0] == '-')
@@ -84,7 +89,6 @@ main(int argc, char *argv[])
 	addarg("cc");
 	addarg("-std=iso9899:1990");
 	addarg("-pedantic");
-	addarg("-m32");
 	for (i = 1; i < optind; i++) {
 	  /* "--" indicates end of options. Radar 3761967.  */
 	  if (strcmp (argv[i], "--") == 0)
@@ -114,11 +118,49 @@ main(int argc, char *argv[])
 	  } else if (strcmp (argv[i], "-D") == 0) {
 	    add_def (argv[i+1]);
 	    i++;
-	  } else if (strncmp (argv[i], "-D", 2) == 0)
-	    add_def (argv[i]+2);
-	  else
+	  } else if (strncmp (argv[i], "-D", 2) == 0) {
+	    addarg(argv[i]+2);
+	  } else if (strcmp (argv[i], "-W") == 0) {
+            char *p;
+            if (strcmp(argv[i+1], "32") && strcmp(argv[i+1], "64")) {
+              /* Not "-W 32" nor "-W 64": pass along unmodified. */
+              addarg(argv[i]);
+              addarg(argv[i+1]);
+              i++;
+              continue;
+            }
+            /* argv[i+1] is "32" or "64"; pass along "-m32" or "-m64".  */
+            p = malloc(1 + strlen("-m64"));
+            strcpy(p, "-m");
+            strcat(p, argv[i+1]);
+	    addarg(p);
+	    i++;
+            m_32_64_set = 1;
+	  } else if (strncmp (argv[i], "-W", 2) == 0) {
+            char *p;
+            if (strcmp(argv[i]+2, "32") && strcmp(argv[i]+2, "64")) {
+              /* Not "-W32" nor "-W64": pass along unmodified. */
+              addarg(argv[i]);
+              continue;
+            }
+            /* argv[i] is "-W32" or "-W64"; pass along "-m32" or "-m64".  */
+            p = malloc(1 + strlen("-m64"));
+            strcpy(p, argv[i]);
+            p[1] = 'm';
+	    addarg(p);
+            m_32_64_set = 1;
+	  } else
 	    addarg(argv[i]);
 	}
+        /* If the user didn't set the width, set it from the current
+           host architecture. */
+#ifdef __LP64__
+        if (!m_32_64_set)
+          addarg("-m64");
+#else
+        if (!m_32_64_set)
+          addarg("-m32");
+#endif
 	while (i < argc) {
 		if (strncmp(argv[i], "-l", 2) == 0) {
 			if (argv[i][2] != '\0')

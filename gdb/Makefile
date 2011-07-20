@@ -1,5 +1,5 @@
 GDB_VERSION = 6.3.50-20050815
-GDB_RC_VERSION = 1518
+GDB_RC_VERSION = 1705
 
 BINUTILS_VERSION = 2.13-20021117
 BINUTILS_RC_VERSION = 46
@@ -525,7 +525,7 @@ install-frameworks-headers:
 	set -e; for i in $(FRAMEWORKS); do \
 		l=`echo $${i} | sed -e 's/liberty/libiberty/;' -e 's/binutils/\./;' -e 's/gdb/\./;'`; \
 		(cd $(OBJROOT)/$(firstword $(NATIVE_TARGETS))/$${l}/$${i}.framework/Versions/A \
-		 && $(TAR) --exclude=CVS -cf - Headers) \
+		 && $(TAR) --exclude=CVS --exclude=.svn -cf - Headers) \
 		| \
 		(cd $(CURRENT_ROOT)/$(PRIVATE_FRAMEWORKS_DIR)/$${i}.framework/Versions/A \
 		 && $(TAR) -xf -); \
@@ -537,7 +537,7 @@ install-frameworks-headers:
 		for j in $(NATIVE_TARGETS); do \
 			mkdir -p $(CURRENT_ROOT)/$(PRIVATE_FRAMEWORKS_DIR)/$${i}.framework/Versions/A/Headers/machine/$${j}; \
 			(cd $(OBJROOT)/$${j}/$${l}/$${i}.framework/Versions/A/Headers/machine \
-			 && $(TAR) --exclude=CVS -cf - *) \
+			 && $(TAR) --exclude=CVS --exclude=.svn -cf - *) \
 			| \
 			(cd $(CURRENT_ROOT)/$(PRIVATE_FRAMEWORKS_DIR)/$${i}.framework/Versions/A/Headers/machine/$${j} \
 			 && $(TAR) -xf -) \
@@ -593,7 +593,7 @@ cross-install-frameworks-headers:
 	set -e; for i in $(FRAMEWORKS); do \
 		l=`echo $${i} | sed -e 's/liberty/libiberty/;' -e 's/binutils/\./;' -e 's/gdb/\./;'`; \
 		(cd "$(OBJROOT)/$(HOST_ARCH_FULL)-apple-darwin--$(CROSS_ARCH_FULL)-apple-darwin/$${l}/$${i}.framework/Versions/A" \
-		 && $(TAR) --exclude=CVS -cf - Headers) \
+		 && $(TAR) --exclude=CVS --exclude=.svn -cf - Headers) \
 		| \
 		(cd "$(CURRENT_ROOT)/$(PRIVATE_FRAMEWORKS_DIR)/$${i}.framework/Versions/A" \
 		 && $(TAR) -xf -); \
@@ -601,7 +601,7 @@ cross-install-frameworks-headers:
 
 	rm -rf "$(CURRENT_ROOT)/$(PRIVATE_FRAMEWORKS_DIR)/gdb.framework/Versions/A/Headers/machine/$(HOST_ARCH)-apple-darwin--$(CROSS_ARCH)-apple-darwin"; \
 	mkdir -p "$(CURRENT_ROOT)/$(PRIVATE_FRAMEWORKS_DIR)/gdb.framework/Versions/A/Headers/machine/$(HOST_ARCH)-apple-darwin--$(CROSS_ARCH)-apple-darwin"; \
-	(cd "$(OBJROOT)/$(HOST_ARCH_FULL)-apple-darwin--$(CROSS_ARCH_FULL)-apple-darwin/gdb.framework/Versions/A/Headers/machine" && $(TAR) --exclude=CVS -cf - *) \
+	(cd "$(OBJROOT)/$(HOST_ARCH_FULL)-apple-darwin--$(CROSS_ARCH_FULL)-apple-darwin/gdb.framework/Versions/A/Headers/machine" && $(TAR) --exclude=CVS --exclude=.svn -cf - *) \
 		| (cd "$(CURRENT_ROOT)/$(PRIVATE_FRAMEWORKS_DIR)/gdb.framework/Versions/A/Headers/machine/$(HOST_ARCH)-apple-darwin--$(CROSS_ARCH)-apple-darwin" && $(TAR) -xf -);
 
 cross-install-frameworks-headers-remove:
@@ -767,7 +767,7 @@ install-chmod-macosx-noprocmod:
 
 install-source:
 	$(INSTALL) -c -d $(DSTROOT)/$(SOURCE_DIR)
-	$(TAR) --exclude=CVS -C $(SRCROOT) -cf - . | $(TAR) -C $(DSTROOT)/$(SOURCE_DIR) -xf -
+	$(TAR) --exclude=CVS --exclude=.svn -C $(SRCROOT) -cf - . | $(TAR) -C $(DSTROOT)/$(SOURCE_DIR) -xf -
 
 all: build
 
@@ -888,7 +888,7 @@ endif
 
 installsrc:
 	$(SUBMAKE) check
-	$(TAR) --dereference --exclude=CVS --exclude=src/contrib --exclude=src/dejagnu --exclude=src/etc --exclude=src/expect --exclude=src/sim --exclude=src/tcl --exclude=src/texinfo --exclude=src/utils -cf - . | $(TAR) -C $(SRCROOT) -xf -
+	$(TAR) --dereference --exclude=CVS --exclude=.svn --exclude=src/contrib --exclude=src/dejagnu --exclude=src/etc --exclude=src/expect --exclude=src/sim --exclude=src/tcl --exclude=src/texinfo --exclude=src/utils -cf - . | $(TAR) -C $(SRCROOT) -xf -
 
 
 

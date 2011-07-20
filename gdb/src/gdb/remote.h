@@ -64,6 +64,11 @@ extern int remote_read_bytes (CORE_ADDR memaddr, char *myaddr, int len);
 extern void (*deprecated_target_resume_hook) (void);
 extern void (*deprecated_target_wait_loop_hook) (void);
 
+void dump_packets_command (char *unused, int fromtty);
+
+CORE_ADDR remote_macosx_get_all_image_infos_addr ();
+
+
 /* APPLE LOCAL
    When in mi mode, we track the time it takes to complete each command
    and we track how many remote protocol packets were used to complete

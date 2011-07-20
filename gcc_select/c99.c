@@ -67,11 +67,11 @@ main(int argc, char *argv[])
 	int link = 1;
 	int inputs = 0;
 	int verbose = 0;
+        int m_32_64_set = 0;
 
 	addarg("cc");
 	addarg("-std=iso9899:1999");
 	addarg("-pedantic");
-	addarg("-m32");
 	addarg("-Wextra-tokens"); /* Radar 4205857 */
 #if defined (__ppc__) || defined (__ppc64__)
 	/* on ppc long double doesn't work */
@@ -124,9 +124,13 @@ main(int argc, char *argv[])
 		combine_and_addarg ("-U", optarg);
 		break;
 	      case 'W':
-		if (strcmp (optarg, "64") == 0)
+		if (strcmp (optarg, "32") == 0) {
+		  addarg ("-m32");
+                  m_32_64_set = 1;
+                } else if (strcmp (optarg, "64") == 0) {
 		  addarg ("-m64");
-		else if (strcmp (optarg, "verbose") == 0)
+                  m_32_64_set = 1;
+		} else if (strcmp (optarg, "verbose") == 0)
 		  {
 		    addarg ("-v");
 		    verbose = 1;
@@ -161,6 +165,15 @@ main(int argc, char *argv[])
 		break;
 	      }
 	  }
+        /* If the user didn't set the width, set it from the current
+           host architecture. */
+#ifdef __LP64__
+        if (!m_32_64_set)
+          addarg("-m64");
+#else
+        if (!m_32_64_set)
+          addarg("-m32");
+#endif
 
 	if (link && inputs > 0) {
 	  addarg("-liconv");

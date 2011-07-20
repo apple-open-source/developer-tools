@@ -397,6 +397,10 @@ arm_host_osabi ()
 	return GDB_OSABI_DARWINV6;
       if (info.cpu_subtype == BFD_MACH_O_CPU_SUBTYPE_ARM_7)
 	return GDB_OSABI_DARWINV7;
+      if (info.cpu_subtype == BFD_MACH_O_CPU_SUBTYPE_ARM_7F)
+	return GDB_OSABI_DARWINV7F;
+      if (info.cpu_subtype == BFD_MACH_O_CPU_SUBTYPE_ARM_7K)
+	return GDB_OSABI_DARWINV7K;
       else
 	return GDB_OSABI_DARWIN;
 }
@@ -412,12 +416,26 @@ arm_set_osabi_from_host_info ()
   info.byte_order = gdbarch_byte_order (current_gdbarch);
   info.osabi = arm_host_osabi ();
   
-  if (info.osabi == GDB_OSABI_DARWINV7)
-    info.bfd_arch_info = bfd_lookup_arch (bfd_arch_arm, bfd_mach_arm_7);
-  else if (info.osabi == GDB_OSABI_DARWINV6)
-    info.bfd_arch_info = bfd_lookup_arch (bfd_arch_arm, bfd_mach_arm_6);
-  else if (info.osabi == GDB_OSABI_DARWIN)
+  switch (info.osabi)
+    {
+      case GDB_OSABI_DARWIN:
     info.bfd_arch_info = bfd_lookup_arch (bfd_arch_arm, 0);
+        break;
+      case GDB_OSABI_DARWINV6:
+        info.bfd_arch_info = bfd_lookup_arch (bfd_arch_arm, bfd_mach_arm_6);
+        break;
+      case GDB_OSABI_DARWINV7:
+        info.bfd_arch_info = bfd_lookup_arch (bfd_arch_arm, bfd_mach_arm_7);
+        break;
+      case GDB_OSABI_DARWINV7F:
+        info.bfd_arch_info = bfd_lookup_arch (bfd_arch_arm, bfd_mach_arm_7f);
+        break;
+      case GDB_OSABI_DARWINV7K:
+        info.bfd_arch_info = bfd_lookup_arch (bfd_arch_arm, bfd_mach_arm_7k);
+        break;
+      default:
+        warning ("Unrecognized osabi %d in arm_set_osabi_from_host_info", (int) info.osabi);
+    }
 
   if (info.osabi != GDB_OSABI_UNKNOWN)
     gdbarch_update_p (info);
@@ -425,7 +443,7 @@ arm_set_osabi_from_host_info ()
 }
 
 /* Two functions in one!  If this is a "bfd_archive" (read: a MachO fat file),
-   recurse for each separate fork of the fat file.
+   recurse for each separate slice of the fat file.
    If this is not a fat file, detect whether the file is arm32 or arm64.
    Before either of these, check if we've already sniffed an appropriate
    OSABI from dyld (in the case of attaching to a process) and prefer that.  */
@@ -435,12 +453,8 @@ arm_mach_o_osabi_sniffer (bfd *abfd)
 {
   enum gdb_osabi ret;
 
-  /* The way loading works on Darwin is that for FAT files, the
-     fork corresponding to the host system will be the one used
-     regardless of what the type of the main executable was.
-     So the osabi has to be determined solely by the type of
-     the host system.  */
-
+  // If we have a thin (non-fat) file, the one slice that exists
+  // determines the osabi.
 
   if (strcmp (bfd_get_target (abfd), "mach-o-le") == 0)
     {
@@ -453,19 +467,26 @@ arm_mach_o_osabi_sniffer (bfd *abfd)
 	    return GDB_OSABI_DARWINV6;
 	  else if (arch_info->mach == bfd_mach_arm_7)
 	    return GDB_OSABI_DARWINV7;
+	  else if (arch_info->mach == bfd_mach_arm_7f)
+	    return GDB_OSABI_DARWINV7F;
+	  else if (arch_info->mach == bfd_mach_arm_7k)
+	    return GDB_OSABI_DARWINV7K;
 	  else
 	    return GDB_OSABI_DARWIN;
 	}
     }
 
-  /* However, if we are running a cross gdb, we won't know what
-     the target architecture is.  FIXME - going to have to determine
-     this somehow.  For now, fall back to looking at the binary.  */
+  // If there's an exact match between the abfd slices and the 
+  // loaded dyld, that slice is the one to use.
 
   ret = arm_mach_o_osabi_sniffer_use_dyld_hint (abfd);
   if (ret == GDB_OSABI_DARWINV6 || ret == GDB_OSABI_DARWIN ||
-      ret == GDB_OSABI_DARWINV7)
+      ret == GDB_OSABI_DARWINV7 || ret == GDB_OSABI_DARWINV7F ||
+      ret == GDB_OSABI_DARWINV7K)
     return ret;
+
+  // Iterate over the available slices, pick the best match based
+  // on the host cpu type / cpu subtype.
 
   if (bfd_check_format (abfd, bfd_archive))
     {
@@ -483,8 +504,43 @@ arm_mach_o_osabi_sniffer (bfd *abfd)
 
 	  if (cur == host_osabi)
 	    return cur;
-          else if (cur > best && cur < host_osabi)
+          else 
+            {
+              // The details here are derived from xnu's
+              // bsd/dev/arm/kern_machdep.c::grade_binary()
+
+              // If this an armv7k host, don't use any of the
+              // armv7{,f} slices.
+              if (host_osabi == GDB_OSABI_DARWINV7K
+                  && (cur == GDB_OSABI_DARWINV7
+                      || cur == GDB_OSABI_DARWINV7F))
+                {
+                  continue;
+                }
+
+              // Picking the "best" depends on the order of the
+              // GDB_OSABI constants - but armv7k is a bit of a 
+              // wrinkle; except on an armv7k system this is never
+              // a best slice to pick.  If we have any other armv7
+              // variant as the current "best", keep it.
+              if (cur == GDB_OSABI_DARWINV7K 
+                  && (best == GDB_OSABI_DARWINV7
+                      || best == GDB_OSABI_DARWINV7F))
+                {
+                  continue;
+                }
+
+              // On an armv7 host, don't try to use armv7f
+              // slice.
+              if (host_osabi == GDB_OSABI_DARWINV7
+                  && cur == GDB_OSABI_DARWINV7F)
+                {
+                  continue;
+                }
+
+            if (cur > best && cur < host_osabi)
             best = cur;
+        }
         }
       return best;
     }
@@ -530,6 +586,14 @@ arm_mach_o_osabi_sniffer_use_dyld_hint (bfd *abfd)
 	  if (arch_info->mach == bfd_mach_arm_7
 	      && osabi_seen_in_attached_dyld == GDB_OSABI_DARWINV7)
 	    return GDB_OSABI_DARWINV7;
+
+	  if (arch_info->mach == bfd_mach_arm_7f
+	      && osabi_seen_in_attached_dyld == GDB_OSABI_DARWINV7F)
+	    return GDB_OSABI_DARWINV7F;
+
+	  if (arch_info->mach == bfd_mach_arm_7k
+	      && osabi_seen_in_attached_dyld == GDB_OSABI_DARWINV7K)
+	    return GDB_OSABI_DARWINV7K;
 	}
     }
 
@@ -1198,6 +1262,16 @@ _initialize_arm_macosx_tdep ()
   gdbarch_register_osabi ((bfd_lookup_arch (bfd_arch_arm, bfd_mach_arm_7))->arch, 
 			  bfd_mach_arm_7,
                           GDB_OSABI_DARWINV7, 
+			  arm_macosx_init_abi_v7);
+
+  gdbarch_register_osabi ((bfd_lookup_arch (bfd_arch_arm, bfd_mach_arm_7f))->arch, 
+			  bfd_mach_arm_7f,
+                          GDB_OSABI_DARWINV7F, 
+			  arm_macosx_init_abi_v7);
+
+  gdbarch_register_osabi ((bfd_lookup_arch (bfd_arch_arm, bfd_mach_arm_7k))->arch, 
+			  bfd_mach_arm_7k,
+                          GDB_OSABI_DARWINV7K, 
 			  arm_macosx_init_abi_v7);
 
 }

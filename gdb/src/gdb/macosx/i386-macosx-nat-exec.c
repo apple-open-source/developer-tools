@@ -133,7 +133,7 @@ fetch_inferior_registers (int regno)
          &gp_count);
       if (ret != KERN_SUCCESS)
 	{
-	  printf ("Error calling thread_get_state for GP registers for thread 0x%ulx", current_thread);
+	  printf_unfiltered ("Error calling thread_get_state for GP registers for thread 0x%x\n", (int) current_thread);
 	  MACH_CHECK_ERROR (ret);
 	}
 
@@ -165,7 +165,7 @@ fetch_inferior_registers (int regno)
              &gp_count);
 	  if (ret != KERN_SUCCESS)
 	    {
-	      printf ("Error calling thread_get_state for GP registers for thread 0x%ulx", current_thread);
+	      printf_unfiltered ("Error calling thread_get_state for GP registers for thread 0x%x\n", (int) current_thread);
 	      MACH_CHECK_ERROR (ret);
 	    }
           x86_64_macosx_fetch_gp_registers (&gp_regs.uts.ts64);
@@ -184,7 +184,7 @@ fetch_inferior_registers (int regno)
              &fp_count);
 	  if (ret != KERN_SUCCESS)
 	    {
-	      printf ("Error calling thread_get_state for float registers for thread 0x%ulx", current_thread);
+	      printf_unfiltered ("Error calling thread_get_state for float registers for thread 0x%x\n", (int) current_thread);
 	      MACH_CHECK_ERROR (ret);
 	    }
           x86_64_macosx_fetch_fp_registers (&fp_regs.ufs.fs64);
@@ -202,7 +202,7 @@ fetch_inferior_registers (int regno)
              &gp_count);
 	  if (ret != KERN_SUCCESS)
 	    {
-	      printf ("Error calling thread_get_state for GP registers for thread 0x%ulx", current_thread);
+	      printf_unfiltered ("Error calling thread_get_state for GP registers for thread 0x%x\n", (int) current_thread);
 	      MACH_CHECK_ERROR (ret);
 	    }
           i386_macosx_fetch_gp_registers (&(gp_regs.uts.ts32));
@@ -221,7 +221,7 @@ fetch_inferior_registers (int regno)
              &fp_count);
 	  if (ret != KERN_SUCCESS)
 	    {
-	      printf ("Error calling thread_get_state for float registers for thread 0x%ulx", current_thread);
+	      printf_unfiltered ("Error calling thread_get_state for float registers for thread 0x%x\n", (int) current_thread);
 	      MACH_CHECK_ERROR (ret);
 	    }
           i386_macosx_fetch_fp_registers (&fp_regs);
@@ -628,6 +628,12 @@ i386_macosx_can_use_hw_breakpoint (int unused1, int unused2, int unused3)
 }
 
 void
+i386_macosx_child_post_startup_inferior (ptid_t pid)
+{
+  i386_cleanup_dregs();
+}
+
+void
 macosx_complete_child_target (struct target_ops *target)
 {
   target->to_can_use_hw_breakpoint = i386_macosx_can_use_hw_breakpoint;
@@ -638,5 +644,6 @@ macosx_complete_child_target (struct target_ops *target)
   target->to_insert_hw_breakpoint = i386_insert_hw_breakpoint;
   target->to_remove_hw_breakpoint = i386_remove_hw_breakpoint;
   target->to_have_continuable_watchpoint = 1;
+  target->to_post_startup_inferior = i386_macosx_child_post_startup_inferior;
 }
 

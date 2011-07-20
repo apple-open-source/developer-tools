@@ -120,11 +120,12 @@ enum gdb_osabi macosx_get_osabi_from_dyld_entry (bfd *abfd);
 void macosx_dyld_mourn_inferior (void);
 
 int target_is_remote ();
+int target_is_kdp_remote ();
 int macosx_dyld_update (int dyldonly);
 int dyld_lookup_and_bind_function (char *name);
 void update_section_tables_dyld (struct dyld_objfile_info *s);
 void update_section_tables ();
-char *dyld_fix_path (char *path);
+char *dyld_fix_path (const char *path);
 
 void macosx_set_malloc_inited (int new_val);
 int macosx_get_malloc_inited (void);

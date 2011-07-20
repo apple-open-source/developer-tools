@@ -335,12 +335,36 @@ void SCEVAddRecExpr::print(raw_ostream &OS) const {
   OS << ">";
 }
 
+void SCEVUnknown::deleted() {
+  // Clear this SCEVUnknown from ValuesAtScopes.
+  SE->ValuesAtScopes.erase(this);
+
+  // Remove this SCEVUnknown from the uniquing map.
+  SE->UniqueSCEVs.RemoveNode(this);
+
+  // Release the value.
+  setValPtr(0);
+}
+
+void SCEVUnknown::allUsesReplacedWith(Value *New) {
+  // Clear this SCEVUnknown from ValuesAtScopes.
+  SE->ValuesAtScopes.erase(this);
+
+  // Remove this SCEVUnknown from the uniquing map.
+  SE->UniqueSCEVs.RemoveNode(this);
+
+  // Update this SCEVUnknown to point to the new value. This is needed
+  // because there may still be outstanding SCEVs which still point to
+  // this SCEVUnknown.
+  setValPtr(New);
+}
+
 bool SCEVUnknown::isLoopInvariant(const Loop *L) const {
   // All non-instruction values are loop invariant.  All instructions are loop
   // invariant if they are not contained in the specified loop.
   // Instructions are never considered invariant in the function body
   // (null loop) because they are defined within the "loop".
-  if (Instruction *I = dyn_cast<Instruction>(V))
+  if (Instruction *I = dyn_cast<Instruction>(getValue()))
     return L && !L->contains(I);
   return true;
 }
@@ -358,11 +382,11 @@ bool SCEVUnknown::properlyDominates(BasicBlock *BB, DominatorTree *DT) const {
 }
 
 const Type *SCEVUnknown::getType() const {
-  return V->getType();
+  return getValue()->getType();
 }
 
 bool SCEVUnknown::isSizeOf(const Type *&AllocTy) const {
-  if (ConstantExpr *VCE = dyn_cast<ConstantExpr>(V))
+  if (ConstantExpr *VCE = dyn_cast<ConstantExpr>(getValue()))
     if (VCE->getOpcode() == Instruction::PtrToInt)
       if (ConstantExpr *CE = dyn_cast<ConstantExpr>(VCE->getOperand(0)))
         if (CE->getOpcode() == Instruction::GetElementPtr &&
@@ -379,7 +403,7 @@ bool SCEVUnknown::isSizeOf(const Type *&AllocTy) const {
 }
 
 bool SCEVUnknown::isAlignOf(const Type *&AllocTy) const {
-  if (ConstantExpr *VCE = dyn_cast<ConstantExpr>(V))
+  if (ConstantExpr *VCE = dyn_cast<ConstantExpr>(getValue()))
     if (VCE->getOpcode() == Instruction::PtrToInt)
       if (ConstantExpr *CE = dyn_cast<ConstantExpr>(VCE->getOperand(0)))
         if (CE->getOpcode() == Instruction::GetElementPtr &&
@@ -404,7 +428,7 @@ bool SCEVUnknown::isAlignOf(const Type *&AllocTy) const {
 }
 
 bool SCEVUnknown::isOffsetOf(const Type *&CTy, Constant *&FieldNo) const {
-  if (ConstantExpr *VCE = dyn_cast<ConstantExpr>(V))
+  if (ConstantExpr *VCE = dyn_cast<ConstantExpr>(getValue()))
     if (VCE->getOpcode() == Instruction::PtrToInt)
       if (ConstantExpr *CE = dyn_cast<ConstantExpr>(VCE->getOperand(0)))
         if (CE->getOpcode() == Instruction::GetElementPtr &&
@@ -446,7 +470,7 @@ void SCEVUnknown::print(raw_ostream &OS) const {
   }
 
   // Otherwise just print it normally.
-  WriteAsOperand(OS, V, false);
+  WriteAsOperand(OS, getValue(), false);
 }
 
 //===----------------------------------------------------------------------===//
@@ -2297,8 +2321,14 @@ const SCEV *ScalarEvolution::getUnknown(Value *V) {
   ID.AddInteger(scUnknown);
   ID.AddPointer(V);
   void *IP = 0;
-  if (const SCEV *S = UniqueSCEVs.FindNodeOrInsertPos(ID, IP)) return S;
-  SCEV *S = new (SCEVAllocator) SCEVUnknown(ID.Intern(SCEVAllocator), V);
+  if (SCEV *S = UniqueSCEVs.FindNodeOrInsertPos(ID, IP)) {
+    assert(cast<SCEVUnknown>(S)->getValue() == V &&
+           "Stale SCEVUnknown in uniquing map!");
+    return S;
+  }
+  SCEV *S = new (SCEVAllocator) SCEVUnknown(ID.Intern(SCEVAllocator), V, this,
+                                            FirstUnknown);
+  FirstUnknown = cast<SCEVUnknown>(S);
   UniqueSCEVs.InsertNode(S, IP);
   return S;
 }
@@ -3513,26 +3543,6 @@ void ScalarEvolution::forgetLoop(const Loop *L) {
 /// changed a value in a way that may effect its value, or which may
 /// disconnect it from a def-use chain linking it to a loop.
 void ScalarEvolution::forgetValue(Value *V) {
-  // If there's a SCEVUnknown tying this value into the SCEV
-  // space, remove it from the folding set map. The SCEVUnknown
-  // object and any other SCEV objects which reference it
-  // (transitively) remain allocated, effectively leaked until
-  // the underlying BumpPtrAllocator is freed.
-  //
-  // This permits SCEV pointers to be used as keys in maps
-  // such as the ValuesAtScopes map.
-  FoldingSetNodeID ID;
-  ID.AddInteger(scUnknown);
-  ID.AddPointer(V);
-  void *IP;
-  if (SCEV *S = UniqueSCEVs.FindNodeOrInsertPos(ID, IP)) {
-    UniqueSCEVs.RemoveNode(S);
-
-    // This isn't necessary, but we might as well remove the
-    // value from the ValuesAtScopes map too.
-    ValuesAtScopes.erase(S);
-  }
-
   Instruction *I = dyn_cast<Instruction>(V);
   if (!I) return;
 
@@ -5354,27 +5364,10 @@ void ScalarEvolution::SCEVCallbackVH::deleted() {
 void ScalarEvolution::SCEVCallbackVH::allUsesReplacedWith(Value *V) {
   assert(SE && "SCEVCallbackVH called with a null ScalarEvolution!");
 
-  Value *Old = getValPtr();
-
-  // If there's a SCEVUnknown tying this value into the SCEV
-  // space, replace the SCEVUnknown's value with the new value
-  // for the benefit of any SCEVs still referencing it, and
-  // and remove it from the folding set map so that new scevs
-  // don't reference it.
-  FoldingSetNodeID ID;
-  ID.AddInteger(scUnknown);
-  ID.AddPointer(Old);
-  void *IP;
-  if (SCEVUnknown *S = cast_or_null<SCEVUnknown>(
-        SE->UniqueSCEVs.FindNodeOrInsertPos(ID, IP))) {
-    S->V = V;
-    SE->UniqueSCEVs.RemoveNode(S);
-    SE->ValuesAtScopes.erase(S);
-  }
-
   // Forget all the expressions associated with users of the old value,
   // so that future queries will recompute the expressions using the new
   // value.
+  Value *Old = getValPtr();
   SmallVector<User *, 16> Worklist;
   SmallPtrSet<User *, 8> Visited;
   for (Value::use_iterator UI = Old->use_begin(), UE = Old->use_end();
@@ -5410,7 +5403,7 @@ ScalarEvolution::SCEVCallbackVH::SCEVCallbackVH(Value *V, ScalarEvolution *se)
 //===----------------------------------------------------------------------===//
 
 ScalarEvolution::ScalarEvolution()
-  : FunctionPass(&ID) {
+  : FunctionPass(&ID), FirstUnknown(0) {
 }
 
 bool ScalarEvolution::runOnFunction(Function &F) {
@@ -5422,6 +5415,12 @@ bool ScalarEvolution::runOnFunction(Function &F) {
 }
 
 void ScalarEvolution::releaseMemory() {
+  // Iterate through all the SCEVUnknown instances and call their
+  // destructors, so that they release their references to their values.
+  for (SCEVUnknown *U = FirstUnknown; U; U = U->Next)
+    U->~SCEVUnknown();
+  FirstUnknown = 0;
+
   Scalars.clear();
   BackedgeTakenCounts.clear();
   ConstantEvolutionLoopExitValue.clear();

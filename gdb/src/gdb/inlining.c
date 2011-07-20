@@ -2773,11 +2773,14 @@ check_for_additional_inlined_breakpoint_locations (struct symtabs_and_lines sals
 void
 inlined_subroutine_adjust_position_for_breakpoint (struct breakpoint *b)
 {
-  int i;
-  int j;
+  int i = 0;
+  int j = 0;
   int cur_pos = 0;
 
   gdb_assert (b->addr_string != NULL);
+
+  if (global_inlined_call_stack.nelts == 0)
+    return;
 
   for (i = 1; i <= global_inlined_call_stack.nelts; i++)
     {
@@ -3717,4 +3720,53 @@ print_inlined_frames_lite (struct ui_out *uiout,
 }
 
 /* APPLE LOCAL end radar 6534195  */
+
+int
+func_sym_is_inlined_function (struct symbol *function)
+{
+  struct objfile *objfile = NULL;
+  struct rb_tree_node_list *matches = NULL;
+  struct obj_section *objsect;
+
+  if (!function)
+    return 0;
+
+  struct block *func_block = SYMBOL_BLOCK_VALUE (function);
+  if (!func_block || !BLOCK_FUNCTION (func_block))
+    return 0;
+
+    /* Find the objfile, to check its inlined subroutine data.  */
+
+  objsect = find_pc_section (func_block->startaddr);
+  if (objsect)
+    objfile = objsect->objfile;
+
+  if (objfile == NULL)
+    return 0;
+
+  rb_tree_find_all_exact_matches (objfile->inlined_subroutine_data,
+                                  func_block->startaddr,
+                                  func_block->endaddr,
+                                  &matches);
+
+  /* The funciton's addresses match; it may be inlined. */
+
+  if (matches)
+    {
+      struct rb_tree_node_list *cur;
+      for (cur = matches; cur; cur = cur->next)
+        {
+          struct inlined_call_stack_record *tmp_node = 
+                          (struct inlined_call_stack_record *) cur->node->data;
+          if (tmp_node->func_sym
+              && strcmp (SYMBOL_LINKAGE_NAME (tmp_node->func_sym),
+                         SYMBOL_LINKAGE_NAME (function)) == 0)
+            /* The function name AND addresses match; it's inlined. */
+            return 1;
+        }
+    }
+
+  return 0;
+}
+
 /* APPLE LOCAL end subroutine inlining  (entire file) */

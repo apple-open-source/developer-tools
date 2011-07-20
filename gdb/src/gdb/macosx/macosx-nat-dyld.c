@@ -52,6 +52,7 @@
 #include "ui-out.h"
 #include "osabi.h"
 #include "exceptions.h"
+#include "remote.h"
 
 #ifdef USE_MMALLOC
 #include <mmalloc.h>
@@ -175,10 +176,6 @@ struct dyld_raw_infos
 
   CORE_ADDR dyld_notify;
 
-  /* Whether the dyld_notify address has been slid to the actual dyld
-     load address yet or not.  */
-  CORE_ADDR dyld_notify_address_slide;
-
   int process_detached_from_shared_region;
 
   /* The following fields are only present when version is higher than 1.  */
@@ -187,7 +184,12 @@ struct dyld_raw_infos
      to use.  It is set by dyld.  */
   int libsystem_initialized;
 
-  CORE_ADDR dyld_image_load_address;
+  /* The actual load address of dyld in memory (the Mach-O header is here) */
+  CORE_ADDR dyld_actual_load_address;
+
+  /* The address where dyld intended to load (its __TEXT seg addr in the 
+     exectutable file on disk/in memory) */
+  CORE_ADDR dyld_intended_load_address;
 };
 
 /* A structure filled in by dyld in the inferior process.
@@ -311,6 +313,15 @@ target_is_remote ()
   return 0;
 }
 
+int
+target_is_kdp_remote ()
+{
+  if (strcmp (current_target.to_shortname, "remote-kdp") == 0)
+    return 1;
+  return 0;
+}
+
+
 static CORE_ADDR
 lookup_dyld_address (macosx_dyld_thread_status *status, const char *s)
 {
@@ -379,19 +390,11 @@ macosx_init_addresses (macosx_dyld_thread_status *s)
 
   dyld_read_raw_infos (s->dyld_image_infos, &infos);
 
-  s->dyld_version = infos.version;
-  if (infos.version >= 2)
-    {
-      s->libsystem_initialized = infos.libsystem_initialized;
-      macosx_set_malloc_inited (s->libsystem_initialized);
-    }
+  s->libsystem_initialized = infos.libsystem_initialized;
+  macosx_set_malloc_inited (s->libsystem_initialized);
 
-  if (s->dyld_slide != INVALID_ADDRESS && s->dyld_minsyms_have_been_relocated == 0)
-    s->dyld_notify = infos.dyld_notify + s->dyld_slide;
-  else if (infos.dyld_notify_address_slide != 0)
-    s->dyld_notify = infos.dyld_notify + infos.dyld_notify_address_slide;
-  else
-    s->dyld_notify = infos.dyld_notify;
+  s->dyld_notify = infos.dyld_notify;
+  s->dyld_slide = infos.dyld_actual_load_address - infos.dyld_intended_load_address;
 }
 
 
@@ -716,12 +719,9 @@ macosx_lookup_dyld_name (bfd *abfd, const char **rname)
             }
           else
             {
-	      char* fixed_name = dyld_fix_path (name);
-	      if (fixed_name != name)
-		{
-		  xfree (name);
-		  name = fixed_name;
-		}
+	      char *fixed_name = dyld_fix_path (name);
+              xfree (name);
+              name = fixed_name;
               break;
             }
         }
@@ -773,33 +773,61 @@ macosx_locate_dyld_via_taskinfo (macosx_dyld_thread_status *s)
   if (s == NULL)
     return 0;
     
-#if defined (NM_NEXTSTEP)
 
   if (s->dyld_image_infos == INVALID_ADDRESS)
     {
-#if !defined (TASK_DYLD_INFO)
-      return 0;
+      CORE_ADDR all_image_info_addr = INVALID_ADDRESS;
+
+     // there is no dyld if this is kernel kdp-mode debugging
+     if (target_is_kdp_remote ())
+       return 0;
+
+     if (target_is_remote ())
+       {
+         all_image_info_addr = remote_macosx_get_all_image_infos_addr ();
+       }
+     else
+       {
+#if defined (NM_NEXTSTEP)
+          if (macosx_status->task == TASK_NULL)
+            return 0;
+
+          struct task_dyld_info task_dyld_info;
+          mach_msg_type_number_t count = TASK_DYLD_INFO_COUNT;
+          kern_return_t kret;
+
+          kret = task_info (macosx_status->task, TASK_DYLD_INFO,
+                            (task_info_t) &task_dyld_info, &count);
+
+          /* Sometimes task_info returns success, but the addr & size are still 0.
+             Presumably when a task is just starting?  Anyway, protect against that
+             case here.  */
+          if (kret != KERN_SUCCESS || 
+              task_dyld_info.all_image_info_addr == 0 || 
+              task_dyld_info.all_image_info_size == 0)
+              return 0;
+          all_image_info_addr = task_dyld_info.all_image_info_addr;
+#else 
+           return 0;
+#endif // NM_NEXTSTEP
+        }
+
+#if defined (TARGET_ARM)
+      // Old debugserver implementations don't support the qShlibInfoAddr
+      // packet -- try the old fixed load address of dyld
+      if (target_is_remote () && all_image_info_addr == INVALID_ADDRESS
+          && dyld_starts_here_p (0x2fe00000))
+        {
+          s->dyld_addr = 0x2fe00000;
+          s->dyld_slide = 0;
+          return 1;
+        }
 #endif
-      if (macosx_status->task == TASK_NULL)
+
+      if (all_image_info_addr == INVALID_ADDRESS)
         return 0;
-
-      struct task_dyld_info task_dyld_info;
-      mach_msg_type_number_t count = TASK_DYLD_INFO_COUNT;
-      kern_return_t kret;
-
-      kret = task_info (macosx_status->task, TASK_DYLD_INFO,
-                        (task_info_t) &task_dyld_info, &count);
-
-      /* Sometimes task_info returns success, but the addr & size are still 0.
-         Presumably when a task is just starting?  Anyway, protect against that
-         case here.  */
-      if (kret != KERN_SUCCESS || 
-          task_dyld_info.all_image_info_addr == 0 || 
-          task_dyld_info.all_image_info_size == 0)
-          return 0;
-      s->dyld_image_infos = task_dyld_info.all_image_info_addr;
+      s->dyld_image_infos = all_image_info_addr;
     }
-#endif /* NM_NEXTSTEP */
 
   if (s->dyld_image_infos != INVALID_ADDRESS)
     {
@@ -812,41 +840,34 @@ macosx_locate_dyld_via_taskinfo (macosx_dyld_thread_status *s)
       if (e.reason != NO_ERROR)
         return 0;
 
-      if (raw_infos.dyld_image_load_address != INVALID_ADDRESS
-          && raw_infos.dyld_image_load_address != 0
-          && dyld_starts_here_p (raw_infos.dyld_image_load_address))
+      if (raw_infos.dyld_actual_load_address != INVALID_ADDRESS
+          && raw_infos.dyld_actual_load_address != 0
+          && dyld_starts_here_p (raw_infos.dyld_actual_load_address))
         {
-          CORE_ADDR load_command_vma;
-
-          // Get the intended load addr of dyld by looking at the 
-          // Mach-O load commands in memory, return that if found.
-
-          load_command_vma = find_text_segment_load_address 
-                                      (raw_infos.dyld_image_load_address);
-          if (load_command_vma != INVALID_ADDRESS)
+          if (raw_infos.version >= 9 
+              && raw_infos.dyld_intended_load_address != INVALID_ADDRESS
+              && dyld_starts_here_p (raw_infos.dyld_actual_load_address))
             {
-              s->dyld_slide = raw_infos.dyld_image_load_address - load_command_vma;
-              s->dyld_addr = raw_infos.dyld_image_load_address;
+              s->dyld_addr = raw_infos.dyld_actual_load_address;
+              s->dyld_slide = raw_infos.dyld_actual_load_address - raw_infos.dyld_intended_load_address;
               return 1;
             }
         }
 
-      if (raw_infos.dyld_image_load_address == 0
+      if (raw_infos.dyld_intended_load_address == INVALID_ADDRESS
+          && raw_infos.dyld_actual_load_address != INVALID_ADDRESS
           && raw_infos.version >= 9
           && s->dyld_name != NULL
-          && s->dyld_name[0] != '\0')
+          && s->dyld_name[0] != '\0'
+          && dyld_starts_here_p (raw_infos.dyld_actual_load_address))
         {
           CORE_ADDR dyld_file_vma;
           CORE_ADDR dyld_here;
           if (macosx_lookup_dyld_file_load_address (s->dyld_name, &dyld_file_vma) == 0)
             return 0;
-          dyld_here = dyld_file_vma + raw_infos.dyld_notify_address_slide;
-          if (dyld_starts_here_p (dyld_here))
-            {
-              s->dyld_addr = dyld_here;
-              s->dyld_slide = raw_infos.dyld_notify_address_slide;
-              return 1;
-            }
+          s->dyld_addr = raw_infos.dyld_actual_load_address;
+          s->dyld_slide = raw_infos.dyld_actual_load_address - dyld_file_vma;
+          return 1;
         }
     }
   return 0;
@@ -1193,6 +1214,10 @@ macosx_dyld_init (macosx_dyld_thread_status *s, bfd *exec_bfd)
 	    osabi_seen_in_attached_dyld = GDB_OSABI_DARWINV6;
 	  else if (s->dyld_mem_header.cpusubtype == BFD_MACH_O_CPU_SUBTYPE_ARM_7)
 	    osabi_seen_in_attached_dyld = GDB_OSABI_DARWINV7;
+	  else if (s->dyld_mem_header.cpusubtype == BFD_MACH_O_CPU_SUBTYPE_ARM_7F)
+	    osabi_seen_in_attached_dyld = GDB_OSABI_DARWINV7F;
+	  else if (s->dyld_mem_header.cpusubtype == BFD_MACH_O_CPU_SUBTYPE_ARM_7K)
+	    osabi_seen_in_attached_dyld = GDB_OSABI_DARWINV7K;
 	  else
 	    osabi_seen_in_attached_dyld = GDB_OSABI_DARWIN;
 	}
@@ -1206,19 +1231,36 @@ macosx_dyld_init (macosx_dyld_thread_status *s, bfd *exec_bfd)
 
   s->dyld_addr = dyld_address;
   macosx_dyld_update (1);
-  macosx_locate_dyld_static (s, &static_dyld_address);
+  if (s->dyld_addr == INVALID_ADDRESS || s->dyld_slide == INVALID_ADDRESS)
+    {
+      macosx_locate_dyld_static (s, &static_dyld_address);
 
-  if (static_dyld_address == INVALID_ADDRESS)
-    return 0;
+      if (static_dyld_address == INVALID_ADDRESS)
+        return 0;
 
-  /* At this point we have the actual load address of dyld
-     and the intended load address (the 'static_address' gotten
-     out of the dyld objfile), so don't do any additional slide
-     adjustments on dyld symbols - they will have the correct addrs
-     when the objfile/minsyms is adjusted to the actual load addr.  */
+      /* At this point we have the actual load address of dyld
+         and the intended load address (the 'static_address' gotten
+         out of the dyld objfile).  */
 
-  s->dyld_addr = dyld_address;
-  s->dyld_minsyms_have_been_relocated = 1;
+      s->dyld_addr = dyld_address;
+      s->dyld_minsyms_have_been_relocated = 1;
+
+      if (s->dyld_slide == INVALID_ADDRESS)
+        {
+          s->dyld_slide = dyld_address - static_dyld_address;
+          if (s->dyld_slide != 0)
+            {
+              s->dyld_minsyms_have_been_relocated = 0;
+            }
+        }
+    }
+  else
+    {
+      if (s->dyld_slide == 0)
+        s->dyld_minsyms_have_been_relocated = 1;
+      else
+        s->dyld_minsyms_have_been_relocated = 0;
+    }
 
   macosx_init_addresses (s);
   macosx_set_start_breakpoint (s, exec_bfd);
@@ -1645,8 +1687,16 @@ macosx_solib_add (const char *filename, int from_tty,
     }
   else
     {
+      if (target_is_remote ())
+        {
+          printf_filtered ("Communication packet log leading up to internal error:\n");
+          dump_packets_command ("", 0);
+          printf_filtered ("\n\nPlease include all of the above log output in your bug report.\n");
+          printf_filtered ("\n");
+        }
       internal_error (__FILE__, __LINE__,
-                      "unrecognized shared library breakpoint");
+                      "unrecognized shared library breakpoint, stopped at 0x%s", 
+                      paddr_nz (read_pc()));
       notify = 0;
     }
 
@@ -1717,17 +1767,16 @@ macosx_init_dyld_from_core (void)
 
   DYLD_ALL_OBJFILE_INFO_ENTRIES (info, e, i)
     {
-      if (e->reason != dyld_reason_executable)
-	{
-	  dyld_remove_objfile (e);
-	  dyld_objfile_entry_clear (e);
-	}
+      dyld_remove_objfile (e);
+      dyld_objfile_entry_clear (e);
     }
 
   macosx_dyld_mourn_inferior ();
 
   macosx_dyld_thread_clear (&macosx_dyld_status);
   
+  reinitialize_objc ();
+
   /* The macosx-exec target keeps a list of address ranges and which
      bfd and bfd_sections they correspond to, so we need to blow away
      this cache. 
@@ -1844,11 +1893,11 @@ macosx_get_osabi_from_dyld_entry (bfd *abfd)
   enum gdb_osabi bfd_osabi = GDB_OSABI_UNKNOWN;
   const char *entry_name = NULL;
 
-  for (i=num_macosx_solib_add_dyld_objfile_entries - 1; i >= 0; i--)
+  for (i = num_macosx_solib_add_dyld_objfile_entries - 1; i >= 0; i--)
     {
       e = &macosx_solib_add_dyld_objfile_entries[i];
       entry_name = dyld_entry_filename (e, d, DYLD_ENTRY_FILENAME_LOADED);
-      if (entry_name != NULL && strcmp(entry_name, bfd_name) == 0)
+      if (entry_name != NULL && strcmp (entry_name, bfd_name) == 0)
 	{
 	  bfd_osabi = dyld_objfile_entry_osabi (e);
 	  break;
@@ -1861,11 +1910,18 @@ macosx_get_osabi_from_dyld_entry (bfd *abfd)
       DYLD_ALL_OBJFILE_INFO_ENTRIES (&status->current_info, e, i)
 	{
 	  entry_name = dyld_entry_filename (e, d, DYLD_ENTRY_FILENAME_LOADED);
-	  if (entry_name != NULL && strcmp(entry_name, bfd_name) == 0)
-	    {
-	      bfd_osabi = dyld_objfile_entry_osabi (e);
-	      break;
-	    }
+	  if (entry_name != NULL)
+            {
+              const char *alt_entry_name = dyld_fix_path (entry_name);
+              if (strcmp (entry_name, bfd_name) == 0
+                  || strcmp (alt_entry_name, bfd_name) == 0)
+                {
+                  bfd_osabi = dyld_objfile_entry_osabi (e);
+                  xfree (alt_entry_name);
+                  break;
+                }
+              xfree (alt_entry_name);
+            }
 	}
     }
   
@@ -1902,144 +1958,66 @@ get_sectoffs_for_shared_cache_dylib (struct dyld_objfile_entry *entry,
                                     CORE_ADDR header_addr)
 {
   int cur_section;
+  struct cleanup *cleanup;
   bfd *this_bfd = entry->abfd;
   struct section_offsets *sect_offsets;
   struct bfd_section *this_sect;
-  unsigned int header_size;
   int i;
-  CORE_ADDR curpos;
-  struct load_command cmd;
 
-  if (entry->mem_header.magic == 0)
-    target_read_mach_header (header_addr, &entry->mem_header);
-  header_size = target_get_mach_header_size (&entry->mem_header);
-  
+  struct section_addr_info *sect_addrs;
+  sect_addrs = get_section_addresses_for_macho_in_memory (header_addr);
+  if (sect_addrs == NULL)
+    return NULL;
+  cleanup = make_cleanup_free_section_addr_info (sect_addrs);
+
+  /* The libraries in the shared cache are slid an additional
+     amount within the shared cahce -- and that slide is not
+     correctly recorded in the in-memory macho load commands
+     that get_section_addresses_for_macho_in_memory() returned.  */
+
+  CORE_ADDR slide_within_shared_cache = 0;
+  for (i = 0; i < sect_addrs->num_sections; i++)
+    {
+      if (strcmp ("LC_SEGMENT.__TEXT", sect_addrs->other[i].name) == 0)
+        {
+          slide_within_shared_cache = header_addr - sect_addrs->other[i].addr;
+          break;
+        }
+    }
+  for (i = 0; i < sect_addrs->num_sections; i++)
+    sect_addrs->other[i].addr += slide_within_shared_cache;
+
+  /* The sect_addrs array now represents the actual load address of each
+     section for this dylib in the shared cache.  */
+
   sect_offsets = (struct section_offsets *)
     xmalloc (SIZEOF_N_SECTION_OFFSETS (this_bfd->section_count));
   memset (sect_offsets, 0,
           SIZEOF_N_SECTION_OFFSETS (this_bfd->section_count));
 
-  /* dyld may have slid this dylib within the shared cache region
-     a little bit extra for this one process.  The Mach-O header
-     addresses we get from the MEM_BFD will be the system-wide generic 
-     shared cache addresses, not this process' specific slid values.  
-     Both of these differ from the on-disk addresses in the load 
-     commands of the actual library file (which typically show the
-     library loading at 0x0).  
-     The same slide value will be applied to all sections of the dylib
-     so we determine it outside the section loop below.  */
-  CORE_ADDR process_shared_cache_slide = 0;
-
-  curpos = header_addr + header_size;
-  const char seg_prefix[] = "LC_SEGMENT.";
-  const int seg_prefix_len = strlen ("LC_SEGMENT.");
-  for (i = 0; i < entry->mem_header.ncmds; i++)
+  for (i = 0; i < sect_addrs->num_sections; i++)
     {
-      if (target_read_load_command (curpos, &cmd))
-        break;
+      if (sect_addrs->other[i].name == NULL
+          || sect_addrs->other[i].name[0] == '\0'
+          || sect_addrs->other[i].addr == 0)
+        continue;
 
-      switch (cmd.cmd)
+      for (this_sect = this_bfd->sections, cur_section = 0;
+           this_sect != NULL;
+           this_sect = this_sect->next, ++cur_section)
         {
-          case LC_SEGMENT:
+          if (this_sect->name == NULL || this_sect->name[0] == '\0')
+            continue;
+
+          if (strcmp (sect_addrs->other[i].name, this_sect->name) == 0)
             {
-              struct segment_command seg32;
-              if (target_read_minimal_segment_32 (curpos, &seg32))
-                break;
-              int seg32_name_len = strlen (seg32.segname);
-              if (seg32_name_len > 16)
-                seg32_name_len = 16;
-
-              if (seg32_name_len == 6 && strcmp (seg32.segname, "__TEXT") == 0)
-                  process_shared_cache_slide = header_addr - seg32.vmaddr;
-
-              
-              CORE_ADDR seg_slide = INVALID_ADDRESS;
-              for (this_sect = this_bfd->sections, cur_section = 0; 
-                   this_sect != NULL;
-                   this_sect = this_sect->next, ++cur_section)
-                {
-
-                  if (strstr (this_sect->name, seg_prefix) == this_sect->name)
-                    {
-                      const char *this_sect_name = this_sect->name + 
-                                                   seg_prefix_len;
-                      if (strnstr (this_sect_name, seg32.segname, seg32_name_len)
-                          == this_sect_name)
-                        {
-                          if (this_sect_name[seg32_name_len] == '\0')
-                            {
-                              /* We have the segment itself, this is where we will
-                                 calculate the slide for the segment and all 
-                                 sections within it.  */
-                              if (seg32.vmaddr != 0)
-                                  seg_slide = seg32.vmaddr - this_sect->vma;
-                              else
-                                  seg_slide = 0;
-                            }
-                          gdb_assert (seg_slide != INVALID_ADDRESS);
-                          sect_offsets->offsets[cur_section] = seg_slide;
-                        }
-                    }
-                }
+              sect_offsets->offsets[cur_section] = 
+                          sect_addrs->other[i].addr - this_sect->vma; 
             }
-            break;
-            
-          case LC_SEGMENT_64:
-            {
-              struct segment_command_64 seg64;
-              if (target_read_minimal_segment_64 (curpos, &seg64))
-                break;
-              int seg64_name_len = strlen (seg64.segname);
-              if (seg64_name_len > 16)
-                seg64_name_len = 16;
-
-              if (seg64_name_len == 6 && strcmp (seg64.segname, "__TEXT") == 0)
-                  process_shared_cache_slide = header_addr - seg64.vmaddr;
-
-              
-              CORE_ADDR seg_slide = INVALID_ADDRESS;
-              for (this_sect = this_bfd->sections, cur_section = 0; 
-                   this_sect != NULL;
-                   this_sect = this_sect->next, ++cur_section)
-                {
-
-                  if (strstr (this_sect->name, seg_prefix) == this_sect->name)
-                    {
-                      const char *this_sect_name = this_sect->name + 
-                                                   seg_prefix_len;
-                      if (strnstr (this_sect_name, seg64.segname, seg64_name_len) 
-                          == this_sect_name)
-                        {
-                          if (this_sect_name[seg64_name_len] == '\0')
-                            {
-                              /* We have the segment itself, this is where we will
-                                 calculate the slide for the segment and all 
-                                 sections within it.  */
-                              if (seg64.vmaddr != 0)
-                                  seg_slide = seg64.vmaddr - this_sect->vma;
-                              else
-                                  seg_slide = 0;
-                            }
-                          gdb_assert (seg_slide != INVALID_ADDRESS);
-                          sect_offsets->offsets[cur_section] = seg_slide;
-                        }
-                    }
-                }
-            }
-          
-          default:
-            break;
         }
-      curpos += cmd.cmdsize;
     }
 
-  if (process_shared_cache_slide != 0)
-    {
-        for (this_sect = this_bfd->sections, cur_section = 0; 
-             this_sect != NULL;
-             this_sect = this_sect->next, ++cur_section)
-          sect_offsets->offsets[cur_section] += process_shared_cache_slide;
-    }
+  do_cleanups (cleanup);
   return sect_offsets;
 }
 
@@ -2139,13 +2117,8 @@ dyld_info_process_raw (struct macosx_dyld_thread_status *s,
       /* Fix dyld path in case we have dyld search/replace paths for
          cross targets.  */
       resolved = dyld_fix_path (namebuf);
-      if (resolved != namebuf)
-	{
-	  xfree (namebuf);
-	  namebuf = resolved;
-	}
-
-      resolved = namebuf;
+      xfree (namebuf);
+      namebuf = resolved;
 
       resolved = realpath (namebuf, buf);
       if (resolved == NULL)
@@ -2444,6 +2417,12 @@ struct dyld_all_image_infos_offsets
   int uuidArrayCount;                   /* version 8 */
   int uuidArray;                        /* version 8 */
   int dyldAllImageInfosAddress;         /* version 9 */
+  int initialImageCount;                /* version 10 */
+  int errorKind;                        /* version 11 */
+  int errorClientOfDylibPath;           /* version 11 */
+  int errorTargetDylibPath;             /* version 11 */
+  int errorSymbol;                      /* version 11 */
+  int sharedCacheSlide;                 /* version 12 */
 };
 
 /* Given the ADDR of the struct dyld_all_image_infos in the inferior,
@@ -2482,6 +2461,12 @@ dyld_read_raw_infos (CORE_ADDR addr, struct dyld_raw_infos *info)
       .uuidArrayCount                  = i + i + p + p + b + b + (p - 2 * b) + p + p + p + p + p + p + p,
       .uuidArray                       = i + i + p + p + b + b + (p - 2 * b) + p + p + p + p + p + p + p + p,
       .dyldAllImageInfosAddress        = i + i + p + p + b + b + (p - 2 * b) + p + p + p + p + p + p + p + p + p,
+      .initialImageCount               = i + i + p + p + b + b + (p - 2 * b) + p + p + p + p + p + p + p + p + p + p,
+      .errorKind                       = i + i + p + p + b + b + (p - 2 * b) + p + p + p + p + p + p + p + p + p + p + p,
+      .errorClientOfDylibPath          = i + i + p + p + b + b + (p - 2 * b) + p + p + p + p + p + p + p + p + p + p + p + p,
+      .errorTargetDylibPath            = i + i + p + p + b + b + (p - 2 * b) + p + p + p + p + p + p + p + p + p + p + p + p + p,
+      .errorSymbol                     = i + i + p + p + b + b + (p - 2 * b) + p + p + p + p + p + p + p + p + p + p + p + p + p + p,
+      .sharedCacheSlide                = i + i + p + p + b + b + (p - 2 * b) + p + p + p + p + p + p + p + p + p + p + p + p + p + p + p,
     };
 
   uint8_t version_buf[4];
@@ -2508,11 +2493,6 @@ dyld_read_raw_infos (CORE_ADDR addr, struct dyld_raw_infos *info)
   info->info_array = extract_unsigned_integer (buf + offsets.infoArray, wordsize);
   info->dyld_notify = extract_unsigned_integer (buf + offsets.notification, wordsize);
 
-  /* By default assume the dyld_notify address is correct.
-     If dyld is being loaded pie by the kernel, it may not
-     have had a chance to relocate itself in-situ yet. */
-  info->dyld_notify_address_slide = 0;
-
 #if defined (TARGET_ARM)
   /* Clear bit zero of for ARM in case the dyld_notify routine is in Thumb.  */
   info->dyld_notify = info->dyld_notify & 0xfffffffffffffffeull;
@@ -2521,25 +2501,22 @@ dyld_read_raw_infos (CORE_ADDR addr, struct dyld_raw_infos *info)
   info->process_detached_from_shared_region = extract_unsigned_integer 
                             (buf + offsets.processDetachedFromSharedRegion, 1);
 
-  /* Read the 'libSystemInitialized' bool.  */
-  if (info->version >= 2)
-    {
-      info->libsystem_initialized = extract_unsigned_integer 
-                                    (buf + offsets.libSystemInitialized, 1);
-      info->dyld_image_load_address = extract_unsigned_integer 
-                                 (buf + offsets.dyldImageLoadAddress, wordsize);
-    }
-  else
-    {
-      info->libsystem_initialized = -1;
-      info->dyld_image_load_address = INVALID_ADDRESS;
-    }
+  info->libsystem_initialized = extract_unsigned_integer 
+                                (buf + offsets.libSystemInitialized, 1);
+  info->dyld_actual_load_address = extract_unsigned_integer 
+                             (buf + offsets.dyldImageLoadAddress, wordsize);
 
+  // If we're attaching to a process very early in its startup -- before
+  // dyld has had a chance to update the addresses of these fields -- we
+  // can tell what the adjustment will be that'll be applied to them soon
+  // and we can apply it by hand now before we return the addresses.
+
+  CORE_ADDR adjustment = INVALID_ADDRESS;
   if (info->version >= 9)
     {
       CORE_ADDR dyld_image_infos_addr;
-      dyld_image_infos_addr = extract_unsigned_integer 
-                             (buf + offsets.dyldAllImageInfosAddress, wordsize);
+      dyld_image_infos_addr = extract_unsigned_integer
+                            (buf + offsets.dyldAllImageInfosAddress, wordsize);
 
       /* The dyld_all_image_infos structure contains a pointer to itself.
          If dyld is loaded pie by the kernel, at initial startup it needs
@@ -2550,8 +2527,32 @@ dyld_read_raw_infos (CORE_ADDR addr, struct dyld_raw_infos *info)
          don't agree, we need to apply the slide ourselves.  */
       if (dyld_image_infos_addr != addr)
         {
-          info->dyld_notify_address_slide = addr - dyld_image_infos_addr;
+          adjustment = addr - dyld_image_infos_addr;
         }
+    }
+
+  // We are very early in program startup, the addresses in the 
+  // dyld_all_image_infos struct need to be updated by hand.
+
+  if (adjustment != INVALID_ADDRESS
+      && dyld_starts_here_p (info->dyld_actual_load_address + adjustment))
+    {
+      if (info->info_array != 0 && info->info_array != INVALID_ADDRESS)
+        info->info_array += adjustment;
+      if (info->dyld_notify != 0 && info->dyld_notify != INVALID_ADDRESS)
+        info->dyld_notify += adjustment;
+      if (info->dyld_actual_load_address != 0 && info->dyld_actual_load_address != INVALID_ADDRESS)
+        info->dyld_actual_load_address += adjustment;
+    }
+
+  if (dyld_starts_here_p (info->dyld_actual_load_address))
+    {
+      info->dyld_intended_load_address = find_text_segment_load_address 
+                                               (info->dyld_actual_load_address);
+    }
+  else
+    {
+      info->dyld_intended_load_address = INVALID_ADDRESS;
     }
 }
 
@@ -2660,8 +2661,19 @@ dyld_info_read (struct macosx_dyld_thread_status *status,
 
       if (realpath (dyld_name, buf) != NULL)
         dyld_name = buf;
-        
-      entry->dyld_name = xstrdup (dyld_name);
+
+      // run the dyld name through the shlib pathname substitutions
+      char *new_dyld_name = dyld_fix_path (dyld_name);
+      if (file_exists_p (new_dyld_name))
+        {
+          entry->dyld_name = new_dyld_name;
+        }
+      else 
+        {
+          xfree (new_dyld_name);
+          entry->dyld_name = xstrdup (dyld_name);
+        }
+
       entry->dyld_name_valid = 1;
       entry->prefix = dyld_symbols_prefix;
 
@@ -2834,6 +2846,32 @@ macosx_dyld_mourn_inferior (void)
 	e->text_name = e->dyld_name;
       e->dyld_name = NULL;
     }
+
+  // Remove any objfiles that have are only in-memory (don't exist as
+  // an on-disk file) and clear the dyld_objfile_entry struct as well.
+  // We'll pick them up again on re-exec if the user does that.
+  int removed_memory_objfiles = 0;
+  DYLD_ALL_OBJFILE_INFO_ENTRIES (&status->current_info, e, i)
+    {
+
+      // Anything in the shared cache, even if it's in-memory-only,
+      // will be present on re-launch so just leave it be.
+      if (e->objfile && e->objfile->obfd
+          && bfd_mach_o_in_shared_cached_memory (e->objfile->obfd))
+        {
+          continue;
+        }
+
+      if (e->objfile && macosx_bfd_is_in_memory (e->objfile->obfd))
+        {
+          dyld_remove_objfile (e);
+          dyld_objfile_entry_clear (e); 
+          removed_memory_objfiles = 1;
+        }
+    }
+  if (removed_memory_objfiles)
+    dyld_objfile_info_pack (&status->current_info);
+
   free_pre_run_memory_map (status->pre_run_memory_map);
   status->pre_run_memory_map = NULL;
 }
@@ -3566,37 +3604,51 @@ macosx_pc_solib (CORE_ADDR addr)
 }
 
 
-/* 
-  Fixup dyld paths by seaching our list of search/replace path pairs. 
-  This is used for remote targets that may have executables whose dyld
-  paths do not match those on the host machine.   
-*/
+/* Fixup dyld paths by seaching our list of search/replace path pairs. 
+   This is used for remote targets that may have executables whose dyld
+   paths do not match those on the host machine.   
+
+   The returned char* always points to newly xmalloc'ed memory even if 
+   there was no change to the string.  It is the caller's responsibility 
+   to free it.  */
+
 char *
-dyld_fix_path (char *path)
+dyld_fix_path (const char *path)
 {
   int i;
   /* Check if we have any dyld path substitutions to perform.  */
   if (shlib_path_substitutions)
     {
+      /* First check to make sure we're not double-substituting a path */
+      for (i = 0; shlib_path_substitutions[i] != NULL; i += 2)
+        {
+          const char *prefix = shlib_path_substitutions[i];
+          const char *new_prefix = shlib_path_substitutions[i + 1];
+          if (strncmp (path, new_prefix, strlen (new_prefix)) == 0)
+            {
+              return xstrdup (path);
+            }
+        }
+    
       /* Step through all path substitution pairs.  */
-      for (i=0; shlib_path_substitutions[i] != NULL; i+=2)
+      for (i = 0; shlib_path_substitutions[i] != NULL; i += 2)
 	{
-	  char *prefix = shlib_path_substitutions[i];
+          const char *prefix = shlib_path_substitutions[i];
+          const char *new_prefix = shlib_path_substitutions[i + 1];
 	  /* See if the path passed in starts with one of our search paths.  */
-	  if (strcasestr (path, prefix) == path)
+	  if (strncmp (path, prefix, strlen (prefix)) == 0)
 	    {
 	      /* We have a match, now we will substitute the new value into
 	         the existing path.  */
-	      char *new_prefix = shlib_path_substitutions[i+1];
 	      int old_prefix_length = strlen (prefix);
 	      int new_path_length = strlen (new_prefix) + 
 				    strlen (path) - old_prefix_length + 1;
-              char* new_path = (char *) xmalloc (new_path_length);
+              char *new_path = (char *) xmalloc (new_path_length);
 	      if (new_path)
 		{
 		  strcpy (new_path, new_prefix);
 		  strcat (new_path, path + old_prefix_length);
-		  return new_path;
+                  return new_path;
 		}
 	      else
 		{
@@ -3605,7 +3657,7 @@ dyld_fix_path (char *path)
 	    }
 	}
     }
-    return path;
+    return xstrdup (path);
 }
 
 /* APPLE LOCAL: This boolean tells us whether the malloc library is

@@ -57,6 +57,7 @@ static pthread_mutex_t write_mutex;
 
 static FILE *excthread_stderr_re = NULL;
 static int excthread_debugflag = 0;
+static int dont_handle_bad_access = 0;
 
 #ifndef HAVE_64_BIT_MACH_EXCEPTIONS
 #define mach_exc_server exc_server
@@ -366,13 +367,17 @@ macosx_exception_thread_create (macosx_exception_thread_status *s,
                             MACH_MSG_TYPE_MAKE_SEND);
   MACH_CHECK_ERROR (kret);
 
+  unsigned int which_exceptions = EXC_MASK_ALL;
+  if (dont_handle_bad_access)
+    which_exceptions &= ~EXC_MASK_BAD_ACCESS;
+ 
   if (inferior_bind_exception_port_flag)
     {
       macosx_save_exception_ports (task, &s->saved_exceptions);
 
       kret = task_set_exception_ports
         (task,
-         EXC_MASK_ALL,
+         which_exceptions,
          s->inferior_exception_port, EXCEPTION_DEFAULT | MACH_EXCEPTION_CODES, THREAD_STATE_NONE);
       MACH_CHECK_ERROR (kret);
     }
@@ -680,4 +685,10 @@ Set if printing exception thread debugging statements."), _("\
 Show if printing exception thread debugging statements."), NULL,
 			    NULL, NULL,
 			    &setdebuglist, &showdebuglist);
+  add_setshow_zinteger_cmd ("dont-handle-bad-access", class_obscure,
+			    &dont_handle_bad_access, _("\
+Set if we allow the EXC_BAD_ACCESS to be handled by the system."), _("\
+Show if we allow the EXC_BAD_ACCESS to be handled by the system."), NULL,
+			    NULL, NULL,
+			    &setlist, &showlist);
 }

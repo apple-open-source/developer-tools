@@ -1,3 +1,27 @@
+2011-04-07  Jason Molenda  (jmolenda@apple.com)
+
+	* gdb.sh: Update script to pick the correct osabi given an
+	armv6+armv7 binary when run on an armv7f system - also handle
+	armv7k systems and choose a sensible default of armv7
+	if this is being run on a non-arm system instead of armv6.
+
+2011-03-16  Jason Molenda  (jmolenda@apple.com)
+
+	* Makefile: Exclude .svn directories for the installsrc etc targets.
+
+2011-03-08  Jason Molenda  (jmolenda@apple.com)
+
+	* gdb.sh: Recognize armv7f and armv7k cpusubtypes,
+	pass them as distinct osabi arguments to gdb.
+
+2011-03-01  Jason Molenda  (jmolenda@apple.com)
+
+	* gdb.sh: Default to armv7 if the cpusubtype is not recognized.
+
+2011-02-18  Jason Molenda  (jmolenda@apple.com)
+
+	* gdb.sh: Remove ppc support from gdb.sh.
+
 2010-08-05  Jason Molenda  (jmolenda@apple.com)
 
 	* Makefile (TARGET_ONLY_EXTRA_ARCHS): Build the cross arm

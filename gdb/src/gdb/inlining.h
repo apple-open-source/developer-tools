@@ -350,5 +350,8 @@ extern struct symbol *block_inlined_function (struct block *,
 /* APPLE LOCAL end inlined function symbols & blocks  */
 
 extern int func_sym_has_inlining (struct symbol *, struct frame_info *);
+
+extern int func_sym_is_inlined_function (struct symbol *);
+
 #endif /* !defined(INLINE_H) */
 /* APPLE LOCAL end subroutine inlining (entire file) */

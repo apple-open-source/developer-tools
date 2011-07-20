@@ -6,4 +6,5 @@ _prefix="$_bindir/.."
 /^NM=/s,/usr/bin,$_bindir,
 g,/usr/lib/,s,,$_prefix/lib/,g
 g,/usr/libexec/,s,,$_prefix/libexec/,g
+g/"Waiting for $lockfile to be removed"/.-1s/ ln / ln -s /
 w

@@ -1306,8 +1306,8 @@ main (int argc, const char **argv)
 
   /* If argv[0] is a symbolic link, use the directory of the pointed-to file
      to find compiler components. */
-
-  if ((linklen = readlink (argv[0], path_buffer, PATH_MAX)) != -1)
+  /* LLVM LOCAL: loop to follow multiple levels of links */
+  while ((linklen = readlink (argv[0], path_buffer, PATH_MAX)) != -1)
     {
       /* readlink succeeds if argv[0] is a symlink.  path_buffer now contains
 	 the file referenced. */

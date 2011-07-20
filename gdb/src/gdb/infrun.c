@@ -3399,10 +3399,30 @@ insert_step_resume_breakpoint_at_frame (struct frame_info *return_frame)
   sr_sal.pc = ADDR_BITS_REMOVE (get_frame_pc (return_frame));
   sr_sal.section = find_pc_overlay (sr_sal.pc);
 
+  if (debug_infrun)
+    fprintf_unfiltered (gdb_stdlog, "infrun: inserting step resume breakpoint at "
+                        "0x%s\n", paddr_nz (sr_sal.pc));
+
   if (stepping_over_inlined_subroutine)
     insert_step_resume_breakpoint_at_sal (sr_sal, step_frame_id);
   else
     insert_step_resume_breakpoint_at_sal (sr_sal, get_frame_id (return_frame));
+}
+
+struct breakpoint *
+hide_step_resume_breakpoint ()
+{
+  struct breakpoint *old_step_resume_breakpoint = step_resume_breakpoint;
+  step_resume_breakpoint = NULL;
+  return old_step_resume_breakpoint;
+}
+
+void
+restore_step_resume_breakpoint (struct breakpoint *bp)
+{
+  if (bp && bp->type != bp_step_resume)
+    internal_error (__FILE__, __LINE__, "Tried to restore a step resume breakpoint, that was not of step resume type.");
+  step_resume_breakpoint = bp;
 }
 
 static void

@@ -1911,7 +1911,7 @@ _initialize_source (void)
      Always use the GNU regex routine for consistency across all hosts.
      Our current GNU regex.c does not have all the POSIX features, so this is
      just an approximation.  */
-  re_set_syntax (RE_SYNTAX_GREP);
+  re_set_syntax (REG_BASIC);
 
   c = add_cmd ("directory", class_files, directory_command, _("\
 Add directory DIR to beginning of search path for source files.\n\

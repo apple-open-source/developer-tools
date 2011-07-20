@@ -1065,16 +1065,12 @@ apropos_command (char *searchstr, int from_tty)
 {
   extern struct cmd_list_element *cmdlist; /*This is the main command list*/
   regex_t pattern;
-  char *pattern_fastmap;
   char errorbuffer[512];
-  pattern_fastmap = xcalloc (256, sizeof (char));
   if (searchstr == NULL)
       error (_("REGEXP string is empty"));
 
   if (regcomp(&pattern,searchstr,REG_ICASE) == 0)
     {
-      pattern.fastmap=pattern_fastmap;
-      re_compile_fastmap(&pattern);
       apropos_cmd (gdb_stdout,cmdlist,&pattern,"");
     }
   else
@@ -1082,7 +1078,6 @@ apropos_command (char *searchstr, int from_tty)
       regerror(regcomp(&pattern,searchstr,REG_ICASE),NULL,errorbuffer,512);
       error (_("Error in regular expression:%s"),errorbuffer);
     }
-  xfree (pattern_fastmap);
 }
 
 /* Print a list of files and line numbers which a user may choose from

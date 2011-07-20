@@ -150,8 +150,24 @@ Overload resolution in evaluating C++ functions is %s.\n"),
 struct value *
 find_function_in_inferior (const char *name, struct type *type)
 {
-  struct symbol *sym;
-  sym = lookup_symbol (name, 0, VAR_DOMAIN, 0, NULL);
+  struct symbol *sym = NULL;
+  int syms_found = 0;
+  struct symbol_search *sym_list = NULL;
+  syms_found = lookup_symbol_all (name, NULL, VAR_DOMAIN, (int *) NULL,
+                                  (struct symtab **) NULL, &sym_list);
+
+  if (syms_found > 0)
+    {
+      struct symbol_search *cur;
+      int found = 0;
+      for (cur = sym_list; cur && !found; ++cur)
+        if (!func_sym_is_inlined_function (cur->symbol))
+          {
+            sym = cur->symbol;
+            found = 1;
+          }
+    }
+
   if (sym != NULL)
     {
       if (SYMBOL_CLASS (sym) != LOC_BLOCK)
@@ -3074,7 +3090,7 @@ cast_into_complex (struct type *type, struct value *val)
 struct thread_is_safe_args
 {
   struct thread_info *tp;
-  struct re_pattern_buffer *unsafe_functions;
+  regex_t *unsafe_functions;
   int npatterns;
   int stack_depth;
   int unsafe_p;

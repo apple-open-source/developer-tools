@@ -34,7 +34,7 @@
 #include "m32c-desc.h"
 #include "m32c-opc.h"
 #include "opintl.h"
-#include "xregex.h"
+#include <regex.h>
 #include "libiberty.h"
 #include "safe-ctype.h"
 

@@ -46,11 +46,13 @@ gdb_load ${binfile}
 
 set timeout 5
 
-gdb_test "rbreak WithArg" \
-    "Breakpoint $decimal.*at.* file.*objc-prog.m.*Breakpoint $decimal.*at.* file.*objc-prog.m.*"  \
+runto_main
+
+gdb_test "rbreak WithArg:" \
+    "Breakpoint 2 at.* file.*objc-prog.m.*Breakpoint 3 at.* file.*objc-prog.m.*"  \
     "rbreak Arg matches at least two functions"
 
-gdb_test "run" ".*Breakpoint $decimal, ..MyClass newWithArg.*" "Run to first rbreak-set bp"
+gdb_continue_to_breakpoint "newWithArg breakpoint"
 
 gdb_test "next" ".*" "step #1 in newWithArg:"
 gdb_test "next" ".*" "step #2 in newWithArg:"

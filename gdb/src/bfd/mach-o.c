@@ -483,6 +483,10 @@ bfd_mach_o_convert_architecture (bfd_mach_o_cpu_type mtype,
 	*subtype = bfd_mach_arm_6;
       else if (msubtype == BFD_MACH_O_CPU_SUBTYPE_ARM_7)
 	*subtype = bfd_mach_arm_7;
+      else if (msubtype == BFD_MACH_O_CPU_SUBTYPE_ARM_7F)
+	*subtype = bfd_mach_arm_7f;
+      else if (msubtype == BFD_MACH_O_CPU_SUBTYPE_ARM_7K)
+	*subtype = bfd_mach_arm_7k;
       break;
     case BFD_MACH_O_CPU_TYPE_MC88000: *type = bfd_arch_m88k; break;
     case BFD_MACH_O_CPU_TYPE_SPARC:

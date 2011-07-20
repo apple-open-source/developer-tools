@@ -195,6 +195,8 @@ static void update_packet_config (struct packet_config *config);
 
 void _initialize_remote (void);
 
+static int remote_macosx_query_qenvironment_hex_packet_supported ();
+
 /* APPLE LOCAL */
 static void start_remote_timer (void);
 static void end_remote_timer (void);
@@ -250,7 +252,7 @@ uint64_t total_packets_sent = 0;
 uint64_t total_packets_received = 0;
 char *remote_debugflags = NULL;
 
-#define PROTOCOL_LOG_BUFSIZE 2048
+#define PROTOCOL_LOG_BUFSIZE 3072
 enum pkt_direction {sent_from_gdb, received_by_gdb};
 struct protocol_log_entry {
   enum pkt_direction direction;
@@ -571,7 +573,7 @@ dump_protocol_log (const char *message)
     }
 }
 
-static void
+void
 dump_packets_command (char *unused, int fromtty)
 {
   if (!remote_desc)
@@ -6221,21 +6223,32 @@ static char *remote_macosx_doc = "Connect to a remote macosx device with "
 static char *remote_macosx_exec_dir;
 
 
-static CORE_ADDR
+CORE_ADDR
 remote_macosx_get_all_image_infos_addr ()
 {
+  // do this just to verify that we're doing remote debugging,
+  // no other reason.
+  struct remote_state *rs = get_remote_state ();
+  if (rs->remote_packet_size < 4)
+    return 0;
+
   char buf[256];
   putpkt ("qShlibInfoAddr");
   getpkt (buf, sizeof (buf) - 1, 0);
-  ULONGEST addr = (ULONGEST)-1;
+  ULONGEST addr = (ULONGEST) -1;
+
+  // Old debugservers & other remote protocol impls may not have this packet
+  // May reply with an empty packet
+  if (buf[0] == '\0')
+    return INVALID_ADDRESS;
+
+  // or they may reply with "E01" etc
   if (buf[0] == 'E' && isxdigit(buf[1]) && isxdigit(buf[2]) && buf[3] == '\0')
-    {
-      /* Error.  */
-    }
-  else if (isxdigit(buf[0]))
-    {
-      unpack_varlen_hex(buf, &addr);
-    }
+    return INVALID_ADDRESS;
+
+  if (isxdigit (buf[0]))
+    unpack_varlen_hex (buf, &addr);
+
   return addr;
 }
 
@@ -6281,77 +6294,94 @@ void
 remote_macosx_create_inferior (char *exec_file, char *allargs, char **env, int from_tty)
 {
   struct remote_state *rs = get_remote_state ();
-  char *buf = alloca (rs->remote_packet_size);
-  char *pkt_buffer = NULL;
-  char *pkt_buffer_end = NULL;
   int exec_len;
-  int args_len;
   int argnum;
   int print_len;
   char *ptr;
   char **argv;
   int argc;
-  struct cleanup *pkt_cleanup;
   char *remote_exec_file;
-  static const char *env_pkt_hdr = "QEnvironment:";
-  int envnum;
-  int packet_len;
-  int max_size;
+  const char *env_pkt_hdr;
   int timed_out;
+  int env_is_hex_encoded;
 
+  if (remote_macosx_query_qenvironment_hex_packet_supported ())
+    env_is_hex_encoded = 1;
+  else
+    env_is_hex_encoded = 0;
+
+  if (env_is_hex_encoded)
+    env_pkt_hdr = "QEnvironmentHexEncoded:";
+  else
+    env_pkt_hdr = "QEnvironment:";
+
+  /* First send down the environment array.  We are using packets of the form:
+         QEnvironment:KEY=VALUE
+     where the KEY and VALUE string is a hex-encoded form. 
+     Send each env var individually.
+     FIXME: These really need to be hex-encoded - we need to create a new
+     QEnvironmentEscaped which expects hex-encoded strings.  */
   
-  /* First send down the environment array. 
-     We are using a packet of the form:
-         QEnvironment[,<LEN>,<ENV_ELEM>]...
-     where the ENV_ELEM is a hex-encoded form of the FOO=BAR entry that gdb passes in, and
-     LEN is the length of the hex-encoded form.  */
-  
-  envnum = 0;
-  max_size = 0;
-  pkt_cleanup = NULL;
+  int buf_size = rs->remote_packet_size;
+  char *buf = (char *) xmalloc (buf_size);
+  struct cleanup *cleanup = make_cleanup (xfree, buf);
+  int envnum = 0;
 
   while (env[envnum] != NULL)
     {
-        packet_len = strlen (env_pkt_hdr) +  strlen(env[envnum]) + 1;
+      int packet_len;
 
-	if (packet_len > rs->remote_packet_size)
-	  {
-	    warning ("Environment variable too long, skipping: %s", env[envnum]);
-	    continue;
-	  }
+      if (env_is_hex_encoded)
+        packet_len = strlen (env_pkt_hdr) + (strlen (env[envnum]) * 2 + 1);
+      else
+        packet_len = strlen (env_pkt_hdr) + strlen (env[envnum]) + 1;
 
-	if (packet_len > max_size)
-	  {
-	    if (pkt_cleanup != NULL)
-	      do_cleanups (pkt_cleanup);
-	    pkt_buffer = (char *) xmalloc (packet_len);
-	    max_size = packet_len;
-	    pkt_cleanup = make_cleanup (xfree, pkt_buffer);
-	  }
+      if (packet_len > buf_size)
+        {
+          warning ("Environment variable too long, skipping: %s", env[envnum]);
+          envnum++;
+          continue;
+        }
 
-	snprintf (pkt_buffer, packet_len, "%s%s", env_pkt_hdr, env[envnum]);
-	putpkt (pkt_buffer);
+      if (env_is_hex_encoded)
+        {
+          strcpy (buf, env_pkt_hdr);
+          char *c = buf + strlen (buf);
+          char *p = env[envnum];
+          while (*p != '\0')
+            c = pack_hex_byte (c, *p++);
+          *c = '\0';
+        }
+      else
+        {
+          snprintf (buf, buf_size, "%s%s", env_pkt_hdr, env[envnum]);
+        }
 
-	getpkt (buf, rs->remote_packet_size, 0);
-	if (buf[0] == 'E')
-	  error ("Got an error \"%s\" sending environment to remote.", buf);
-	else if (buf[0] != '\0' && (buf[0] != 'O' && buf[1] != 'K'))
-	  error ("Unknown packet reply: \"%s\" to environment packet.", buf);
-	
-	envnum++;
+      buf[buf_size - 1] = '\0';
+      putpkt (buf);
+
+      getpkt (buf, buf_size, 0);
+      if (buf[0] == 'E')
+        error ("Got an error \"%s\" sending environment to remote.", buf);
+      else if (buf[0] != '\0' && (buf[0] != 'O' && buf[1] != 'K'))
+        error ("Unknown packet reply: \"%s\" to environment packet.", buf);
+      
+      envnum++;
     }
-
-  if (pkt_cleanup != NULL)
-    do_cleanups (pkt_cleanup);
 
   /* Disable ASLR if requested.  */
   send_disable_aslr ();
 
   /* Next send down the arguments.  */
 
+  /* allargs is about to get chopped up so measure its total size & remember */
+
+  int allargs_string_length = strlen (allargs);
+
   /* The largest possible array - every character is a separate argument.  */
-  argv = (char **) xmalloc (((strlen (allargs) + 1) / (unsigned) 2 + 2) * sizeof (*argv));
-  pkt_cleanup = make_cleanup (xfree, argv);
+
+  argv = (char **) xmalloc ((allargs_string_length + 1) * sizeof (char *));
+  make_cleanup (xfree, argv);
   breakup_args (allargs, &argc, argv);
 
   if (remote_macosx_exec_dir == NULL || remote_macosx_exec_dir[0] == '\0')
@@ -6370,35 +6400,56 @@ remote_macosx_create_inferior (char *exec_file, char *allargs, char **env, int f
   exec_len = strlen (remote_exec_file);
   /* This is likely an overestimate, since if there's more than one
      argument we won't include the spaces...  */
-  args_len = strlen (allargs);
-  const size_t pkt_buffer_length = 1 + INT_PRINT_MAX + 1 + INT_PRINT_MAX + 1 +
-				   2 * exec_len + argc * (1 + INT_PRINT_MAX + 
-				   1 + INT_PRINT_MAX + 1) + 2 * args_len + 1;
+  int exe_and_args_buffer_length = 1 + INT_PRINT_MAX 
+                        + 1 + INT_PRINT_MAX 
+                        + 1 + 2 * exec_len 
+                        + argc * (1 + INT_PRINT_MAX + 1 + INT_PRINT_MAX + 1) 
+                        + 2 * allargs_string_length + 1;
 
-  pkt_buffer = xmalloc (pkt_buffer_length);
-  pkt_buffer_end = pkt_buffer + pkt_buffer_length;
-  make_cleanup (xfree, pkt_buffer);
-  print_len = snprintf (pkt_buffer, pkt_buffer_length, "A%d,0,", 2 * exec_len);
-  ptr = pkt_buffer + print_len;
+  if (exe_and_args_buffer_length > rs->remote_packet_size)
+    exe_and_args_buffer_length = rs->remote_packet_size;
+
+  char *exe_and_args_buffer = (char *) xmalloc (exe_and_args_buffer_length);
+  char *exe_and_args_buffer_end = exe_and_args_buffer + exe_and_args_buffer_length;
+  make_cleanup (xfree, exe_and_args_buffer);
+
+  print_len = snprintf (exe_and_args_buffer, exe_and_args_buffer_length, "A%d,0,", 2 * exec_len);
+  ptr = exe_and_args_buffer + print_len;
 
   ptr = pack_string_as_ascii_hex (ptr, remote_exec_file, 
 				  remote_exec_file + exec_len);
 
-  for (argnum = 0; argnum < argc; argnum++)
+  for (argnum = 0; argnum < argc && ptr < exe_and_args_buffer_end; argnum++)
     {
+      char *oldptr = ptr;
       char *arg = argv[argnum];
       int arglen = strlen (arg);
       *ptr++ = ',';
-      print_len = snprintf (ptr, pkt_buffer_end - ptr, "%d,%d,", 2 * arglen, 
+      if (ptr >= exe_and_args_buffer_end)
+        {
+          ptr = oldptr;
+          break;
+        }
+      print_len = snprintf (ptr, exe_and_args_buffer_end - ptr, "%d,%d,", 2 * arglen, 
 			    argnum + 1);
       ptr += print_len;
+      if (ptr >= exe_and_args_buffer_end)
+        {
+          ptr = oldptr;
+          break;
+        }
       ptr = pack_string_as_ascii_hex (ptr, arg, arg + arglen);
+      if (ptr >= exe_and_args_buffer_end)
+        {
+          ptr = oldptr;
+          break;
+        }
     }
   *ptr = '\0';
-  putpkt (pkt_buffer);
-  do_cleanups (pkt_cleanup);
+  *exe_and_args_buffer_end = '\0';
+  putpkt (exe_and_args_buffer);
 
-  getpkt (buf, rs->remote_packet_size, 0);
+  getpkt (buf, buf_size, 0);
   if (buf[0] == 'E')
     error ("Got an error \"%s\" sending arguments to remote.", buf);
   else if (buf[0] != 'O' && buf[1] != 'K')
@@ -6414,7 +6465,7 @@ remote_macosx_create_inferior (char *exec_file, char *allargs, char **env, int f
   int old_remote_timeout = remote_timeout;
   remote_timeout = 30;	
   putpkt ("qLaunchSuccess");
-  timed_out = getpkt_sane(buf, rs->remote_packet_size, 0);
+  timed_out = getpkt_sane (buf, buf_size, 0);
   remote_timeout = old_remote_timeout;
   
   if (timed_out)
@@ -6429,6 +6480,7 @@ remote_macosx_create_inferior (char *exec_file, char *allargs, char **env, int f
     }
 
   remote_macosx_complete_create_or_attach (from_tty);
+  do_cleanups (cleanup);
 }
 
 void
@@ -6559,6 +6611,24 @@ remote_macosx_query_step_packet_supported ()
 }
 
 #endif
+
+static int
+remote_macosx_query_qenvironment_hex_packet_supported ()
+{
+  struct remote_state *rs = get_remote_state ();
+  char *buf = alloca (rs->remote_packet_size);
+  putpkt ("QEnvironmentHexEncoded:");
+  /* Reply "OK" QEnvironmentHexEncoded packet is supported.  */
+  
+  int old_remote_timeout = remote_timeout;
+  remote_timeout = 1;	
+  int timed_out = getpkt_sane (buf, rs->remote_packet_size, 0);
+  remote_timeout = old_remote_timeout;
+
+  if (!timed_out && buf[0] == 'O' && buf[1] == 'K')
+      return 1;
+  return 0;
+}
 
 /* Open a connection to a remote debugger.
    NAME is the filename used for communication.  */

@@ -2509,7 +2509,11 @@ dwarf2_build_psymtabs_hard (struct objfile *objfile, int mainline)
 
       do_cleanups (back_to_inner);
     }
+
+  sort_objfile_thumb_psyms (objfile);
+    
   do_cleanups (back_to);
+
 }
 
 /* Load the DIEs for a secondary CU into memory.  */

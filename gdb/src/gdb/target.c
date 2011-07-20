@@ -232,6 +232,7 @@ set_trust_readonly_cleanup (void *new)
 /* Non-zero if we want to see trace of target level stuff.  */
 
 static int targetdebug = 0;
+static int debug_target_writes = 0;
 static void
 show_targetdebug (struct ui_file *file, int from_tty,
 		  struct cmd_list_element *c, const char *value)
@@ -1110,6 +1111,18 @@ target_xfer_partial (struct target_ops *ops,
 
       retval = ops->to_xfer_partial (ops, raw_object, annex, readbuf,
 				     writebuf, offset, len);
+    }
+
+  if (debug_target_writes && writebuf)
+    {
+      fprintf_filtered (gdb_stdlog, "%s:target_xfer_partial write to addr 0x%s %d bytes: ",
+                        ops->to_shortname, paddr_nz (offset), (int) len);
+      int count = 0;
+      while (count < len && count < 32)
+         fprintf_unfiltered (gdb_stdlog, "%02x", ((uint8_t *) writebuf)[count++] & 0xff);
+      if (count == 32 && len != 32)
+        fprintf_unfiltered (gdb_stdlog, "...");
+      fprintf_unfiltered (gdb_stdlog, "\n");
     }
 
   if (targetdebug)
@@ -2778,6 +2791,16 @@ verbose.  Changes do not take effect until the next \"run\" or \"target\"\n\
 command."),
 			    NULL,
 			    show_targetdebug,
+			    &setdebuglist, &showdebuglist);
+
+  add_setshow_zinteger_cmd ("target-writes", class_maintenance, &debug_target_writes, _("\
+Set target writes debugging."), _("\
+Show target writes debugging."), _("\
+When non-zero, target write debugging is enabled.  Higher numbers are more\n\
+verbose.  Changes do not take effect until the next \"run\" or \"target\"\n\
+command."),
+			    NULL,
+			    NULL,
 			    &setdebuglist, &showdebuglist);
 
   add_setshow_boolean_cmd ("trust-readonly-sections", class_support,

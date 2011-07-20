@@ -82,7 +82,7 @@ fi
 if [ -z "${MIGCC}" ]; then
   xcrunPath="/usr/bin/xcrun"
   if [ -x "${xcrunPath}" ]; then
-    MIGCC=`"${xcrunPath}" -find cc -sdk "$sdkRoot"`
+    MIGCC=`"${xcrunPath}" -sdk "$sdkRoot" -find cc`
   else
     MIGCC=$(realpath "${scriptRoot}/cc")
   fi
@@ -163,10 +163,20 @@ do
     then
       iSysRootParm=( "-isysroot" "${sdkRoot}" )
     fi
+    if [ ! -r "${file}" ]
+    then
+      echo "error: cannot read file ${file}"
+      rm -rf ${WORKTMP}
+      exit 1
+    fi
     rm -f "${temp}.c" "${temp}.d"
     (echo '#line 1 '\"${file}\" ; cat "${file}" ) > "${temp}.c"
-    "$C" -E -arch ${arch} ${cppflags} -I "${sourcedir}" "${iSysRootParm[@]}" "${temp}.c" | "$M" "${migflags[@]}" || rm -df "${temp}.c" "${temp}.d" "${WORKTMP}" | exit
-
+    "$C" -E -arch ${arch} ${cppflags} -I "${sourcedir}" "${iSysRootParm[@]}" "${temp}.c" | "$M" "${migflags[@]}"
+    if [ $? -ne 0 ]
+    then
+      rm -rf "${temp}.c" "${temp}.d" "${WORKTMP}"
+      exit 1
+    fi
     if [ "${sawMD}" -a -f "${temp}.d" ]
     then
 	deps=

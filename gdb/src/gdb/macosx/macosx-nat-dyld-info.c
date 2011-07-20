@@ -177,6 +177,12 @@ dyld_objfile_entry_osabi (const struct dyld_objfile_entry *e)
 	      case BFD_MACH_O_CPU_SUBTYPE_ARM_7:
 		return GDB_OSABI_DARWINV7;
 		    
+	      case BFD_MACH_O_CPU_SUBTYPE_ARM_7F:
+		return GDB_OSABI_DARWINV7F;
+
+	      case BFD_MACH_O_CPU_SUBTYPE_ARM_7K:
+		return GDB_OSABI_DARWINV7K;
+
 	      default:
 		return GDB_OSABI_DARWIN;
 	    }
@@ -1389,6 +1395,19 @@ dyld_print_entry_info (struct dyld_objfile_entry *j, int shlibnum, int baselen)
       ui_out_text (uiout, tag);
       ui_out_text (uiout, " ");
       ui_out_field_string (uiout, "dsym-objpath", dsymobjname);
+    }
+  if (info_verbose && j->objfile && j->objfile->obfd)
+    {
+      uuid_t bfd_uuid;
+      if (bfd_mach_o_get_uuid (j->objfile->obfd, bfd_uuid, sizeof (uuid_t)))
+        {
+          const char *tag = "(Mach-O UUID)";
+          ui_out_text (uiout, "\n");
+          ui_out_spaces (uiout, baselen + 34 - strlen (tag) - 1);
+          ui_out_text (uiout, tag);
+          ui_out_text (uiout, " ");
+          ui_out_field_string (uiout, "macho-uuid", puuid (bfd_uuid));
+        }
     }
 
   do_cleanups (list_cleanup);

@@ -4,10 +4,6 @@ host_arch=""
 requested_arch="UNSET"
 architecture_to_use=""
 
-# classic-inferior-support
-translate_mode=0
-translate_binary=""
-
 PATH=$PATH:/sbin:/bin:/usr/sbin:/usr/bin
 
 # gdb is setgid procmod and dyld will truncate any DYLD_FRAMEWORK_PATH etc
@@ -53,14 +49,20 @@ unset DYLD_INSERT_LIBRARIES
 
 host_arch=`/usr/bin/arch 2>/dev/null` || host_arch=""
 
-if [ "$host_arch" == "arm" ]; then
+if [ "$host_arch" == "arm" ]
+then
+  host_arch=armv7            # default to armv7
   host_cpusubtype=`sysctl hw.cpusubtype | awk '{ print $NF }'` || host_cputype=""
   case "$host_cpusubtype" in
     6) host_arch="armv6" ;;
     7) host_arch="armv5" ;;
     9) host_arch="armv7" ;;
+    10) host_arch="armv7f" ;;
+    12) host_arch="armv7k" ;;
+    *) echo warning: unrecognized host cpusubtype ${host_cpusubtype}, defaulting to host==armv7. >&2 ;;
   esac
-elif [ -z "$host_arch" ]; then
+elif [ -z "$host_arch" ]
+then
     echo "There was an error executing 'arch(1)'; assuming 'i386'.";
     host_arch="i386";
 fi
@@ -81,8 +83,7 @@ fi
 
 case "$1" in
  --help)
-    echo "  --translate        Debug applications running under translation." >&2
-    echo "  -arch i386|arm|armv6|armv7|x86_64|ppc     Specify a gdb targetting a specific architecture" >&2
+    echo "  -arch x86_64|arm|armv6|armv7||armv7f|i386         Specify a gdb targetting a specific architecture" >&2
     ;;
   -arch=* | -a=* | --arch=*)
     requested_arch=`echo "$1" | sed 's,^[^=]*=,,'`
@@ -90,9 +91,6 @@ case "$1" in
   -arch | -a | --arch)
     shift
     requested_arch="$1"
-    shift;;
-  -translate | --translate | -oah* | --oah*)
-    translate_mode=1
     shift;;
 esac
 
@@ -103,33 +101,10 @@ then
 fi
 [ "$requested_arch" = "UNSET" ] && requested_arch=""
 
-if [ $translate_mode -eq 1 ]
-then
-  translate=""
-  if [ "$host_arch" = i386 -o "$host_arch" = x86_64 ]
-  then
-    translate=`sysctl -n kern.exec.archhandler.powerpc`
-  fi
-  [ -z "$translate" -o ! -x "$translate" ] && translate=/usr/libexec/oah/translate
-  if [ "$host_arch" = i386 -a -x $translate ]
-  then
-    requested_arch="ppc"
-    translate_binary="$translate -execOAH"
-  else
-    if [ "$host_arch" = x86_64 -a -x $translate ]
-    then
-      requested_arch="ppc"
-      translate_binary="$translate -execOAH"
-    else
-      echo ERROR: translate not available.  Running in normal debugger mode. >&2
-    fi
-  fi
-fi
-
 if [ -n "$requested_arch" ]
 then
   case $requested_arch in
-    ppc* | i386 | x86_64 | arm*)
+    i386 | x86_64 | arm*)
      ;;
     *)
       echo Unrecognized architecture \'$requested_arch\', using host arch. >&2
@@ -167,7 +142,8 @@ do
           exec_file=$arg
           ;;
         *)
-          if [ -x "$arg" ]; then
+          if [ -x "$arg" ]
+          then
             exec_file="$arg"
           fi
           ;;
@@ -244,19 +220,55 @@ else
   do
     # If we don't have any best architecture set yet, use this in case
     # none of them match the host architecture.
-    if [ -z "$best_arch" ]; then
+    if [ -z "$best_arch" ]
+    then
       best_arch="$file_arch"
+      continue
     fi
 
     # See if the file architecture matches the host, and if so set the
     # best architecture to that.
-    if [ "$file_arch" = "$host_arch" ]; then
+    if [ "$file_arch" = "$host_arch" ]
+    then
       best_arch="$file_arch"
+      continue
     fi
+
+    # If this is an armv7f system, the armv7 slice is
+    # the next-best arch to pick if we don't have an exact match.
+    if [ "$host_arch" = armv7f ]
+    then
+      if [ "$file_arch" = armv7 ]
+      then
+        best_arch=$file_arch
+        continue
+      fi
+    fi
+
+    # if this is an armv7k system, the armv6 slice is the 
+    # next-best arch to pick if we don't have an exact match.
+    if [ "$host_arch" = armv7k -a "$file_arch" = armv6 ]
+    then
+      best_arch="$file_arch"
+      continue
+    fi
+
+    # in the absence of any better information, if we have
+    # an armv6 slice and an armv7 slice, and we don't have
+    # a counter-indication from the host_arch, pick the armv7.
+    if [ "$best_arch" = armv6 -a "$file_arch" = armv7 ]
+    then
+      if [ "$host_arch" != armv6 -a "$host_arch" != armv7k ]
+      then
+        best_arch="$file_arch"
+        continue
+      fi
+    fi
+
   done
 
   case "$best_arch" in
-    ppc* | i386 | x86_64 | arm*)
+    i386 | x86_64 | arm*)
       # We found a plausible architecture and we will use it
       architecture_to_use="$best_arch"
       ;;
@@ -288,9 +300,6 @@ then
 fi
 
 case "$architecture_to_use" in
-  ppc*)
-    gdb="${GDB_ROOT}/usr/libexec/gdb/gdb-powerpc-apple-darwin"
-    ;;
   i386 | x86_64)
     gdb="${GDB_ROOT}/usr/libexec/gdb/gdb-i386-apple-darwin"
     ;;
@@ -302,6 +311,12 @@ case "$architecture_to_use" in
           ;;
         armv7) 
           osabiopts="--osabi DarwinV7" 
+          ;;
+        armv7k)
+          osabiopts="--osabi DarwinV7K" 
+          ;;
+        armv7f)
+          osabiopts="--osabi DarwinV7F" 
           ;;
         *)
           # Make the REQUESTED_ARCHITECTURE the empty string so
@@ -322,16 +337,18 @@ esac
 # bug in gdb currently that hasn't been fixed. If gdb ever does fix its 
 # ability to grab the correct slice from an executable given a core file, 
 # then we can take the next 3 lines out.
-if [ -z "$requested_arch" -a -n "$core_file" ]; then
+if [ -z "$requested_arch" -a -n "$core_file" ]
+then
   requested_arch=$architecture_to_use;      
 fi
 
-if [ ! -x "$gdb" ]; then
+if [ ! -x "$gdb" ]
+then
     echo "Unable to start GDB: cannot find binary in '$gdb'"
     exit 1
 fi
 
-if [ -n "$requested_arch" -a $translate_mode -eq 0 ]
+if [ -n "$requested_arch" ]
 then
   exec $translate_binary "$gdb" --arch "$requested_arch" "$@"
 else

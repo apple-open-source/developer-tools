@@ -51,7 +51,7 @@ gdb_test "print myvar" ".*c = 97 'a'.*" "print myvar with char element in main"
 
 gdb_test "cont" "Continu.* *Breakpoint 2, foo.*" "continue to breakpoint in foo()"
 
-gdb_test "print myvar" ".*c = 10.*" "print myvar with int element in foo"
+gdb_test "print myvar" ".*i = 10.*" "print myvar with int element in foo"
 
 gdb_exit
 return 0

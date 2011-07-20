@@ -31,6 +31,7 @@
 #include <errno.h>		/* System call error return status.  */
 #include <limits.h>
 #include <string.h>
+#include <regex.h>
 
 #ifdef HAVE_STDDEF_H
 #include <stddef.h>
@@ -588,12 +589,6 @@ extern NORETURN void perror_with_name (const char *) ATTR_NORETURN;
 
 extern void print_sys_errmsg (const char *, int);
 
-/* From regex.c or libc.  BSD 4.4 declares this with the argument type as
-   "const char *" in unistd.h, so we can't declare the argument
-   as "char *".  */
-
-extern char *re_comp (const char *);
-
 /* From symfile.c */
 
 extern void symbol_file_command (char *, int);
@@ -863,6 +858,14 @@ void free_uuids_array (uint8_t **uuids);
 
 char *puuid (uint8_t *uuid);
 
+const char *re_comp (const char *str);
+
+int re_exec (const char *str);
+
+int re_set_syntax (int newflags);
+
+int re_search_oneshot (regex_t *patbuf, const char *str, int size, int start, int range, void *regs);
+
 
 
 /* Optional host machine definition.  Pure autoconf targets will not
@@ -1066,6 +1069,8 @@ enum gdb_osabi
   GDB_OSABI_DARWIN64,
   GDB_OSABI_DARWINV6,
   GDB_OSABI_DARWINV7,
+  GDB_OSABI_DARWINV7F,
+  GDB_OSABI_DARWINV7K,
   /* APPLE LOCAL end Darwin */
 
   GDB_OSABI_QNXNTO,

@@ -206,6 +206,10 @@ fork_inferior (char *exec_file_arg, char *allargs, char **env,
 	  arch_string = "armv6";
 	else if (strcmp (osabi_name, "DarwinV7") == 0)
 	  arch_string = "armv7";
+	else if (strcmp (osabi_name, "DarwinV7K") == 0)
+	  arch_string = "armv7k";
+	else if (strcmp (osabi_name, "DarwinV7F") == 0)
+	  arch_string = "armv7f";
 #endif
 	if (arch_string != NULL)
 	  sprintf (shell_command, "%s exec /usr/bin/arch -arch %s ", shell_command, arch_string);
@@ -456,6 +460,17 @@ fork_inferior (char *exec_file_arg, char *allargs, char **env,
 		cpu = CPU_TYPE_ARM;
 		count = 1;
 	      }
+	    else if (strcmp (osabi_name, "DarwinV7K") == 0)
+	      {
+		cpu = CPU_TYPE_ARM;
+		count = 1;
+	      }
+	    else if (strcmp (osabi_name, "DarwinV7F") == 0)
+	      {
+		cpu = CPU_TYPE_ARM;
+		count = 1;
+	      }
+
 #endif
 	    retval = posix_spawnattr_init (&attr);
 	    if (retval != 0)
@@ -483,6 +498,12 @@ fork_inferior (char *exec_file_arg, char *allargs, char **env,
 	    ps_flags = POSIX_SPAWN_SETEXEC;
 
 #if defined (TM_NEXTSTEP)
+
+// NOTE: for arm native debugging, a separate posix_spawnp with its own flags
+// is in macosx-nat-inferior.c:macosx_child_create_inferior() - and further
+// note that there are two verisons of this function, selected via an #ifdef.
+// If you change the flags to posix_spawn here, be sure to change them there
+// as well.
 
 #ifndef _POSIX_SPAWN_DISABLE_ASLR
 #define _POSIX_SPAWN_DISABLE_ASLR 0x0100

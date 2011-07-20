@@ -1064,6 +1064,11 @@ install-programs: $(bin_PROGRAMS)
 # Also, on Cygwin the --record output is in DOS text file format (CR LF
 # line endings), so we need to convert it from DOS text file format to
 # Unix text file format (LF line endings); we use sed for that too.
+ifdef PYTHON_SETUP_HOME
+SETUP_OPT = --home="$(PYTHON_SETUP_HOME)"
+else # !PYTHON_SETUP_HOME
+SETUP_OPT = --prefix="$(prefix)"
+endif # !PYTHON_SETUP_HOME
 install-include-server: include-server pump
 	if test -z "$(INCLUDESERVER_PYTHON)"; then	\
 	  echo "Not building $@: No suitable python found"; \
@@ -1081,7 +1086,7 @@ install-include-server: include-server pump
 	        --build-base="$(include_server_builddir)" \
 	        --build-temp="$(include_server_builddir)" \
 	      install 					\
-	         --prefix="$(prefix)" 			\
+	         $(SETUP_OPT)	 			\
 	         --record="$(include_server_builddir)/install.log.pre" \
 	         --root="$$DESTDIR"                     \
 	    || exit 1; \

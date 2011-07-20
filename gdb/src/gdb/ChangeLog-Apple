@@ -1,3 +1,307 @@
+2011-07-01  Jason Molenda  (jmolenda@apple.com)
+
+	* remote.c 
+	(remote_macosx_query_qenvironment_hex_packet_supported):
+	Drop extra packet read attempt for old debugservers -- 
+	that code was to support "old" debugservers back around
+	iOS 2.x era.
+
+2011-06-30  Jason Molenda  (jmolenda@apple.com)
+
+        * remote.c (remote_macosx_get_all_image_infos_addr): Clean up 
+        error handling, return INVALID_ADDRESS explicitly for cases
+        where the remote stub doesn't support this packet.
+        (remote_macosx_create_inferior): Test if the 
+        QEnvironmentHexEncoded packet is supported, send all of the
+        environment strings hex encoded if it is.
+        (remote_macosx_query_qenvironment_hex_packet_supported): New
+        helper function to determine if QEnvironmentHexEncoded is
+        recognized by the remote stub.
+
+2011-06-30  Jim Ingham  <jingham@apple.com>
+
+	* breakpoint.c (bpstat_what): Set the bs_class
+	to bp_nostop if we hit an exception catchpoint and
+	aren't going to stop at it.
+	(current_exception_should_stop): Set the regular expression
+	style to extended for the exception class regexp.
+	
+2011-06-22  Jason Molenda  (jmolenda@apple.com)
+
+	* remote.c (remote_macosx_create_inferior): Allocate all
+	buffers on the heap instead of some on the stack with alloca.
+	Add buffer overrun checks liberally through this function.
+	Don't run the cleanup chain until the end of the function.
+
+2011-06-22  Jim Ingham  <jingham@apple.com>
+
+	* breakpoint.c (current_exception_should_stop): Xcode sets the
+	execption-throw-type-regexp to be "$" when it means "match all"
+	but that expression fails re_exec now.  So I just shortcut "$"
+	and don't even do the match.
+	
+2011-05-27  Jim Ingham  <jingham@apple.com>
+
+	* varobj.c (get_join_type): Protect against getting passed
+	a NULL type.
+	
+2011-05-27  Caroline Tice <ctice@apple.com>
+
+	* inlining.c (inlined_subroutine_adjust_position_for_breakpoint):
+	Initialize i & j variables; check if the inlined call stack is empty
+	and return immediately if so (nothing to adjust).
+	
+2011-05-17  Jason Molenda  (jmolenda@apple.com)
+
+	* dwarf2read.c (dwarf2_build_psymtabs_hard): Sort the
+	thumb psyms table after all the psymtabs have been processed.
+	* objfiles.c (sort_objfile_thumb_psyms): New function to sort
+	the thumb psym table in the objfile so it can be binary 
+	searched.
+	(compare_psymbol_ptrs): Utility function used by qsort, bsearch.
+	(partial_symbol_special_info): Use a binary search to find an
+	entry instead of linear.  Avoid searching if the partial_symbol
+	isn't a function psym.
+	(objfile_add_special_psym): Don't add the partial_symbol if it's 
+	not a function psym.
+	* objfiles.h: Prototype for sort_objfile_thumb_psyms.
+	* symfile.c (append_psymbols_as_msymbols): Instead of iterating
+	over each psymtab's partial_symbols, just iterate over the 
+	objfile's complete list of partial_symbols.
+	Delay check for thumb-ness until after we've decided that we're
+	going to add the psymbol as a minsym so it's not needlessly
+	looked up.
+
+	* dbxread.c (fill_symbuf): Make warning about changed
+	DBX_SYMBOL_SIZE a little more specific.
+
+2011-05-16  Jason Molenda  (jmolenda@apple.com)
+
+	* symtab.c (rbreak_command): alloca a buffer big enough for
+	any filename + function name we might need to pass down to
+	rbr_break_command() instead of allocating a new chunk of
+	memory for each matching string with alloca.
+
+2011-05-13  Jim Ingham  <jingham@apple.com>
+       
+	From Caroline Tice:
+	
+	* inlining.c (func_sym_is_inlined_function): New function.
+	* inlining.h (func_sym_is_inlined_function): Declare it.
+	* valops.c (find_function_in_inferior): Find all the symbols
+	matching the given name, and use only a non-inlined one.
+	
+2011-05-11  Jason Molenda  (jmolenda@apple.com)
+
+        * target.c (debug_target_writes): New debug variable 
+        'set debug target-writes 1' which will print the bytes being
+        written into the inferior's address space.  (unlikely debug target
+        it will not print reads).
+        (target_xfer_partial): Print writes if debug_target_writes is set.
+        * arm-tdep.c (thumb_get_next_pc): Add logging of next pc value 
+        computed.
+        (arm_get_next_pc): Ditto.
+        (arm_breakpoint_from_pc): Add logging of the breakpoint pattern
+        used for a given memory address.
+        * infrun.c (insert_step_resume_breakpoint_at_frame): Additional
+        debug infrun output about the address where a step-resume breakpoint
+        is being set when nexting over a function call.
+
+2011-05-06  Jim Ingham  (jingham@apple.com)
+
+	* objc-lang.c (read_objc_object): Fix a thinko in handling the
+	return value for gdb_object_getClass.  If gdb_object_getClass
+	returns 0 be sure to set that in the objc_object we are returning.
+
+	I also added a bunch of logging controlled by "set debug objc".
+	(new_objc_runtime_class_getClass): Logging.
+	(read_objc_object): Logging.
+	(find_implementation): Logging.
+	(get_class_address_from_object): Logging.
+	(_initialize_objc_lang): Add "set debug objc".
+
+	* varobj.c (_initialize_varobj): Move "set varobjdebug" to
+	"set debug varobj".
+	(varobj_update): Logging.
+	
+2011-04-29  Jason Molenda  (jmolenda@apple.com)
+
+	* utils.c (re_comp): When re_comp is passed a null regex
+	str, reuse the previous compiled regex.  If no previous
+	compiled regex, return an error.
+
+2011-04-28  Jason Molenda  (jmolenda@apple.com)
+
+	* source.c (_initialize_source): Specify REG_BASIC instead of
+	REG_EXTENDED to match previous gdb behavior when initializing
+	the regex style for re_comp/re_exec.
+	* utils.c (re_exec): Correct return values to match the man page
+	I found on the web for this API.
+
+2011-04-28  Jason Molenda  (jmolenda@apple.com)
+
+	* utils.c: Set default regex format to REG_BASIC to match the
+	previous behavior in gdb better.
+	(re_search_oneshot): Fix posix api call.
+
+2011-04-28  Jason Molenda  (jmolenda@apple.com)
+
+	* gdb_regex.h: Removed.
+	* Makefile.in: Remove references.
+	* utils.c (re_set_syntax, re_comp, re_exec, re_search_oneshot):
+	Add simple implementations of these APIs (as far as needed by gdb)
+	to map down to the POSIX regex APIs.
+	* defs.h: Prototypes.
+	* source.c, valops.c: Updated.
+	* cli/cli-cmds.c, cli/cli-decode.c, cli/cli-decode.h: Updated.
+
+2011-04-23  Jason Molenda  (jmolenda@apple.com)
+
+        * remote.c (remote_macosx_get_all_image_infos_addr): Change linkage
+        of this func to extern.
+        * remote.h: Add prototype for remote_macosx_get_all_image_infos_addr.
+        * arm-tdep.c (IS_THUMB_ADDR): Make this bit pattern more explicit.
+        (arm_unwind_pc): Use arm_pc_is_thumb() instead of IS_THUMB_ADDR.
+        IS_THUMB_ADDR is not valid on addresses of frame 0.
+
+2011-04-19  Jason Molenda  (jmolenda@apple.com)
+
+        * dwarf2loc.c (dwarf2_evaluate_loc_desc): Catch invalid register
+        specification from llvm-gcc/clang bug, return variable as 
+        optimized away instead of internal_error'ing.
+
+2011-04-12  Jason Molenda  (jmolenda@apple.com)
+
+        * symtab.c (find_pc_sect_symtab): Include the name of the file
+        that had a problem expanding from psymtab to symtab in the warning
+        message.
+
+2011-04-05  Jason Molenda  (jmolenda@apple.com)
+
+        * remote.c (PROTOCOL_LOG_BUFSIZE): Increase size of packet buffer.
+
+2011-03-28  Jason Molenda  (jmolenda@apple.com)
+
+	* remote.c (dump_packets_command): Make function linkage extern.
+	* remote.h: Add proto.
+
+2011-03-28  Jason Molenda  (jmolenda@apple.com)
+
+	* remote.c (remote_macosx_create_inferior): Send down env vars
+	one kv-pair per QEnvironment packet.
+	Simplify the cleanup chain use, hopefully avoid a double-free
+	that we've been getting reports of.
+
+2011-03-18  Jim Ingham  <jingham@apple.com>
+
+	* infrun.c (restore_step_resume_breakpoint): Only try to check the 
+	restored step resume breakpoint's type if it isn't NULL...
+	
+2011-03-17  Jim Ingham  <jingham@apple.com>
+
+	* inferior.h: Declare {hide,restore}_step_resume_breakpoint.
+	* infrun.c ({hide,restore}_step_resume_breakpoint): New functions.
+	* obj-lang.c (resolve_newruntime_objc_msgsendsuper): The algorithm
+	for getting the super-class out of the objc_super struct wasn't 
+	quite right.
+	* (do_end_debugger_mode): Stash aside the step resume breakpoint 
+	while we run the code to turn off the debugger mode, then restore
+	it when we're done.
+		
+2011-03-14  Jason Molenda  (jmolenda@apple.com)
+
+	* objfiles.c (find_objfile_by_name): Locate an objfile even if
+	it was loaded from an in-memory/core file bfd.
+
+2011-03-08  Jason Molenda  (jmolenda@apple.com)
+
+	* fork-child.c: Add support for DarwinV7K, DarwinV7F.
+	* symfile.c: Ditto.
+	* osabi.c: Ditto.
+	* defs.h: Ditto.
+
+2011-03-08  Jason Molenda  (jmolenda@apple.com)
+
+	* symfile.c (add_kext_command): An extra newline on the final
+	error string when add-kext fails; there will have been multiple
+	lines of output for most failures and it can be hard to visually
+	separate why one kext failed to load vrs. another.
+
+2011-03-08  Jason Molenda  (jmolenda@apple.com)
+
+	* symfile.c (add_kext_command): Only print the basename of the
+	file when a .kext bundle can't be found.
+	(find_kext_files_by_symfile): Ditto.
+
+2011-03-01  Jason Molenda  (jmolenda@apple.com)
+
+	* symfile.c (add_kext_command): Drop the verbose discussion about
+	what might have gone wrong.
+	(find_kext_files_by_symfile): List the UUID of the .sym file 
+	which we failed to find a .kext bundle for.
+
+2011-02-28  Jason Molenda  (jmolenda@apple.com)
+
+	* objfiles.c (objfile_section_offset): Include the exec_objfile and
+	objfile names in the internal_error message so we have a better
+	indication which file caused the problem.
+
+2011-02-23  Jason Molenda  (jmolenda@apple.com)
+
+	* symfile.c (add_kext_command): Change the error to not 
+	call error() so the addkextsyms macro continues to execute
+	even if one kext isn't located.
+
+2011-02-23  Jason Molenda  (jmolenda@apple.com)
+
+	* symfile.c (add_kext_command): If we don't find a .kext bundle
+	file path (by whatever mechanism), don't try to add the kext -
+	we don't have enough information.
+
+2011-02-17  Jason Molenda  (jmolenda@apple.com)
+
+        * fork-child.c (fork_inferior): Add a comment noting the
+        existance of a second posix_spawn use down in 
+        macosx-nat-inferior.c for arm native debugging.
+
+2011-02-10  Jim Ingham  <jingham@apple.com>
+
+	* varobj.c (varobj_create): If we've been passed in a non-null
+	block, set the global "found_block" to that.
+	
+2011-02-02  Jason Molenda  (jmolenda@apple.com)
+
+	* symfile.c (find_kext_loadaddrs_from_kernel): If someone is
+	add-kext'ing a kext that has already been add-kext'ed (or
+	was picked up by add-all-kexts), error out with an appropriate
+	error message.
+	(convert_sect_addrs_to_offsets_via_on_disk_file): Don't try 
+        to apply the overall slide to sections w/o a slide if we didn't 
+	get an overall slide value.
+
+2011-02-01  Jason Molenda  (jmolenda@apple.com)
+
+	* symfile.c (find_kext_loadaddrs_from_kernel): Update to 
+	return a section_addr_info pointer instead of void.
+	(find_kext_loadaddrs_from_kernel): Update to use new
+	macosx_get_kext_sect_addrs_from_kernel() call signature.
+	(add_kext_command): Convert the section_addr_info's into
+	a series of section_offsets which are handled more correctly
+	when loading a symfile.
+	(convert_sect_addrs_to_offsets_via_on_disk_file): New function.
+	* symfile.h (convert_sect_addrs_to_offsets_via_on_disk_file):
+	prototype added.
+
+2011-01-31  Jason Molenda  (jmolenda@apple.com)
+
+	* objfiles.c (find_objfile_by_uuid): New function.
+	* objfiles.h: Prototype.
+
+2011-01-31  Jason Molenda  (jmolenda@apple.com)
+
+	* symfile.c (syms_from_objfile): Revert change from 2011-01-19
+	until some unintended side effects have been investigated.
+
 2011-01-26  Caroline Tice <ctice@apple.com>
 
         * arm-tdep.c (arm_macosx_fast_show_stack):   Modify the frame_num
@@ -23,9 +327,26 @@
 
 2011-01-19  Jason Molenda  (jmolenda@apple.com)
 
+	* symfile.c (syms_from_objfile): We're getting offsets double-applied
+	in the ordered sections table with kext dSYMs - remove that section
+	of code for a testsuite run to see what unintended consequences there
+	might be by removing it.
+
+2011-01-19  Jason Molenda  (jmolenda@apple.com)
+
         * inlining.c (print_inlined_frames_lite): Add guard against
         snprintf buffer overrun.  Don't leak function name + [inlined]
         memory scratch buffer.
+
+2011-01-19  Jason Molenda  (jmolenda@apple.com)
+
+	* dwarf2read.c (process_full_comp_unit): Adjust comile unit
+	start/end addresses by the dSYM section offset, if any.
+
+2011-01-19  Jason Molenda  (jmolenda@apple.com)
+
+	* dwarf2read.c (process_full_comp_unit): Adjust comile unit
+	start/end addresses by the dSYM section offset, if any.
 
 2011-01-18  Caroline Tice <ctice@apple.com>
 
@@ -44,11 +365,6 @@
         parameter an int* rather than an int, so it can be changed.
         (mi_print_frame_info_lite):  Ditto.
         (mi_cmd_stack_list_frames_lite): Ditto for the signature of print_fun.
-
-2011-01-19  Jason Molenda  (jmolenda@apple.com)
-
-	* dwarf2read.c (process_full_comp_unit): Adjust comile unit
-	start/end addresses by the dSYM section offset, if any.
 
 2011-01-12  Jim Ingham  <jingham@apple.com>
 

@@ -31,6 +31,7 @@
 #include <execinfo.h>
 #include <sys/resource.h>
 #include <uuid/uuid.h>
+#include <regex.h>
 
 #ifdef TUI
 #include "tui/tui.h"		/* For tui_get_command_dimension.   */
@@ -3934,3 +3935,77 @@ unlimit_file_rlimit ()
       bfd_set_cache_max_open (limit.rlim_cur - reserve);
     }
 }
+
+// Not even a little bit thread safe
+static regex_t rebuf;
+static int rebuf_needs_freeing = 0;
+
+static int regex_fmt = REG_BASIC;
+
+// newflags is a bitmask of
+// REG_EXTENDED, REG_BASIC, REG_NOSPEC, REG_ICASE, REG_NOSUB, REG_NEWLINE, 
+// REG_PEND used for subsequent re_comp's
+
+int
+re_set_syntax (int newflags)
+{
+  int oldflags = regex_fmt;
+  regex_fmt = newflags;
+  return oldflags;
+}
+
+const char *
+re_comp (const char *str)
+{
+  if (str == NULL && rebuf_needs_freeing)
+    {
+      // reuse the current compiled regex
+      return NULL;
+    }
+
+  if (str == NULL)
+    return "No previous regular expression";
+
+  if (rebuf_needs_freeing)
+    {
+      regfree (&rebuf);
+      memset (&rebuf, 0, sizeof (regex_t));
+      rebuf_needs_freeing = 0;
+    }
+
+  if (regcomp (&rebuf, str, regex_fmt) != 0)
+    return "re_comp failed on given pattern";
+
+  rebuf_needs_freeing = 1;
+  return NULL;
+}
+
+int
+re_exec (const char *str)
+{
+  regmatch_t matches[10];
+  memset (matches, 0, sizeof (regmatch_t) * 10);
+  if (regexec (&rebuf, str, 10, matches, 0) != 0)
+    return 0;
+  if (matches[0].rm_so == matches[0].rm_eo)
+    return 0;
+  return 1;
+}
+
+/* Some people use re_search() as a simpler way to call regexec() without
+   really needing the "find a match, now find the next match, etc" behavior
+   that re_search() really provides.
+   This is a one-shot re_search impl.  */
+
+int
+re_search_oneshot (regex_t *patbuf, const char *str, int size, int start, 
+                   int range, void *regs)
+{
+  regmatch_t matches[10];
+  memset (matches, 0, sizeof (regmatch_t) * 10);
+  if (regexec (patbuf, str, 10, matches, 0) != 0)
+    return -2;
+  if (matches[0].rm_so == matches[0].rm_eo)
+    return -1;
+  return matches[0].rm_so;
+}  

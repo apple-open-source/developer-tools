@@ -82,7 +82,7 @@ gdb_expect -re "$gdb_prompt $"
 
 gdb_test "break r5414488-libfile.m:18" "Breakpoint 1 at $hex: file.*, line.*\\." "Set breakpoint on inlined subroutine call at line 18"
 
-gdb_test "run" "Starting program: $binfile *\r\n\Reading symbols for shared libraries \(\[.+\]\)+ done.*Breakpoint 1, -\\\[TestLoop init\\\].*" "continue to breakpoint"
+gdb_test "run" "Starting program: .*Reading symbols for shared libraries.*Breakpoint 1, -\\\[TestLoop init\\\].*" "continue to breakpoint"
 
 gdb_test "step" "NSMakeRect \\\[inlined\\\].*"  "Step into inlined subroutine"
 
