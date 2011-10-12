@@ -414,8 +414,8 @@ macosx_exception_thread_destroy (macosx_exception_thread_status *s)
 	 may be sitting in.  */
 
       s->shutting_down = 1;
-      mach_port_destroy (mach_task_self (), s->inferior_exception_port);
-      mach_port_destroy (mach_task_self (), s->task);
+      mach_port_deallocate (mach_task_self (), s->inferior_exception_port);
+      mach_port_deallocate (mach_task_self (), s->task);
       /* The exception thread may have hit an error, in which
 	 case it's sitting in read wondering what to do.  Tell
 	 it to exit here.  */

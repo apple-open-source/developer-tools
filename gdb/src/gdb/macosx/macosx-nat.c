@@ -192,7 +192,7 @@ classic_socket_exists_p (pid_t pid)
   sprintf (name, "/tmp/translate.gdb.%d", pid);
   if (stat (name, &sb) != 0)
     return 0;
-  if (sb.st_mode & S_IFSOCK)
+  if (S_ISSOCK (sb.st_mode))
     return 1;
 
   return 0;

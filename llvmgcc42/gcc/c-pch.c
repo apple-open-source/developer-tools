@@ -446,6 +446,12 @@ c_common_read_pch (cpp_reader *pfile, const char *name,
      been loaded.  */
   if (lang_post_pch_load)
     (*lang_post_pch_load) ();
+  /* LLVM LOCAL begin */
+#ifdef ENABLE_LLVM
+  llvm_post_pch_read();
+#endif
+  /* LLVM LOCAL end */
+
 }
 
 /* Indicate that no more PCH files should be read.  */

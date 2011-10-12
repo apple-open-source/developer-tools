@@ -42,6 +42,7 @@
 .Op Fl o Ar outfile
 .Op Fl O Ar optlevel
 .Op Fl U Ar name ...
+.Op Fl W Cm 32|64
 .Ar operand ...
 .Sh DESCRIPTION
 This is the name of the C language compiler as required by the
@@ -150,10 +151,9 @@ Remove any initial definition of
 The
 .Fl U
 option may be specified more than once.
-.It Fl W Cm 64
-Make pointers 64 bits.  There is presently no
-.Fl W Cm 32
-option, since it is the default.
+.It Fl W Cm 32|64
+Set the pointer size for the compiled code to either 32 or 64 bits.
+If not specified, the pointer size matches the current host architecture.
 .El
 .Pp
 An operand is either in the form of a pathname or the form

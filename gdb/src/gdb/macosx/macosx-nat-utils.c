@@ -93,7 +93,14 @@ macosx_filename_in_bundle (const char *filename, int mainline)
   info_plist_filename = make_info_plist_path (filename, ".app", "Info.plist");
   if (info_plist_filename)
     plist = macosx_parse_plist (info_plist_filename);
-  
+
+  if (plist == NULL)
+    {
+      info_plist_filename = make_info_plist_path (filename, ".xpc", "Info.plist");
+      if (info_plist_filename)
+        plist = macosx_parse_plist (info_plist_filename);
+    }
+
   /* Did we find a valid property list in the shallow bundle?  */
   if (plist != NULL)
     {
@@ -107,6 +114,13 @@ macosx_filename_in_bundle (const char *filename, int mainline)
 						  "Contents/Info.plist");
       if (info_plist_filename)
 	plist = macosx_parse_plist (info_plist_filename);
+
+      if (plist == NULL)
+        {
+          info_plist_filename = make_info_plist_path (filename, ".xpc", "Contents/Info.plist");
+          if (info_plist_filename)
+            plist = macosx_parse_plist (info_plist_filename);
+        }
     }
 
   if (plist != NULL)

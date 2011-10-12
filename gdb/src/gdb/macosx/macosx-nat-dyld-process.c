@@ -1161,6 +1161,11 @@ dyld_load_library_from_file (const struct dyld_path_info *d,
        issue_warning = 0;
 #endif
 
+      /* OpenCL jitted dylibs will not have a backing file; don't
+         warn about them.  */
+      if (strstr (name, "com.apple.opencl/clprogram") != NULL)
+        issue_warning = 0;
+
       if (issue_warning)
         warning ("Unable to read symbols for %s (file not found).", name);
 
@@ -1322,7 +1327,14 @@ dyld_load_library (const struct dyld_path_info *d,
                 {
                   n = "<No file name>";
                 }
-              warning ("No copy of %s found locally, reading from memory on remote device.  This may slow down the debug session.", n);
+              /* For OpenCL jitted dylibs on a remote system don't report the
+                 fact that we couldn't find them on the local system.  Should we
+                 ignore them altogether?  This will still silently pull them down
+                 over the wire which is slow... but ignoring them altogether would
+                 be a drag if we crash in one or if one of the OpenCL folks are 
+                 trying to debug a problem with one.  */
+              if (strncmp (n, "com.apple.opencl/clprogram", strlen ("com.apple.opencl/clprogram")) != 0)
+                warning ("No copy of %s found locally, reading from memory on remote device.  This may slow down the debug session.", n);
 	    }
 	  goto try_again_please;
 	}

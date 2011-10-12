@@ -1310,6 +1310,10 @@ bool X86FastISel::X86SelectCall(Instruction *I) {
   if (FTy->isVarArg())
     return false;
 
+  // Fast-isel doesn't know about callee-pop yet.
+  if (Subtarget->IsCalleePop(FTy->isVarArg(), CC))
+    return false;
+
   // Handle *simple* calls for now.
   const Type *RetTy = CS.getType();
   EVT RetVT;

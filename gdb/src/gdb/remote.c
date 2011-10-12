@@ -1425,11 +1425,11 @@ record_currthread (int currthread)
 
   /* If this is a new thread, add it to GDB's thread list.
      If we leave it up to WFI to do this, bad things will happen.  */
-  if (!in_thread_list (pid_to_ptid (currthread)))
+  if (!in_thread_list (ptid_build (currthread, 0, currthread)))
     {
-      add_thread (pid_to_ptid (currthread));
+      add_thread (ptid_build (currthread, 0, currthread));
       ui_out_text (uiout, "[New ");
-      ui_out_text (uiout, target_pid_to_str (pid_to_ptid (currthread)));
+      ui_out_text (uiout, target_pid_to_str (ptid_build (currthread, 0, currthread)));
       ui_out_text (uiout, "]\n");
     }
 }
@@ -2165,7 +2165,7 @@ remote_newthread_step (threadref *ref, void *context)
 {
   ptid_t ptid;
 
-  ptid = pid_to_ptid (threadref_to_int (ref));
+  ptid = ptid_build (threadref_to_int (ref), 0, threadref_to_int (ref));
 
   if (!in_thread_list (ptid))
     add_thread (ptid);
@@ -2242,8 +2242,8 @@ remote_threads_info (void)
 		     positive numbers out of range for signed 'long',
 		     and return LONG_MAX to indicate an overflow.  */
 		  tid = strtoul (bufp, &bufp, 16);
-		  if (tid != 0 && !in_thread_list (pid_to_ptid (tid)))
-		    add_thread (pid_to_ptid (tid));
+		  if (tid != 0 && !in_thread_list (ptid_build (tid, 0, tid)))
+		    add_thread (ptid_build (tid, 0, tid));
 		}
 	      while (*bufp++ == ',');	/* comma-separated list */
 	      putpkt ("qsThreadInfo");
@@ -2689,7 +2689,7 @@ remote_open_1 (char *name, int from_tty, struct target_ops *target,
      be split out into seperate variables, especially since GDB will
      someday have a notion of debugging several processes.  */
 
-  inferior_ptid = pid_to_ptid (MAGIC_NULL_PID);
+  inferior_ptid = ptid_build (MAGIC_NULL_PID, 0, MAGIC_NULL_PID);
 
   if (async_p)
     {
@@ -3514,7 +3514,7 @@ Packet: '%s'\n"),
 got_status:
   if (thread_num != -1)
     {
-      return pid_to_ptid (thread_num);
+      return ptid_build (thread_num, 0, thread_num);
     }
   return inferior_ptid;
 }
@@ -3712,7 +3712,7 @@ Packet: '%s'\n"),
 got_status:
   if (thread_num != -1)
     {
-      return pid_to_ptid (thread_num);
+      return ptid_build (thread_num, 0, thread_num);
     }
   return inferior_ptid;
 }
@@ -5768,7 +5768,7 @@ threadalive_test (char *cmd, int tty)
 {
   int sample_thread = SAMPLE_THREAD;
 
-  if (remote_thread_alive (pid_to_ptid (sample_thread)))
+  if (remote_thread_alive (ptid_build (sample_thread, 0, sample_thread)))
     printf_filtered ("PASS: Thread alive test\n");
   else
     printf_filtered ("FAIL: Thread alive test\n");
@@ -6374,6 +6374,12 @@ remote_macosx_create_inferior (char *exec_file, char *allargs, char **env, int f
 
   /* Next send down the arguments.  */
 
+  /* Don't modify allargs -- this is actually a pointer to the inferior_args
+     global and we don't want to modify it.  */
+
+  char *allargs_copy = xstrdup (allargs);
+  make_cleanup (xfree, allargs_copy);
+
   /* allargs is about to get chopped up so measure its total size & remember */
 
   int allargs_string_length = strlen (allargs);
@@ -6382,7 +6388,7 @@ remote_macosx_create_inferior (char *exec_file, char *allargs, char **env, int f
 
   argv = (char **) xmalloc ((allargs_string_length + 1) * sizeof (char *));
   make_cleanup (xfree, argv);
-  breakup_args (allargs, &argc, argv);
+  breakup_args (allargs_copy, &argc, argv);
 
   if (remote_macosx_exec_dir == NULL || remote_macosx_exec_dir[0] == '\0')
     {

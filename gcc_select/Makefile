@@ -64,6 +64,7 @@ mklinks:
 	ln -s llvm-g++-4.2 $(DSTROOT)/usr/bin/c++
 	ln -s llvm-gcc-4.2 $(DSTROOT)/usr/bin/cc
 	ln -s gcov-4.2 $(DSTROOT)/usr/bin/gcov
+	ln -s ../llvm-gcc-4.2/bin/gcov-4.2 $(DSTROOT)/usr/bin/gcov-4.2
 
 installsrc:
 	if [ $(SRCROOT) != . ]; then  \
@@ -74,11 +75,7 @@ installdoc:
 	mkdir -p $(DSTROOT)/usr/share/man/man1
 	install -c -m 444 $(SRCROOT)/c99.1 $(DSTROOT)/usr/share/man/man1/c99.1
 	install -c -m 444 $(SRCROOT)/c89.1 $(DSTROOT)/usr/share/man/man1/c89.1
-	for prog in gcc g++ c++ gcov cpp ; do \
-	  ln -s $${prog}-4.2.1 $(DSTROOT)/usr/share/man/man1/$${prog}.1 || \
-	    exit 1 ; \
-	done
-	ln -s gcc.1 $(DSTROOT)/usr/share/man/man1/cc.1
+	ln -s gcc.1.gz $(DSTROOT)/usr/share/man/man1/cc.1.gz
 
 installhdrs:
 	mkdir -p $(DSTROOT)/usr/include/gcc/darwin

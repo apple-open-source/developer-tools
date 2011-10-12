@@ -12839,10 +12839,20 @@ tree_expr_nonzero_warnv_p (tree t, bool *strict_overflow_p)
 
    case ADDR_EXPR:
       {
-	tree base = get_base_address (TREE_OPERAND (t, 0));
+        tree targ0 = TREE_OPERAND (t, 0);
+        tree base = get_base_address (targ0);
 
 	if (!base)
 	  return false;
+
+        /* LLVM LOCAL begin */
+#ifdef ENABLE_LLVM
+        /* Support the "array ref with pointer base" extension. */
+        if (TREE_CODE (targ0) == ARRAY_REF &&
+            TREE_CODE (TREE_TYPE (TREE_OPERAND(targ0, 0))) != ARRAY_TYPE)
+          return false;
+#endif
+        /* LLVM LOCAL end */
 
 	/* Weak declarations may link to NULL.  */
 	if (VAR_OR_FUNCTION_DECL_P (base))

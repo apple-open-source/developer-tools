@@ -675,14 +675,18 @@ arm_pc_is_thumb (CORE_ADDR memaddr)
    with bits 31:16 set to zero. If the thumb opcode size is 4 bytes, the 
    first 16 bit opcode will be in bits 31:16, and the second 16 bit opcode 
    will be in bits 15:0.  */
-static uint32_t
-read_thumb_instruction (CORE_ADDR addr, uint32_t *opcode_size_ptr)
+int
+read_thumb_instruction (CORE_ADDR addr, uint32_t *opcode_size_ptr, uint32_t *insn)
 {
-  uint32_t insn = read_memory_unsigned_integer (addr, 2);
+  ULONGEST buf;
+  if (safe_read_memory_unsigned_integer (addr, 2, &buf))
+    *insn = buf;
+  else
+    return 0;
   
   /* Check if this is a 32 bit instruction and read the low 16 bits
      after shifting the high 16 bits into 31:16.  */
-  if ((insn & 0xe000) != 0xe000 || bits (insn, 11, 12) == 0)
+  if ((*insn & 0xe000) != 0xe000 || bits (*insn, 11, 12) == 0)
     {
       /* We have a 16 bit thumb instruction.  */
       if (opcode_size_ptr)
@@ -691,14 +695,14 @@ read_thumb_instruction (CORE_ADDR addr, uint32_t *opcode_size_ptr)
   else
     {
       /* We have a 32 bit thumb instruction.  */
-      insn = insn << 16 | read_memory_unsigned_integer (addr + 2, 2);
+      *insn = *insn << 16 | read_memory_unsigned_integer (addr + 2, 2);
       
       /* Fill in the opcode size if requested.  */
       if (opcode_size_ptr)
 	*opcode_size_ptr = 4;
     }
   
-  return insn;
+  return 1;
 }
 
 
@@ -862,8 +866,10 @@ thumb_macosx_skip_prologue (CORE_ADDR pc, CORE_ADDR func_end)
   uint32_t opcode_size = 2;  /* Size in bytes of the thumb instruction.  */
   for (state.pc = pc; state.pc < max_prologue_addr; state.pc += opcode_size)
     {
+      uint32_t insn;
       /* Read a 16 or 32 bit thumb instruction into a 32 bit value.  */
-      uint32_t insn = read_thumb_instruction (state.pc, &opcode_size);
+      if (!read_thumb_instruction (state.pc, &opcode_size, &insn))
+        return pc;
       
       /* Make sure we got a 2 or 4 byte opcode size. We could conceivably 
          got an opcode_size of zero if we failed to read memory. */
@@ -1124,7 +1130,12 @@ arm_macosx_skip_prologue_addr_ctx (struct address_context *pc_addr_ctx)
 
   for (state.pc = pc; state.pc < prologue_end; state.pc += 4)
     {
-      insn = read_memory_unsigned_integer (state.pc, 4);
+      ULONGEST buf;
+      if (safe_read_memory_unsigned_integer (state.pc, 4, &buf))
+        insn = buf;
+      else
+        return pc;
+
       if (arm_debug > 3)
 	fprintf_unfiltered (gdb_stdlog, "  0x%s: 0x%8.8x", paddr (state.pc), 
 			    insn);
@@ -1535,7 +1546,8 @@ of function, aborting at 0x%s after consecutive zero opcodes\n",
        state.pc += opcode_size)
     {
       /* Read a 16 or 32 bit thumb instruction into a 32 bit value.  */
-      insn = read_thumb_instruction (state.pc, &opcode_size);
+      if (!read_thumb_instruction (state.pc, &opcode_size, &insn))
+        return;
 
       /* Make sure we got a 2 or 4 byte opcode size. We could conceivably 
          got an opcode_size of zero if we failed to read memory. */

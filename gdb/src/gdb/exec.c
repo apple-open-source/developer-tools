@@ -286,8 +286,12 @@ exec_file_attach (char *filename, int from_tty)
 #endif
       /* APPLE LOCAL end app bundles */
 
+      if (scratch_chan < 0 && !file_exists_p (filename))
+        error ("File '%s' does not exist or is not a regular file.", filename);
+
       if (scratch_chan < 0)
 	perror_with_name (filename);
+
       exec_bfd = bfd_fopen (scratch_pathname, gnutarget,
 			    write_files ? FOPEN_RUB : FOPEN_RB,
 			    scratch_chan);

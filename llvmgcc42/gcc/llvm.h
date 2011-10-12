@@ -103,6 +103,9 @@ void llvm_pch_write_init(void);
 /* Read bytecodes from PCH file.  */
 void llvm_pch_read(const unsigned char *, unsigned);
 
+/* Initialize remainign llvm specific data structures after pch is loaded.  */
+void llvm_post_pch_read(void);
+
 /* llvm_asm_file_start - Start the .s file. */
 void llvm_asm_file_start(void);
 

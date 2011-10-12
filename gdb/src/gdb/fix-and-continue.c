@@ -1995,7 +1995,7 @@ file_exists_p (const char *filename)
   if (stat (filename, &sb) != 0)
     return 0;
 
-  if (sb.st_mode & S_IFREG)
+  if (S_ISREG (sb.st_mode))
     return 1;
   else
     return 0;

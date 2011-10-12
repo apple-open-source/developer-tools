@@ -844,8 +844,9 @@ macosx_locate_dyld_via_taskinfo (macosx_dyld_thread_status *s)
           && raw_infos.dyld_actual_load_address != 0
           && dyld_starts_here_p (raw_infos.dyld_actual_load_address))
         {
-          if (raw_infos.version >= 9 
-              && raw_infos.dyld_intended_load_address != INVALID_ADDRESS
+          if (raw_infos.dyld_intended_load_address != INVALID_ADDRESS
+              && raw_infos.dyld_intended_load_address != 0
+              && raw_infos.dyld_actual_load_address != INVALID_ADDRESS
               && dyld_starts_here_p (raw_infos.dyld_actual_load_address))
             {
               s->dyld_addr = raw_infos.dyld_actual_load_address;

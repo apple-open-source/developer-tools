@@ -769,12 +769,17 @@ protected:
     NewInstruction = IC->ReplaceInstUsesWith(*CI, With);
   }
   bool isFoldable(unsigned SizeCIOp, unsigned SizeArgOp, bool isString) const {
-    if (ConstantInt *SizeCI = dyn_cast<ConstantInt>(CI->getOperand(SizeCIOp))) {
+    if (ConstantInt *SizeCI =
+       		    	    dyn_cast<ConstantInt>(CI->getOperand(SizeCIOp))) {
       if (SizeCI->isAllOnesValue())
         return true;
-      if (isString)
-        return SizeCI->getZExtValue() >=
-               GetStringLength(CI->getOperand(SizeArgOp));
+      if (isString) {
+      	uint64_t Len = GetStringLength(CI->getOperand(SizeArgOp));
+        // If the length is 0 we don't know how long it is and so we can't
+        // remove the check.
+        if (Len == 0) return false;
+        return SizeCI->getZExtValue() >= Len;
+      }
       if (ConstantInt *Arg = dyn_cast<ConstantInt>(CI->getOperand(SizeArgOp)))
         return SizeCI->getZExtValue() >= Arg->getZExtValue();
     }
@@ -1276,4 +1281,3 @@ Instruction *InstCombiner::transformCallThroughTrampoline(CallSite CS) {
   CS.setCalledFunction(NewCallee);
   return CS.getInstruction();
 }
-

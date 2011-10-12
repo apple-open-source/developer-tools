@@ -152,6 +152,11 @@ mi_cmd_stack_list_frames (char *command, char **argv, int argc)
 }
 
 /* Helper print function for mi_cmd_stack_list_frames_lite */
+
+/* FRAME_NUM will be unmodified if this function only prints a single
+   concrete frame.  It will be incremented once for each inlined frame
+   that is printed in addition to the concrete frame.  */
+
 static void 
 mi_print_frame_info_lite_base (struct ui_out *uiout,
 			       int with_names,
@@ -800,10 +805,8 @@ parse_statics_globals_args (char **argv, int argc, char **filename_ptr, char ** 
 
   if (filter_arg != NULL)
     {
-      const char *msg;
-
       if (regcomp (&mi_symbol_filter, filter_arg, REG_EXTENDED) != 0)
-	error ("Error compiling regexp: \"%s\"", msg);
+	error ("Error compiling regexp: \"%s\"", filter_arg);
       *filterp_ptr = &mi_symbol_filter;
     }
   else

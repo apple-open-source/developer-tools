@@ -1377,7 +1377,7 @@ int
 dir_exists_p (const char *dir)
 {
   struct stat sb;
-  return (stat (dir, &sb) == 0) && ((sb.st_mode & S_IFDIR) != 0);
+  return (stat (dir, &sb) == 0) && S_ISDIR (sb.st_mode);
 }
 
 /* Searches a string for a substring.  If the substring is found, the
@@ -2224,7 +2224,6 @@ actually_do_stack_frame_prologue (unsigned int count_limit,
   CORE_ADDR fp;
   ULONGEST pc;
   struct frame_info *fi = NULL;
-  int i;
   int more_frames;
   int old_load_state;
   
@@ -2237,15 +2236,8 @@ actually_do_stack_frame_prologue (unsigned int count_limit,
   if (print_fun)
     ui_out_begin (uiout, ui_out_type_list, "frames");
 
-  i = 0;
   more_frames = 1;
   pc = 0;
-
-  if (i >= count_limit)
-    {
-      more_frames = 0;
-      goto count_finish;
-    }
 
   fi = get_current_frame ();
   if (fi == NULL)
@@ -2254,8 +2246,8 @@ actually_do_stack_frame_prologue (unsigned int count_limit,
       goto count_finish;
     }
 
-  /* Sometimes we can backtrace more accurately when we read
-     in debug information.  So let's do that here.  */
+  /* Sometimes we can backtrace more accurately when we read in
+     debug information.  So let's do that here for the first frame.  */
 
   old_load_state = pc_set_load_state (get_frame_pc (fi), OBJF_SYM_ALL, 0);
   if (old_load_state >= 0 && old_load_state != OBJF_SYM_ALL && print_fun == NULL)
@@ -2264,36 +2256,39 @@ actually_do_stack_frame_prologue (unsigned int count_limit,
       goto start_again;
     }
 
-  if (print_fun && (i >= print_start && i < print_end))
-    print_fun (uiout, &i, get_frame_pc (fi), get_frame_base (fi));
+  int frames_printed = 0;
 
-  if (i == 0)
-    i = 1;
-  else if (i > 0)
+  // Print the first frame (and any inlined frames that may be at this point)
+  if (print_fun && 0 >= print_start && 0 < print_end)
+    print_fun (uiout, &frames_printed, get_frame_pc (fi), get_frame_base (fi));
+
+  /* if print_fun() listed inlined function psuedo-frames, "frames_printed" will
+     be incremented from its initial value (always 0 here). e.g.
+     frames_printed == 0, we printed one concrete frame
+     frames_printed == 1, we printed a concrete frame plus an inlined frame.  */
+
+  frames_printed++;
+  if (frames_printed > 1)
     {
-
       /* In this case, we must have found and printed out some inlined
          frames already.  Therefore, we need to bring 'fi' up to our
          currently printed frame location, then increment i and
          proceed into the loop (if we're not already done). */
-      
-      int j = 0;
-      while ((j < i) && (fi != NULL))
-        {
-          fi = get_prev_frame (fi);
-          ++j;
-        }
+      int j;
+      for (j = 0; j < (frames_printed - 1) && fi != NULL; j++)
+        fi = get_prev_frame (fi);
+
+      // At the top of the stack?  Then we're done here.
       if (fi == NULL)
         {
           more_frames = 0;
           goto count_finish;
         }
-      ++i;
     }
   
   do
     {
-      if (i >= count_limit)
+      if (frames_printed >= count_limit)
 	{
 	  more_frames = 0;
 	  goto count_finish;
@@ -2319,41 +2314,36 @@ actually_do_stack_frame_prologue (unsigned int count_limit,
 	  goto start_again;
 	}
 
-      if (print_fun && (i >= print_start && i < print_end))
-        print_fun (uiout, &i, pc, fp);
+      if (print_fun && frames_printed >= print_start && frames_printed < print_end)
+        print_fun (uiout, &frames_printed, pc, fp);
+      frames_printed++;
 
       /* If we printed out multiple frames (because of inlining) then we
          need to update fi appropriately)  */
 
-      int j = frame_relative_level (fi);
-      while ((j < i) && (fi != NULL))
-        {
-          fi = get_prev_frame (fi);
-          ++j;
-        }
+      int j;
+      for (j = frame_relative_level (fi); j < (frames_printed - 1) && fi != NULL; j++)
+        fi = get_prev_frame (fi);
 
       if (fi == NULL)
-      {
+        {
           more_frames = 0;
           goto count_finish;
-      }
+        }
 
-      i++;
-
-      /* APPLE LOCAL begin subroutine inlining  */
-      if (!backtrace_past_main && inside_main_func (fi)
+      if (!backtrace_past_main 
+          && inside_main_func (fi)
 	  && get_frame_type (fi) != INLINED_FRAME)
 	{
 	  more_frames = 0;
 	  goto count_finish;
 	}
-      /* APPLE LOCAL end subroutine inlining  */
     }
-  while (i < 5);
+  while (frames_printed < 5);
 
  count_finish:
   *out_fi = fi;
-  *count = i;
+  *count = frames_printed;
   return more_frames;
 }
 

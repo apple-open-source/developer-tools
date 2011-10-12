@@ -48,7 +48,7 @@
 #	@(#)usr.bin.cpp.sh	6.5 (Berkeley) 4/1/91
 #
 PATH="`xcode-select -print-path`/usr/bin:/usr/bin:/bin"
-CPP="gcc -E"
+CPP="llvm-gcc-4.2 -E"
 OUTPUT="-o -"
 ALST="-traditional"
 NSI=no

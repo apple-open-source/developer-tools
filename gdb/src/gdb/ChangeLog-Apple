@@ -1,3 +1,96 @@
+2011-08-01  Jim Ingham  <jingham@apple.com>
+
+	* objc-lang.c (objc_setup_safe_print): Move suppressing output past
+	the code that overrides the safe check mode.  Also, now setting
+	the safe check off overrides ALL checking.
+	
+2011-07-27  Jim Ingham  <jingham@apple.com>
+
+	* objc-lang.c (objc_setup_safe_print): If the Objc non-blocking mode is
+	turned off, then setup_safe_print should return true, not false.
+	
+2011-07-25  Jason Molenda  (jmolenda@apple.com)
+
+	* remote.c (record_currthread): Put the thread id in both
+	the pid slot (old behavior) and the thread id slot.
+	(remote_newthread_step): Ditto.
+	(remote_threads_info): Ditto.
+	(remote_open_1): Ditto.
+	(threadalive_test): Ditto.
+	(remote_pid_to_str): Ditto.
+
+2011-07-25  Jason Molenda  (jmolenda@apple.com)
+
+	* objc-lang.c (objc_setup_safe_print): Only print
+	po-and-print-run-all-threads warning if the debug_handcall_setup
+	flag is set, not if verbose is set.
+
+2011-07-21  Jason Molenda  (jmolenda@apple.com)
+
+	* objc-lang.c: Make the setting name 
+	'po-and-print-run-all-threads' not 
+	'po_and_print_run_all_threads' to be consistent with
+	other set/show names.
+
+2011-07-21  Jim Ingham  <jingham@apple.com>
+
+	* objc-lang.c: Rename call-po-at-unsafe-times to po_and_print_run_all_threads
+	to more clearly reflect what it does.  Also set the default to 1, there are
+	too many cases where malloc & objc lie to us and tell us running is safe when
+	it is not.
+	(_initialize_objc_lang): Change the set variable as well.
+	(objc_setup_safe_print): If po_and_print_runs_all_threads is on, then
+	override debugger mode and run all threads.
+	
+2011-07-14  Jason Molenda  (jmolenda@apple.com)
+
+	* utils.c (breakup_args): Allow for multi-word arguments
+	if they are delimited by quote marks.  Limited flexibility;
+	--arg="this is \" a test" will fail to parse correctly.
+	Only detects quoted args if the quote mark is the first char
+	of the argument so --arg=this_is_"_a_test will be passed as-is.
+
+2011-07-11  Jason Molenda  (jmolenda@apple.com)
+
+	* remote.c (remote_macosx_create_inferior): Make a copy of
+	the "allargs" parameter because we'll modify it and our caller
+	is passing a pointer ot the global args string (which 
+	shouldn't be modified).
+
+2011-07-08  Jason Molenda  (jmolenda@apple.com)
+
+	* symfile.c (replace_psymbols_with_correct_psymbols):
+	After we've copied the partial symbols from the .sym file
+	to the dSYM, clear the psymtab link in the .sym file objfile
+	so we don't try to use them later on.
+
+2011-07-07  Jason Molenda  (jmolenda@apple.com)
+
+	* arm-tdep.c (read_thumb_instruction): Use the safe memory 
+	read call so we don't throw an error() if we can't scan the
+	prologue right now.
+	(thumb_macosx_skip_prologue): Update to 
+	read_thumb_instruction's new usage.
+	(arm_macosx_skip_prologue_addr_ctx): Same.
+
+2011-07-07  Jason Molenda  (jmolenda@apple.com)
+
+	* fix-and-continue.c (file_exists_p): Use S_ISREG to 
+	test the st_mode bits.
+
+2011-07-07  Jason Molenda  (jmolenda@apple.com)
+
+	* exec.c (exec_file_attach): When we fail to open the arg
+	to  file / -file-exec-and-symbols, check to see if the 
+	file exists at all and emit a gdb specific error message
+	instead of picking up whatever the last errno msg is set to.
+
+2011-07-06  Jason Molenda  (jmolenda@apple.com)
+
+	* configure.ac (build_warnings): Remove -Wformat-nonliteral
+	and add -Wno-format-security for building with clang; too
+	many false positives with gettext macros in the gdb sources.
+
 2011-07-01  Jason Molenda  (jmolenda@apple.com)
 
 	* remote.c 

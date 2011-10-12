@@ -1,3 +1,49 @@
+2011-07-14  Jason Molenda  (jmolenda@apple.com)
+
+	* macosx-nat-dyld-process.c (dyld_load_library_from_file):
+	Don't warn about OpenCL jitted dylibs not being found on
+	disk.
+	(dyld_load_library): Don't warn about the fact that OpenCL
+	jitted dylibs will be copied down from the device over the
+	wire on a remote debug session.
+
+2011-07-14  Jason Molenda  (jmolenda@apple.com)
+
+	* macosx-nat-dyld.c (macosx_locate_dyld_via_taskinfo): 
+	Correctly handle slides from pre-version-9-dyld-all-image-infos
+	if we have reasonable values for the dyld load location and
+	intended dyld load location.
+
+2011-07-13  Jason Molenda  (jmolenda@apple.com)
+
+	* macosx-tdep.c (actually_do_stack_frame_prologue): Excise
+	the "i" local var and comparisons against the same.
+
+2011-07-13  Jason Molenda  (jmolenda@apple.com)
+
+	* macosx-tdep.c (actually_do_stack_frame_prologue): Fix
+	off-by-one error when we had a stack less than 5 frames
+	deep with an inlined function in it so that the # of frames
+	printed is returned correctly.  Clean up the variable names
+	a bit so this function is easier to understand.
+
+2011-07-08  Jason Molenda  (jmolenda@apple.com)
+
+	* macosx-nat-utils.c (macosx_filename_in_bundle): Add special
+	a case to handle a ".xpc" bundle in addition to ".app".
+
+2011-07-07  Jason Molenda  (jmolenda@apple.com)
+
+	* macosx-nat.c (classic_socket_exists_p): Use S_ISSOCK to test
+	the bits.
+	* macosx-tdep.c (dir_exists_p): Use S_ISDIR to test the bits.
+
+2011-07-05  Jason Molenda  (jmolenda@apple.com)
+
+	* macosx-nat-excthread.c (macosx_exception_thread_destroy): Call
+	mach_port_deallocate instead of mach_port_destroy to reduce ref count
+	on ports we have send/receive rights to.
+
 2011-06-30  Jason Molenda  (jmolenda@apple.com)
 
 	* macosx-nat-dyld.c (macosx_locate_dyld_via_taskinfo): For the special
@@ -21,8 +67,8 @@
 2011-06-20  Jim Ingham  <jingham@apple.com>
 
 	* macosx-nat-excthread.c (macosx_exception_thread_create): Add an 
-	option to not watch EXC_BAD_ACCESS when we watch exceptions in the target
-	program.  
+	option to not watch EXC_BAD_ACCESS when we watch exceptions in the 
+	target program.  
 	
 2011-05-14  Jason Molenda  (jmolenda@apple.com)
 

@@ -26,7 +26,7 @@
 /* Begin PBXBuildFile section */
 		B3236A9808A978E700609FFD /* distcc.plist in license plist */ = {isa = PBXBuildFile; fileRef = B3236A8608A976CE00609FFD /* distcc.plist */; };
 		B3236AA108A97BD700609FFD /* distcc.txt in license file */ = {isa = PBXBuildFile; fileRef = B3236AA008A97BCE00609FFD /* distcc.txt */; };
-		B387DBC3087F275300A8560D /* distccd.plist in Launchd .plist */ = {isa = PBXBuildFile; fileRef = B3BA8F32087CA128009521B6 /* distccd.plist */; };
+		B387DBC3087F275300A8560D /* com.apple.distccd.plist in Launchd .plist */ = {isa = PBXBuildFile; fileRef = B3BA8F32087CA128009521B6 /* com.apple.distccd.plist */; };
 		B3979746089C5BD100A40359 /* distcc_compilers in distcc_compilers */ = {isa = PBXBuildFile; fileRef = B3979742089C5B4400A40359 /* distcc_compilers */; };
 /* End PBXBuildFile section */
 
@@ -69,7 +69,7 @@
 			dstPath = /System/Library/LaunchDaemons;
 			dstSubfolderSpec = 0;
 			files = (
-				B387DBC3087F275300A8560D /* distccd.plist in Launchd .plist */,
+				B387DBC3087F275300A8560D /* com.apple.distccd.plist in Launchd .plist */,
 			);
 			name = "Launchd .plist";
 			runOnlyForDeploymentPostprocessing = 1;
@@ -99,7 +99,7 @@
 		B387DA8B087EFCAC00A8560D /* Common.make */ = {isa = PBXFileReference; fileEncoding = 30; lastKnownFileType = text; path = Common.make; sourceTree = "<group>"; };
 		B387DA8C087EFCAC00A8560D /* GNUSource.make */ = {isa = PBXFileReference; fileEncoding = 30; lastKnownFileType = text; path = GNUSource.make; sourceTree = "<group>"; };
 		B3979742089C5B4400A40359 /* distcc_compilers */ = {isa = PBXFileReference; fileEncoding = 30; lastKnownFileType = text; path = distcc_compilers; sourceTree = "<group>"; };
-		B3BA8F32087CA128009521B6 /* distccd.plist */ = {isa = PBXFileReference; fileEncoding = 30; lastKnownFileType = text.plist.xml; path = distccd.plist; sourceTree = "<group>"; };
+		B3BA8F32087CA128009521B6 /* com.apple.distccd.plist */ = {isa = PBXFileReference; fileEncoding = 30; lastKnownFileType = text.plist.xml; path = com.apple.distccd.plist; sourceTree = "<group>"; };
 		B3CC5CFD087DFB8F00EB91A2 /* Makefile */ = {isa = PBXFileReference; fileEncoding = 30; lastKnownFileType = sourcecode.make; path = Makefile; sourceTree = "<group>"; };
 		B3CC5D78087DFCD100EB91A2 /* Makefile.in */ = {isa = PBXFileReference; fileEncoding = 30; lastKnownFileType = text; name = Makefile.in; path = distcc_dist/Makefile.in; sourceTree = "<group>"; };
 /* End PBXFileReference section */
@@ -123,7 +123,7 @@
 				B3CC5CF8087DFB2C00EB91A2 /* distcc */,
 				B3236AA008A97BCE00609FFD /* distcc.txt */,
 				B3236A8608A976CE00609FFD /* distcc.plist */,
-				B3BA8F32087CA128009521B6 /* distccd.plist */,
+				B3BA8F32087CA128009521B6 /* com.apple.distccd.plist */,
 				B3979742089C5B4400A40359 /* distcc_compilers */,
 				B3BA8F3B087CA1DE009521B6 /* Products */,
 				50367DFF0EDB29950049A223 /* Config Files */,
@@ -174,7 +174,11 @@
 			isa = PBXProject;
 			buildConfigurationList = B3BA8F22087CA0CC009521B6 /* Build configuration list for PBXProject "distcc" */;
 			compatibilityVersion = "Xcode 3.1";
+			developmentRegion = English;
 			hasScannedForEncodings = 0;
+			knownRegions = (
+				en,
+			);
 			mainGroup = B3BA8F1F087CA0CC009521B6;
 			productRefGroup = B3BA8F3B087CA1DE009521B6 /* Products */;
 			projectDirPath = "";

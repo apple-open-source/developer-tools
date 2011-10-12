@@ -3541,11 +3541,17 @@ align_down (ULONGEST v, int n)
 /* APPLE LOCAL: Moved this from fork-child since I need it in remote
    and fork-child doesn't get built for a cross.  I also changed this
    to report argv as well.  */
+
+/* APPLE LOCAL: Modify this to allow for quoted multiword arguments
+   e.g.
+   arg1 "arg2 word2 word3" arg3
+   is three arguments, the middle one being a multi-word arg.  */
+
 void
 breakup_args (char *scratch, int *argc, char **argv)
 {
   char *cp = scratch;
-
+  char quote = '\0';
   *argc = 0;
 
   for (;;)
@@ -3558,15 +3564,32 @@ breakup_args (char *scratch, int *argc, char **argv)
       if (*cp == '\0')
 	break;
 
+      if (*cp == '"')
+        {
+          quote = '"';
+          cp++;
+        }
+
       /* Take an arg.  */
       *argv++ = cp;
       (*argc)++;
 
-      /* Scan for next arg separator */
-      while (!(*cp == '\0' || *cp == ' ' || *cp == '\t' || *cp == '\n'))
-	{
-	  cp++;
-	}
+      if (quote != '\0')
+        {
+          while (*cp != '\0' && *cp != quote)
+            cp++;
+          if (*cp == quote)
+            *cp++ = '\0';
+           quote = '\0';
+        }
+      else
+        {
+          /* Scan for next arg separator */
+          while (!(*cp == '\0' || *cp == ' ' || *cp == '\t' || *cp == '\n'))
+	    {
+	      cp++;
+	    }
+        }
 
       /* No separators => end of string => break */
       if (*cp == '\0')

@@ -1,5 +1,5 @@
 GDB_VERSION = 6.3.50-20050815
-GDB_RC_VERSION = 1705
+GDB_RC_VERSION = 1708
 
 BINUTILS_VERSION = 2.13-20021117
 BINUTILS_RC_VERSION = 46
@@ -125,16 +125,16 @@ INTL_HEADERS = $(BINUTILS_BUILD_ROOT)/usr/include
 
 TAR = gnutar
 CPP = cpp
-CC = gcc
+CC = clang
 CXX = c++
 LD = ld
 AR = ar
 RANLIB = ranlib
 NM = nm
-CC_FOR_BUILD = gcc
+CC_FOR_BUILD = clang
 
 ifndef CDEBUGFLAGS
-CDEBUGFLAGS = -g -Os -funwind-tables -fasynchronous-unwind-tables -D_DARWIN_UNLIMITED_STREAMS
+CDEBUGFLAGS = -g -Os -funwind-tables -fasynchronous-unwind-tables -D_DARWIN_UNLIMITED_STREAMS -Wno-format-security -Wno-format-nonliteral 
 endif
 
 CFLAGS = $(CDEBUGFLAGS) $(RC_CFLAGS)
@@ -197,8 +197,8 @@ CONFIG_BUILD=--build=$(BUILD_ARCH)
 CONFIG_OTHER_OPTIONS?=--disable-serial-configure
 
 ifneq ($(findstring macosx,$(CANONICAL_ARCHS))$(findstring darwin,$(CANONICAL_ARCHS)),)
-CC = gcc -arch $(HOST_ARCHITECTURE)
-CC_FOR_BUILD = gcc
+CC = clang -arch $(HOST_ARCHITECTURE)
+CC_FOR_BUILD = clang
 
 CDEBUGFLAGS = -g -Os
 
@@ -299,7 +299,7 @@ crossarm:;
 	for i in $(RC_ARCHS); do \
 		$(RM) -r $(OBJROOT)/$${i}-apple-darwin--arm-apple-darwin; \
 		$(INSTALL) -c -d $(OBJROOT)/$${i}-apple-darwin--arm-apple-darwin; \
-		sdk_cc=`xcrun -sdk $(SDKROOT) -find gcc`; \
+		sdk_cc=`xcrun -sdk $(SDKROOT) -find clang`; \
 		(cd $(OBJROOT)/$${i}-apple-darwin--arm-apple-darwin/ && \
 			$(CONFIGURE_ENV) CC="$${sdk_cc} -arch $${i}" $(MACOSX_FLAGS) $(SRCTOP)/src/configure \
 				--host=$${i}-apple-darwin \
@@ -372,10 +372,10 @@ cross:;
 			$(RM) -r "$${curr_objroot}"; \
 			$(INSTALL) -c -d "$${curr_objroot}"; \
 			if [[ "$${host_arch}" == "arm" ]] ; then \
-				sdk_cc=`xcrun -sdk $(SDKROOT) -find gcc`; \
+				sdk_cc=`xcrun -sdk $(SDKROOT) -find clang`; \
 				sdk_cflags=" -isysroot $(SDKROOT)"; \
 			else \
-				sdk_cc="cc"; \
+				sdk_cc="clang"; \
 				sdk_cflags=""; \
 			fi; \
 			(cd "$${curr_objroot}"/ && \
@@ -426,10 +426,10 @@ cross-installhdrs:
 			$(RM) -r "$${curr_objroot}"; \
 			$(INSTALL) -c -d "$${curr_objroot}"; \
 			if [[ "$${host_arch}" == "arm" ]] ; then \
-				sdk_cc=`xcrun -sdk $(SDKROOT) -find gcc`; \
+				sdk_cc=`xcrun -sdk $(SDKROOT) -find clang`; \
 				sdk_cflags=" -isysroot $(SDKROOT)"; \
 			else \
-				sdk_cc="cc"; \
+				sdk_cc="clang"; \
 				sdk_cflags=""; \
 			fi; \
 			(cd "$${curr_objroot}"/ && \

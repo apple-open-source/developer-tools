@@ -1,3 +1,13 @@
+2011-07-22  Jim Ingham  <jingham@apple.com>
+
+	* mi-main.c (captured_mi_execute_command): Null out mi_error_message
+	after freeing it to make sure it doesn't get double-freed...
+	
+2011-07-13  Jason Molenda  (jmolenda@apple.com)
+
+	* mi-cmd-stack.c (parse_statics_globals_args): Fix error printer
+	to print the pattern that failed to compile.
+
 2011-04-28  Jason Molenda  (jmolenda@apple.com)
 
 	* mi-main.c (mi_execute_command): If we have a NULL error message text,

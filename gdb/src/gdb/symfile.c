@@ -1457,6 +1457,15 @@ replace_psymbols_with_correct_psymbols (struct objfile *exe_obj)
       // TODO includes?
     } 
 
+  /* At this point we've copied all of the relevant psymbols from the
+     .sym file (with the actual addresses for the kext) over into the
+     dSYM's objfile.  Leaving the .sym file's objfile with the original
+     psyms is just going to cause trouble if we try to expand it, so 
+     clear them out.  Remember, this is only happening for kexts.  */
+
+  exe_obj->psymtabs = NULL;
+  exe_obj->symtabs = NULL;
+
   tell_breakpoints_objfile_changed (dsym_obj);
   tell_objc_msgsend_cacher_objfile_changed (dsym_obj);
   /* APPLE LOCAL cache lookup values for improved performance  */
@@ -1692,12 +1701,13 @@ symbol_file_add_with_addrs_or_offsets_using_objfile (struct objfile *in_objfile,
   if (objfile->separate_debug_objfile)
     append_psymbols_as_msymbols (objfile);  
 
-  /* If OBJFILE is a kext binary that has final linked addresses (i.e. is the
-     output of kextutil) and we have a dSYM file (which has ld -r'ed addresses
-     but not kextutil'ed addresses so they are not final/correct), copy the
-     psymtabs from OBJFILE which are based on the debug map entries into
-     the OBJFILE->separate_debug_objfile and unlink the dSYM's original psymtab
-     entries.  */
+  /* If OBJFILE is a kext binary that has final linked addresses
+     (i.e. is the output of kextutil, a .sym file) and we have a
+     dSYM file (which has ld -r'ed addresses but not kextutil'ed
+     addresses so they are not final/correct), copy the psymtabs
+     from OBJFILE which are based on the debug map entries into the
+     OBJFILE->separate_debug_objfile and unlink the dSYM's original
+     psymtab entries.  */
   if (objfile->separate_debug_objfile && objfile->not_loaded_kext_filename)
     replace_psymbols_with_correct_psymbols (objfile);
 

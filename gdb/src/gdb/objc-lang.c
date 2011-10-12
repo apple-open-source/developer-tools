@@ -94,9 +94,9 @@ static int debug_objc;
 /* Should we lookup ObjC Classes as part of ordinary symbol resolution? */
 int lookup_objc_class_p = 1;
 
-/* Should we override the check for things like malloc on the stack above us before
-   calling PO?  */
-int call_po_at_unsafe_times = 0;
+/* Should we always run all threads with only minimal checks for the current thread when running
+   po and printing?  */
+int po_and_print_run_all_threads = 1;
 
 /* If we can't safely run po with the other threads frozen, should we run it
    with the other threads free to execute.  */
@@ -2248,6 +2248,18 @@ objc_setup_safe_print (struct cleanup **cleanup)
     {
       static struct ui_out *null_uiout = NULL, *stored_uiout;
       struct gdb_exception e;
+
+      if (po_and_print_run_all_threads)
+        {
+          /* Don't check anything, just override any more checking of the debugger
+             mode and return 1.  */
+          if (debug_handcall_setup)
+            fprintf_unfiltered (gdb_stdout, "In objc_setup_safe_print: "
+                               "po-and-print-run-all-threads is on, so overriding check.");
+          make_cleanup_set_restore_debugger_mode (&ret_cleanup, 0);
+          return 1;
+        }
+
       /* I want to suppress output here, because if there is some problem,
          I'm going to try to work around it and so the warning messages would
          not be helpful.  I can't use the cleanup method because then I couldn't
@@ -2337,6 +2349,11 @@ objc_setup_safe_print (struct cleanup **cleanup)
             }
         }
     }
+  else
+    {
+      // If they have disabled non-blocking mode then this setup should just return true.
+      safe_p = 1;
+    }
 
   return safe_p;
 }
@@ -2360,7 +2377,7 @@ print_object_command (char *args, int from_tty)
     error (
 "The 'print-object' command requires an argument (an Objective-C object)");
 
-  if (call_po_at_unsafe_times)
+  if (po_and_print_run_all_threads)
     {
       /* Set the debugger mode so that we don't do any checking.  */
         make_cleanup_set_restore_debugger_mode (&debugger_mode, 0);
@@ -5392,7 +5409,7 @@ set_non_blocking_mode_func (char *args, int from_tty,
 void
 _initialize_objc_lang ()
 {
-  add_setshow_boolean_cmd ("call-po-at-unsafe-times", no_class, &call_po_at_unsafe_times, 
+  add_setshow_boolean_cmd ("po-and-print-run-all-threads", no_class, &po_and_print_run_all_threads, 
 			   "Set whether to override the check for potentially unsafe"
 			   " situations before calling print-object.",
 			   "Show whether to override the check for potentially unsafe"
@@ -5410,7 +5427,8 @@ _initialize_objc_lang ()
 			   "However, that may cause deadlocks between the po function and\n"
                            "a lock held on some other thread.  In that case, po will allow\n"
                            "the other threads to run as well.  If you don't want it to do that\n"
-                           "then set this variable to off.",
+                           "then set this variable to off.\n"
+                           "N.B. po-and-print-run-all-threads overrides this setting.\n",
 			   NULL, NULL,
 			   &setlist, &showlist);
 		      		      

@@ -167,6 +167,7 @@ case "${host}" in
   i370-*-opened*)       frag=mh-openedition ;;
   i[[34567]]86-*-windows*)	frag=mh-windows ;;
   # APPLE LOCAL - Allow more than 256 streams to be open at a time.
+  arm-apple-darwin*) frag=mh-arm-macosx;;
   *-apple-darwin* | *-macos*) frag=mh-macosx;;
 esac
 

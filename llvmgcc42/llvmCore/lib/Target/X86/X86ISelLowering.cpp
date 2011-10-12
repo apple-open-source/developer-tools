@@ -1430,26 +1430,6 @@ ArgsAreStructReturn(const SmallVectorImpl<ISD::InputArg> &Ins) {
   return Ins[0].Flags.isSRet();
 }
 
-/// IsCalleePop - Determines whether the callee is required to pop its
-/// own arguments. Callee pop is necessary to support tail calls.
-bool X86TargetLowering::IsCalleePop(bool IsVarArg, CallingConv::ID CallingConv){
-  if (IsVarArg)
-    return false;
-
-  switch (CallingConv) {
-  default:
-    return false;
-  case CallingConv::X86_StdCall:
-    return !Subtarget->is64Bit();
-  case CallingConv::X86_FastCall:
-    return !Subtarget->is64Bit();
-  case CallingConv::Fast:
-    return GuaranteedTailCallOpt;
-  case CallingConv::GHC:
-    return GuaranteedTailCallOpt;
-  }
-}
-
 /// CCAssignFnForNode - Selects the correct CCAssignFn for a the
 /// given CallingConvention value.
 CCAssignFn *X86TargetLowering::CCAssignFnForNode(CallingConv::ID CC) const {
@@ -1757,7 +1737,7 @@ X86TargetLowering::LowerFormalArguments(SDValue Chain,
   }
 
   // Some CCs need callee pop.
-  if (IsCalleePop(isVarArg, CallConv)) {
+  if (Subtarget->IsCalleePop(isVarArg, CallConv)) {
     BytesToPopOnReturn  = StackSize; // Callee pops everything.
   } else {
     BytesToPopOnReturn  = 0; // Callee pops nothing.
@@ -2207,7 +2187,7 @@ X86TargetLowering::LowerCall(SDValue Chain, SDValue Callee,
 
   // Create the CALLSEQ_END node.
   unsigned NumBytesForCalleeToPush;
-  if (IsCalleePop(isVarArg, CallConv))
+  if (Subtarget->IsCalleePop(isVarArg, CallConv))
     NumBytesForCalleeToPush = NumBytes;    // Callee pops everything
   else if (!Is64Bit && !IsTailCallConvention(CallConv) && IsStructRet)
     // If this is a call to a struct-return function, the callee
