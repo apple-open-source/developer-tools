@@ -7400,6 +7400,10 @@ case $build in
     # that too.
     stage1_cflags="-g -no-cpp-precomp -DHAVE_DESIGNATED_INITIALIZERS=0"
     ;;
+  *-*-darwin*)
+    # -std=gnu89 never hurt
+    stage1_cflags="-g -std=gnu89"
+    ;;
 esac
 
 # LLVM LOCAL begin - LLVM uses inlined functions
@@ -7411,9 +7415,9 @@ if test "$GCC" = yes; then
   # Pass -fkeep-inline-functions for stage 1 if the GCC version supports it.
   CFLAGS="$CFLAGS -fkeep-inline-functions"
   echo $ac_n "checking whether -fkeep-inline-functions is supported""... $ac_c" 1>&6
-echo "configure:7415: checking whether -fkeep-inline-functions is supported" >&5
+echo "configure:7419: checking whether -fkeep-inline-functions is supported" >&5
   cat > conftest.$ac_ext <<EOF
-#line 7417 "configure"
+#line 7421 "configure"
 #include "confdefs.h"
 
 #if (__GNUC__ < 3) \
@@ -7426,7 +7430,7 @@ int main() {
 
 ; return 0; }
 EOF
-if { (eval echo configure:7430: \"$ac_compile\") 1>&5; (eval $ac_compile) 2>&5; }; then
+if { (eval echo configure:7434: \"$ac_compile\") 1>&5; (eval $ac_compile) 2>&5; }; then
   rm -rf conftest*
   echo "$ac_t""yes" 1>&6; stage1_cflags="$stage1_cflags -fkeep-inline-functions"
 else

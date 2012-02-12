@@ -1896,6 +1896,9 @@ install_variable (struct varobj *var)
   unsigned int index = 0;
   unsigned int i = 1;
 
+  if (var->obj_name == NULL)
+    return 0;
+
   for (chp = var->obj_name; *chp; chp++)
     {
       index = (index + (i++ * (unsigned int) *chp)) % VAROBJ_TABLE_SIZE;
@@ -1941,6 +1944,9 @@ uninstall_variable (struct varobj *var)
   const char *chp;
   unsigned int index = 0;
   unsigned int i = 1;
+
+  if (var->obj_name == NULL)
+    return;
 
   /* Remove varobj from hash table */
   for (chp = var->obj_name; *chp; chp++)

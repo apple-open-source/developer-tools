@@ -789,18 +789,18 @@ const Type *TypeConverter::ConvertType(tree orig_type) {
   case POINTER_TYPE:
   case REFERENCE_TYPE:
   case BLOCK_POINTER_TYPE:
-    if (const PointerType *Ty = cast_or_null<PointerType>(GET_TYPE_LLVM(type))){
+    if (const PointerType *PTy = cast_or_null<PointerType>(GET_TYPE_LLVM(type))){
       // We already converted this type.  If this isn't a case where we have to
       // reparse it, just return it.
       if (PointersToReresolve.empty() || PointersToReresolve.back() != type ||
           ConvertingStruct)
-        return Ty;
+        return PTy;
       
       // Okay, we know that we're !ConvertingStruct and that type is on the end
       // of the vector.  Remove this entry from the PointersToReresolve list and
       // get the pointee type.  Note that this order is important in case the
       // pointee type uses this pointer.
-      assert(Ty->getElementType()->isOpaqueTy() && "Not a deferred ref!");
+      assert(PTy->getElementType()->isOpaqueTy() && "Not a deferred ref!");
       
       // We are actively resolving this pointer.  We want to pop this value from
       // the stack, as we are no longer resolving it.  However, we don't want to
@@ -815,7 +815,7 @@ const Type *TypeConverter::ConvertType(tree orig_type) {
       
       // Note that we know that Ty cannot be resolved or invalidated here.
       const Type *Actual = ConvertType(TREE_TYPE(type));
-      assert(GET_TYPE_LLVM(type) == Ty && "Pointer invalidated!");
+      assert(GET_TYPE_LLVM(type) == PTy && "Pointer invalidated!");
 
       // Restore ConvertingStruct for the caller.
       ConvertingStruct = false;
@@ -824,7 +824,7 @@ const Type *TypeConverter::ConvertType(tree orig_type) {
         Actual = Type::getInt8Ty(Context);  // void* -> sbyte*
       
       // Update the type, potentially updating TYPE_LLVM(type).
-      const OpaqueType *OT = cast<OpaqueType>(Ty->getElementType());
+      const OpaqueType *OT = cast<OpaqueType>(PTy->getElementType());
       const_cast<OpaqueType*>(OT)->refineAbstractTypeTo(Actual);
       return GET_TYPE_LLVM(type);
     } else {

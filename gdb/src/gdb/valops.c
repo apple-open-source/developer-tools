@@ -2060,12 +2060,36 @@ find_overload_match (struct type **arg_types, int nargs, char *name, int method,
       obj_type_name = TYPE_NAME (value_type (obj));
       /* Hack: evaluate_subexp_standard often passes in a pointer
          value rather than the object itself, so try again */
-      if ((!obj_type_name || !*obj_type_name) &&
-	  (TYPE_CODE (value_type (obj)) == TYPE_CODE_PTR))
-	obj_type_name = TYPE_NAME (TYPE_TARGET_TYPE (value_type (obj)));
-      if ((!obj_type_name || !*obj_type_name) &&
-	  (TYPE_CODE (TYPE_TARGET_TYPE (value_type (obj))) == TYPE_CODE_PTR))
-	obj_type_name = TYPE_NAME (TYPE_TARGET_TYPE (TYPE_TARGET_TYPE (value_type (obj))));
+
+      if (!obj_type_name || !*obj_type_name)
+        {
+          struct type *obj_type = value_type (obj);
+          if (!obj_type)
+            error ("Could not get the type of obj in find_overload_match.");
+
+          struct type *target_type = TYPE_TARGET_TYPE (obj_type);
+	  if (TYPE_CODE (obj_type) == TYPE_CODE_PTR)
+            {
+              if (!target_type)
+                error ("Could not get target type of obj in find_overload_match.");
+              
+              obj_type_name = TYPE_NAME (target_type);
+            }
+
+          if (!obj_type_name || !*obj_type_name)
+            {
+              if (!target_type)
+                error ("Could not get target type of dereferenced type in find_overload_match.");
+
+              if (TYPE_CODE (target_type) == TYPE_CODE_PTR)
+                {
+                  target_type = TYPE_TARGET_TYPE (target_type);
+                  if (!target_type)
+                    error ("Could not get twice dereferenced target type in find_overload_match.");
+                  obj_type_name = TYPE_NAME (target_type);
+                }
+            }
+        }
 
       fns_ptr = value_find_oload_method_list (&temp, name, 0,
 					      &num_fns,

@@ -12,7 +12,7 @@ void foo (struct inner *in)
    puts ("");
 }
 
-main ()
+int main ()
 {
   struct outer a;
   a.c = 10; /* good place to put a breakpoint */

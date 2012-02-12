@@ -2457,6 +2457,10 @@ case $build in
     # that too.
     stage1_cflags="-g -no-cpp-precomp -DHAVE_DESIGNATED_INITIALIZERS=0"
     ;;
+  *-*-darwin*)
+    # -std=gnu89 never hurt
+    stage1_cflags="-g -std=gnu89"
+    ;;
 esac
 
 # LLVM LOCAL begin - LLVM uses inlined functions

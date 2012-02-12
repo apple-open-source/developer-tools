@@ -42,6 +42,8 @@
 #include <stdlib.h>
 #include <string.h>
 #include <unistd.h>
+#include <limits.h>
+#include <mach-o/dyld.h>
 extern char *optarg;
 extern int optind;
 extern int optopt;
@@ -69,6 +71,11 @@ int dash_dash_seen = 0;
 int
 main(int argc, char *argv[])
 {
+	char exec_path[PATH_MAX];
+	char link_path[PATH_MAX];
+	uint32_t exec_path_size = sizeof(exec_path);
+	char *compiler_path = exec_path;
+	char *lastslash;
 	int ch, i;
         int m_32_64_set = 0;
 	args = NULL;
@@ -86,7 +93,7 @@ main(int argc, char *argv[])
 			usage();
 	}
 
-	addarg("cc");
+	addarg("llvm-gcc");
 	addarg("-std=iso9899:1990");
 	addarg("-pedantic");
 	for (i = 1; i < optind; i++) {
@@ -180,8 +187,22 @@ main(int argc, char *argv[])
 		} else
 		  addarg(argv[i++]);
 	}
-	execv("/usr/bin/cc", args);
-	err(1, "/usr/bin/cc");
+
+	/* Find the path to this executable. */
+	if (_NSGetExecutablePath(exec_path, &exec_path_size))
+		memcpy(exec_path, "/usr/bin/c89", sizeof("/usr/bin/c89"));
+	if (realpath(exec_path, link_path))
+		compiler_path = link_path;
+
+	/* Chop off c89 and replace it with llvm-gcc. */
+	lastslash = strrchr(compiler_path, '/');
+	if (!lastslash)
+		err(1, "unexpected path name: %s", compiler_path);
+	strcpy(lastslash+1, "llvm-gcc");
+
+        /* Exec llvm-gcc. */
+	execv(compiler_path, args);
+	err(1, "failed to exec compiler %s", compiler_path);
 }
 
 /* Combine item1 and item2 and used them as one argument.

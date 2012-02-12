@@ -1,3 +1,30 @@
+2011-11-14  Jim Ingham  <jingham@apple.com>
+
+        * dwarf2read.c (read_type_die): Handle DW_TAG_unspecified_type.
+        (read_tag_unspecified_type): New function, add a type for the
+        DW_TAG_unspecified_type die.
+
+2011-10-26  Jim Ingham  <jingham@apple.com>
+
+        * valops.c (find_overload_method): Be a little more careful
+        getting target types of the input value so we don't crash on 
+        bad types.
+
+2011-10-03  Jason Molenda  (jmolenda@apple.com)
+
+        * symfile.c (symbol_file_add_with_addrs_or_offsets_using_objfile):  If
+        adding a main executable file on arm and we don't have an osabi set,
+        set it based on the slice of the main executable that we're using.
+
+2011-09-26  Jason Molenda  (jmolenda@apple.com)
+
+        * varobj.c (uninstall_variable): Fix typeo.
+
+2011-09-09  Jim Ingham  <jingham@apple.com>
+
+        * varobj.c (install_variable, uninstall_variable): Explicitly require
+        that all installed variables have non-NULL obj_name fields.
+        
 2011-08-01  Jim Ingham  <jingham@apple.com>
 
 	* objc-lang.c (objc_setup_safe_print): Move suppressing output past

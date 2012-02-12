@@ -5,34 +5,19 @@
 
 #------------------------------------------------------------------------------#
 
-# Set V to what we wish to switch to when this project is "built".  Note, you
-# can set V from the buildit command line by specifying V=LLVM.
-
-V = LLVM
-
-#------------------------------------------------------------------------------#
-
 SRCROOT = .
 SRC = `cd $(SRCROOT) && pwd | sed s,/private,,`
-
-ifeq ($(shell echo $V | tr "[:lower:]" "[:upper:]"),LLVM)
-PREFIX=/usr/bin/llvm-
-else
-PREFIX=
-endif
+DEVELOPER_DIR ?= /
+DEST_DIR = $(DSTROOT)$(DEVELOPER_DIR)
 
 .PHONY: all install installhdrs installsrc installdoc clean mklinks installsym
 .PHONY: Embedded
 
 all: install
 
-Embedded: installhdrs
+Embedded:
 	ARM_PLATFORM=`xcodebuild -version -sdk iphoneos PlatformPath` && \
-	$(MAKE) DSTROOT=$(DSTROOT)$$ARM_PLATFORM PREFIX=llvm- \
-	    installhdrs mklinks && \
-	$(MAKE) DSTROOT=$(DSTROOT)$$ARM_PLATFORM/Developer PREFIX=llvm- \
-	    installhdrs mklinks
-	ln -s gcc/darwin/default/stdint.h $(DSTROOT)/usr/include/stdint.h
+	$(MAKE) DEST_DIR=$(DSTROOT)$$ARM_PLATFORM/Developer mklinks
 
 $(OBJROOT)/c89.o : $(SRCROOT)/c89.c
 	$(CC) -c $^ -Wall -Os -g $(RC_CFLAGS) -o $@
@@ -46,25 +31,21 @@ $(OBJROOT)/c99.o : $(SRCROOT)/c99.c
 %.dSYM : %
 	dsymutil $^
 
-install: installhdrs
-
 install: installdoc mklinks $(OBJROOT)/c99 $(OBJROOT)/c89 installsym
-	mkdir -p $(DSTROOT)/usr/bin
-	install -s -c -m 555 $(OBJROOT)/c99 $(DSTROOT)/usr/bin/c99
-	install -s -c -m 555 $(OBJROOT)/c89 $(DSTROOT)/usr/bin/c89
-	install -c -m 555 $(SRCROOT)/cpp $(DSTROOT)/usr/bin/cpp
+	mkdir -p $(DEST_DIR)/usr/bin
+	install -s -c -m 555 $(OBJROOT)/c99 $(DEST_DIR)/usr/bin/c99
+	install -s -c -m 555 $(OBJROOT)/c89 $(DEST_DIR)/usr/bin/c89
+	install -c -m 555 $(SRCROOT)/cpp $(DEST_DIR)/usr/bin/cpp
 
 installsym: $(OBJROOT)/c99.dSYM $(OBJROOT)/c89.dSYM
 	cp -rp $^ $(SYMROOT)
 
 mklinks:
-	mkdir -p $(DSTROOT)/usr/bin
-	ln -s llvm-gcc-4.2 $(DSTROOT)/usr/bin/gcc
-	ln -s llvm-g++-4.2 $(DSTROOT)/usr/bin/g++
-	ln -s llvm-g++-4.2 $(DSTROOT)/usr/bin/c++
-	ln -s llvm-gcc-4.2 $(DSTROOT)/usr/bin/cc
-	ln -s gcov-4.2 $(DSTROOT)/usr/bin/gcov
-	ln -s ../llvm-gcc-4.2/bin/gcov-4.2 $(DSTROOT)/usr/bin/gcov-4.2
+	mkdir -p $(DEST_DIR)/usr/bin
+	ln -s llvm-gcc-4.2 $(DEST_DIR)/usr/bin/gcc
+	ln -s llvm-g++-4.2 $(DEST_DIR)/usr/bin/g++
+	ln -s gcov-4.2 $(DEST_DIR)/usr/bin/gcov
+	ln -s ../llvm-gcc-4.2/bin/gcov-4.2 $(DEST_DIR)/usr/bin/gcov-4.2
 
 installsrc:
 	if [ $(SRCROOT) != . ]; then  \
@@ -72,14 +53,11 @@ installsrc:
 	fi
 
 installdoc:
-	mkdir -p $(DSTROOT)/usr/share/man/man1
-	install -c -m 444 $(SRCROOT)/c99.1 $(DSTROOT)/usr/share/man/man1/c99.1
-	install -c -m 444 $(SRCROOT)/c89.1 $(DSTROOT)/usr/share/man/man1/c89.1
-	ln -s gcc.1.gz $(DSTROOT)/usr/share/man/man1/cc.1.gz
+	mkdir -p $(DEST_DIR)/usr/share/man/man1
+	install -c -m 444 $(SRCROOT)/c99.1 $(DEST_DIR)/usr/share/man/man1/c99.1
+	install -c -m 444 $(SRCROOT)/c89.1 $(DEST_DIR)/usr/share/man/man1/c89.1
 
 installhdrs:
-	mkdir -p $(DSTROOT)/usr/include/gcc/darwin
-	ln -s 4.2 $(DSTROOT)/usr/include/gcc/darwin/default
 
 clean:
 	rm -rf $(OBJROOT)/c[89]9{,.dSYM}

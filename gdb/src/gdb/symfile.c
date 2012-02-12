@@ -1714,6 +1714,24 @@ symbol_file_add_with_addrs_or_offsets_using_objfile (struct objfile *in_objfile,
   if (deprecated_target_new_objfile_hook)
     deprecated_target_new_objfile_hook (objfile);
 
+  /* This is a tricky little bit where some users launch without specifying
+     a binary at startup (so gdb.sh can't add the appropriate --osabi option)
+     so when we see the first symbol-file / file command specifying the main
+     executable, we want to use that to seed the osabi so we can pick out the
+     correct fork of any multi-slice kexts that we might add on later.  
+     It's a pretty specific problem so I'm putting it in a TARGET_ARM block to
+     keep this from tripping up some other configuration that I'm not thinking
+     of right now.  */
+#if defined (TARGET_ARM)
+  if (mainline && objfile->obfd && 
+      (gdbarch_osabi (current_gdbarch) == GDB_OSABI_UNKNOWN || gdbarch_osabi (current_gdbarch) == GDB_OSABI_DARWIN))
+    {
+      const char *osabi_name = gdbarch_osabi_name (gdbarch_lookup_osabi_from_bfd (objfile->obfd));
+      if (osabi_name && strcasecmp (osabi_name, "unknown") != 0)
+        set_osabi_from_string (osabi_name);
+    }
+#endif
+
   bfd_cache_close_all ();
   return (objfile);
 }

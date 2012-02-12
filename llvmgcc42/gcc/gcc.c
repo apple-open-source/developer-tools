@@ -840,10 +840,12 @@ static const char *cpp_debug_options = "%{d*}";
 /* LLVM LOCAL begin */
 static const char *llvm_options =
 #ifdef ENABLE_LLVM
-"%{O4|emit-llvm|flto:%{S:-emit-llvm} \
-                     %{!S:-emit-llvm-bc \
-                     %{c: %W{o*} %{!o*:-o %b%w.o}} \
-                     %{!c:-o %d%w%u%O}}}"
+"%{O4:-O3}%<O4\
+ %<flto\
+ %{emit-llvm:%{S:-emit-llvm}\
+             %{!S:-emit-llvm-bc\
+             %{c: %W{o*} %{!o*:-o %b%w.o}}\
+             %{!c:-o %d%w%u%O}}}"
 #else
   "%{emit-llvm:%e--emit-llvm is not supported in this configuration.}"
 #endif
@@ -860,7 +862,7 @@ static const char *cc1_options =
 "/* LLVM LOCAL */"\
  %1 %{!Q:-quiet} -dumpbase %B %{d*} %{Zmllvm*: -mllvm %*} %{m*} %{a*}\
  %{c|S:%{o*:-auxbase-strip %*}%{!o*:-auxbase %b}}%{!c:%{!S:-auxbase %b}}\
- %{g*} %{O*} %{W*&pedantic*} %{w} %{std*&ansi&trigraphs}\
+ %{g*} %{!O4:%{O*}} %{W*&pedantic*} %{w} %{std*&ansi&trigraphs}\
  %{v:-version} %{pg:-p} %{p} %{f*} %{undef}\
  %{Qn:-fno-ident} %{--help:--help}\
  %{--target-help:--target-help}\

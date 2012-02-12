@@ -265,15 +265,13 @@ fi
 # LLVM LOCAL end
 
 # If the user has set CC or CXX, respect their wishes.  If not,
-# compile with LLVM-GCC/LLVM-G++ if available; if LLVM is not
+# compile with clang/clang++ if available; if LLVM is not
 # available, fall back to usual GCC/G++ default.
-savedPATH=$PATH ; PATH="/Developer/usr/bin:$PATH"
-XTMPCC=$(which llvm-gcc)
+XTMPCC=`xcrun -find clang`
 if [ x$CC  = x -a x$XTMPCC != x ] ; then export CC=$XTMPCC  forcedCC=1  ; fi
-XTMPCC=$(which llvm-g++)
+XTMPCC=`xcrun -find clang++`
 if [ x$CXX = x -a x$XTMPCC != x ] ; then export CXX=$XTMPCC forcedCXX=1 ; fi
-PATH=$savedPATH
-unset XTMPCC savedPATH
+unset XTMPCC
 
 # Build the native GCC.  Do this even if the user didn't ask for it
 # because it'll be needed for the bootstrap.
@@ -638,7 +636,7 @@ done
 if [ "x$RC_ProjectName" = "xllvmgcc42_Embedded" ]; then
 MAN1_DIR=${DEST_DIR}${ARM_PLATFORM}/Developer/usr/share/man/man1
 else
-MAN1_DIR=$DEST_DIR/Developer/usr/share/man/man1
+MAN1_DIR=$DEST_DIR$DEST_ROOT/../share/man/man1
 fi
 mkdir -p ${MAN1_DIR}
 for i in gcc.1 g++.1 cpp.1 gcov.1 ; do
@@ -762,22 +760,6 @@ for t in $TARGETS ; do
     rm libllvmgcc.dylib
     ln -s ../../libllvmgcc.dylib
 done
-
-if [ "x$RC_ProjectName" == "xllvmgcc42_Embedded" ]; then
-    if [ "x$LLVM_BUILT_ROOTS" == "x" ]; then
-        mkdir -p $DEST_DIR${ARM_PLATFORM}/usr/bin
-        cd $DEST_DIR${ARM_PLATFORM}/usr/bin
-        ln -s ${ARM_PLATFORM}/Developer/usr/bin/llvm-gcc-4.2 llvm-gcc-4.2
-        ln -s ${ARM_PLATFORM}/Developer/usr/bin/llvm-g++-4.2 llvm-g++-4.2
-    fi
-else
-    if [ "x$LLVM_BUILT_ROOTS" == "x" ]; then
-        mkdir -p $DEST_DIR/usr/bin
-        cd $DEST_DIR/usr/bin
-        ln -s /Developer/usr/bin/llvm-gcc-4.2 llvm-gcc-4.2
-        ln -s /Developer/usr/bin/llvm-g++-4.2 llvm-g++-4.2
-    fi
-fi
 
 # Remove unwind.h from the install directory for > 10.6
 if [ $DARWIN_VERS -gt 10 ]; then

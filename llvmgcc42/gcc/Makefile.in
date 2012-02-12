@@ -962,8 +962,11 @@ endif
 
 # LLVM LOCAL begin
 # Disable C-only warning flags if they are present.
-ALL_CXXFLAGS = $(filter-out -Wstrict-prototypes -Wmissing-prototypes \
-                            -Wold-style-definition -Wno-overlength-strings, $(ALL_CFLAGS)) -Wno-unused
+ALL_CXXFLAGS = $(filter-out -std=gnu89 \
+			    -Werror  -Wstrict-prototypes  \
+			    -Wmissing-prototypes \
+                            -Wold-style-definition -Wno-overlength-strings, \
+		$(ALL_CFLAGS)) -Wno-unused
 ALL_CXXFLAGS += -DTARGET_NAME=\"$(target_noncanonical)\"
 ALL_CXXFLAGS += -frandom-seed=0
 

@@ -433,7 +433,7 @@ Objective-C and Objective-C++ Dialects}.
 -ftree-copy-prop -ftree-store-ccp -ftree-store-copy-prop -fwhole-program @gol
 --param @var{name}=@var{value}
 @c LLVM LOCAL -fast, -Oz,
--flto (APPLE ONLY) -O  -O0  -O1  -O2  -O3 -O4 (APPLE ONLY) -Os -Oz (APPLE ONLY) -fast (APPLE ONLY)}
+(APPLE ONLY) -O  -O0  -O1  -O2  -O3 (APPLE ONLY) -Os -Oz (APPLE ONLY) -fast (APPLE ONLY)}
 
 @item Preprocessor Options
 @xref{Preprocessor Options,,Options Controlling the Preprocessor}.
@@ -5155,17 +5155,6 @@ are disabled by default when optimizing.
 Optimize yet more.  @option{-O3} turns on all optimizations specified by
 @option{-O2} and also turns on the @option{-finline-functions},
 @option{-funswitch-loops} and @option{-fgcse-after-reload} options.
-
-@c LLVM LOCAL begin
-@item -flto
-@opindex flto
-Enable LLVM Link Time Optimization. 
-
-@item -O4
-@opindex O4
-Enable LLVM Link Time Optimization. @option{-O4} turns on all LLVM compile
-time optimizations specified by @option{-O2}.
-@c LLVM LOCAL end
 
 @item -O0
 @opindex O0

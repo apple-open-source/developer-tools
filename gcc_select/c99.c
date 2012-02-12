@@ -44,6 +44,8 @@
 #include <string.h>
 #include <unistd.h>
 #include <sysexits.h>
+#include <limits.h>
+#include <mach-o/dyld.h>
 
 char **args;
 u_int cargs, nargs;
@@ -64,12 +66,17 @@ void combine_and_addarg (const char *, const char *);
 int
 main(int argc, char *argv[])
 {
+	char exec_path[PATH_MAX];
+	char link_path[PATH_MAX];
+	uint32_t exec_path_size = sizeof(exec_path);
+	char *compiler_path = exec_path;
+	char *lastslash;
 	int link = 1;
 	int inputs = 0;
 	int verbose = 0;
         int m_32_64_set = 0;
 
-	addarg("cc");
+	addarg("llvm-gcc");
 	addarg("-std=iso9899:1999");
 	addarg("-pedantic");
 	addarg("-Wextra-tokens"); /* Radar 4205857 */
@@ -185,8 +192,22 @@ main(int argc, char *argv[])
 	      printf ("\"%s\" ", args[i]);
 	    putchar ('\n');
 	  }
-	execv("/usr/bin/cc", args);
-	err(EX_OSERR, "/usr/bin/cc");
+
+	/* Find the path to this executable. */
+	if (_NSGetExecutablePath(exec_path, &exec_path_size))
+		memcpy(exec_path, "/usr/bin/c99", sizeof("/usr/bin/c99"));
+	if (realpath(exec_path, link_path))
+		compiler_path = link_path;
+
+	/* Chop off c99 and replace it with llvm-gcc. */
+	lastslash = strrchr(compiler_path, '/');
+	if (!lastslash)
+		err(EX_OSERR, "unexpected path name: %s", compiler_path);
+	strcpy(lastslash+1, "llvm-gcc");
+
+        /* Exec llvm-gcc. */
+	execv(compiler_path, args);
+	err(EX_OSERR, "failed to exec compiler %s", compiler_path);
 }
 
 /* Combine item1 and item2 and used them as one argument.

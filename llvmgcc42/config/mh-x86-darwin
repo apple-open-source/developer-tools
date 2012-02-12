@@ -2,7 +2,7 @@
 # The -mdynamic-no-pic ensures that the compiler executable is built without
 # position-independent-code -- the usual default on Darwin.
 
-BOOT_CFLAGS=-g -O2 -mdynamic-no-pic
+BOOT_CFLAGS=-g -O2 -mdynamic-no-pic -std=gnu89
 
 # LLVM LOCAL
 # For hosts after darwin10 we want to pass in -no-pie
