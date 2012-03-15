@@ -180,6 +180,9 @@ dyld_objfile_entry_osabi (const struct dyld_objfile_entry *e)
 	      case BFD_MACH_O_CPU_SUBTYPE_ARM_7F:
 		return GDB_OSABI_DARWINV7F;
 
+	      case BFD_MACH_O_CPU_SUBTYPE_ARM_7S:
+		return GDB_OSABI_DARWINV7S;
+
 	      case BFD_MACH_O_CPU_SUBTYPE_ARM_7K:
 		return GDB_OSABI_DARWINV7K;
 

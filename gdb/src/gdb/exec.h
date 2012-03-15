@@ -39,4 +39,8 @@ extern int build_section_table (struct bfd *, struct section_table **,
 /* Set the loaded address of a section.  */
 extern void exec_set_section_address (const char *, int, CORE_ADDR);
 
+extern int only_read_from_live_memory;
+int set_only_read_from_live_memory (int newval);
+void set_only_read_from_live_memory_cleanup (void *new);
+
 #endif

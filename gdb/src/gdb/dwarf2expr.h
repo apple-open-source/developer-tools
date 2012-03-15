@@ -21,6 +21,8 @@
    Foundation, Inc., 59 Temple Place - Suite 330,
    Boston, MA 02111-1307, USA.  */
 
+#include "dwarf2loc.h"
+
 #if !defined (DWARF2EXPR_H)
 #define DWARF2EXPR_H
 
@@ -131,7 +133,7 @@ void free_dwarf_expr_context (struct dwarf_expr_context *ctx);
 void dwarf_expr_push (struct dwarf_expr_context *ctx, CORE_ADDR value);
 void dwarf_expr_pop (struct dwarf_expr_context *ctx);
 void dwarf_expr_eval (struct dwarf_expr_context *ctx, unsigned char *addr,
-		      size_t len, int eh_frame_p);
+		      size_t len, int eh_frame_p, struct dwarf2_address_translation *);
 CORE_ADDR dwarf_expr_fetch (struct dwarf_expr_context *ctx, int n);
 
 

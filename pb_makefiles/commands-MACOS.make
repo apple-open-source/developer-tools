@@ -1,5 +1,5 @@
 ##
-# Copyright (c) 1999 Apple Computer, Inc. All rights reserved.
+# Copyright (c) 1999-2012 Apple Inc.  All rights reserved.
 #
 # @APPLE_LICENSE_HEADER_START@
 # 
@@ -54,7 +54,7 @@ SYMLINK = /bin/ln -s
 CP = /bin/cp
 MV = /bin/mv
 FASTCP = $(MAKEFILEDIR)/fastcp
-TAR = /usr/bin/gnutar
+TAR = /usr/bin/tar
 ifneq "" "$(wildcard /bin/mkdirs)"
   MKDIRS = /bin/mkdirs
 else
@@ -77,7 +77,6 @@ ifneq "" "$(wildcard /bin/chgrp)"
 else
   CHGRP = /usr/bin/chgrp
 endif
-COMPRESSMANPAGES = $(MAKEFILEPATH)/bin/compress-man-pages.pl -d $(DSTROOT)
 
 AWK = /usr/bin/awk
 TR = /usr/bin/tr

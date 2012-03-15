@@ -873,7 +873,7 @@ You must use a pointer to function type variable. Command ignored."), arg_name);
   /* Sanity.  The exact same SP value is returned by PUSH_DUMMY_CALL,
      saved as the dummy-frame TOS, and used by unwind_dummy_id to form
      the frame ID's stack address.  */
-  dummy_id = frame_id_build (sp, bp_addr);
+  dummy_id = frame_id_build (sp, gdbarch_addr_bits_remove (current_gdbarch, bp_addr));
 
   /* Create a momentary breakpoint at the return address of the
      inferior.  That way it breaks when it returns.  */
@@ -882,7 +882,7 @@ You must use a pointer to function type variable. Command ignored."), arg_name);
     struct breakpoint *bpt;
     struct symtab_and_line sal;
     init_sal (&sal);		/* initialize to zeroes */
-    sal.pc = bp_addr;
+    sal.pc = gdbarch_addr_bits_remove (current_gdbarch, bp_addr);
     sal.section = find_pc_overlay (sal.pc);
     /* Sanity.  The exact same SP value is returned by
        PUSH_DUMMY_CALL, saved as the dummy-frame TOS, and used by

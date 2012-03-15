@@ -4950,6 +4950,7 @@ process_die (struct die_info *die, struct dwarf2_cu *cu)
       read_tag_ptr_to_member_type (die, cu);
       break;
     case DW_TAG_reference_type:
+    case DW_TAG_rvalue_reference_type:
       read_tag_reference_type (die, cu);
       break;
     case DW_TAG_string_type:
@@ -8412,9 +8413,15 @@ find_partial_die_in_comp_unit (unsigned long offset, struct dwarf2_cu *cu)
 
   /* FIXME: Remove this once <rdar://problem/6193416> is fixed */
   if (lookup_die == NULL)
-    internal_error (__FILE__, __LINE__,
-		    _("could not find partial DIE in cache\n"));
-
+    {
+      char tmpname[PATH_MAX];
+      if (cu->objfile && cu->objfile->name)
+        strcpy (tmpname, cu->objfile->name);
+      else
+        strcpy (tmpname, "<No name available>");
+      error ("\nError: gdb does not handle things like classes defined inside functions correctly; debug info for '%s' skipped, please use lldb if you need to debug code in this framework.",
+           basename (tmpname));
+    }
   return lookup_die;
 }
 
@@ -10999,6 +11006,7 @@ read_type_die (struct die_info *die, struct dwarf2_cu *cu)
       read_tag_ptr_to_member_type (die, cu);
       break;
     case DW_TAG_reference_type:
+    case DW_TAG_rvalue_reference_type:
       read_tag_reference_type (die, cu);
       break;
     case DW_TAG_const_type:
@@ -11362,6 +11370,8 @@ dwarf_tag_name (unsigned tag)
       return "DW_TAG_pointer_type";
     case DW_TAG_reference_type:
       return "DW_TAG_reference_type";
+    case DW_TAG_rvalue_reference_type:
+      return "DW_TAG_rvalue_reference_type";
     case DW_TAG_compile_unit:
       return "DW_TAG_compile_unit";
     case DW_TAG_string_type:
@@ -13060,14 +13070,15 @@ dwarf2_symbol_mark_computed (struct attribute *attr, struct symbol *sym,
 {
   if (attr->form == DW_FORM_data4 || attr->form == DW_FORM_data8)
     {
-      struct dwarf2_loclist_baton *baton;
+      struct dwarf2_address_translation *baton;
 
       baton = obstack_alloc (&cu->objfile->objfile_obstack,
-			     sizeof (struct dwarf2_loclist_baton));
+			     sizeof (struct dwarf2_address_translation));
       baton->objfile = cu->objfile;
+      baton->section = SYMBOL_SECTION (sym);
 
-      /* APPLE LOCAL: We'll need to translate addresses for the
-         debug-info-in-.o-files case */
+      /* The memory for addr_map is xmalloc'ed and never freed so we can
+         save a pointer to it in our baton.  */
       baton->addr_map = cu->addr_map;
 
       /* We don't know how long the location list is, but make sure we
@@ -13087,14 +13098,16 @@ dwarf2_symbol_mark_computed (struct attribute *attr, struct symbol *sym,
     }
   else
     {
-      struct dwarf2_locexpr_baton *baton;
+      struct dwarf2_address_translation *baton;
 
       baton = obstack_alloc (&cu->objfile->objfile_obstack,
-			     sizeof (struct dwarf2_locexpr_baton));
+			     sizeof (struct dwarf2_address_translation));
       baton->objfile = cu->objfile;
+      baton->section = SYMBOL_SECTION (sym);
+      baton->base_address_untranslated = INVALID_ADDRESS;
 
-      /* APPLE LOCAL: We'll need to translate addresses for the
-         debug-info-in-.o-files case */
+      /* The memory for addr_map is xmalloc'ed and never freed so we can
+         save a pointer to it in our baton.  */
       baton->addr_map = cu->addr_map;
 
       if (attr_form_is_block (attr))
@@ -13114,6 +13127,9 @@ dwarf2_symbol_mark_computed (struct attribute *attr, struct symbol *sym,
 						 SYMBOL_NATURAL_NAME (sym));
 	  baton->size = 0;
 	  baton->data = NULL;
+          baton->section = -1;
+          baton->base_address_untranslated = INVALID_ADDRESS;
+          baton->addr_map = NULL;
 	}
       
       SYMBOL_OPS (sym) = &dwarf2_locexpr_funcs;

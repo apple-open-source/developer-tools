@@ -117,7 +117,12 @@ typedef enum bfd_mach_o_load_command_type
   BFD_MACH_O_LC_LOAD_UPWARD_DYLIB = 0x23 | BFD_MACH_O_LC_REQ_DYLD, /* Same as LC_LOAD_DYLIB */
   BFD_MACH_O_LC_VERSION_MIN_MACOSX = 0x24,  /* build for MacOSX min OS version */
   BFD_MACH_O_LC_VERSION_MIN_IPHONEOS = 0x25,  /* build for iPhoneOS min OS version */
-  BFD_MACH_O_LC_FUNCTION_STARTS = 0x26      /* table of function start addresses. */
+  BFD_MACH_O_LC_FUNCTION_STARTS = 0x26,      /* table of function start addresses. */
+  BFD_MACH_O_LC_DYLD_ENVIRONMENT = 0x27,     /* string for dyld to treat like environment variable */
+  BFD_MACH_O_LC_MAIN = (0x28 | BFD_MACH_O_LC_REQ_DYLD),    /* replacement for LC_UNIXTHREAD */
+  BFD_MACH_O_LC_DATA_IN_CODE = 0x29,         /* table of non-instructions in __text */
+  BFD_MACH_O_LC_SOURCE_VERSION = 0x2a,       /* source version used to build binary */
+  BFD_MACH_O_LC_DYLIB_CODE_SIGN_DRS = 0x2b,  /* Code signing DRs copied from linked dylibs */
 }
 bfd_mach_o_load_command_type;
 
@@ -151,6 +156,7 @@ typedef enum bfd_mach_o_cpu_subtype
     BFD_MACH_O_CPU_SUBTYPE_ARM_6 = 6,
     BFD_MACH_O_CPU_SUBTYPE_ARM_7 = 9,
     BFD_MACH_O_CPU_SUBTYPE_ARM_7F = 10,
+    BFD_MACH_O_CPU_SUBTYPE_ARM_7S = 11,
     BFD_MACH_O_CPU_SUBTYPE_ARM_7K = 12,
     BFD_MACH_O_CPU_SUBTYPE_POWERPC_970 = 100
   }
@@ -491,6 +497,13 @@ typedef struct bfd_mach_o_thread_command
 }
 bfd_mach_o_thread_command;
 
+typedef struct bfd_mach_o_main_command
+{
+  bfd_vma entryoffset; /* This is the offset of the entry point relative to the TEXT segment.  */
+  bfd_vma stacksize;   /* If non-zero, this is the original stack size.  */
+}
+bfd_mach_o_main_command;
+
 typedef struct bfd_mach_o_dylinker_command
 {
   unsigned long cmd;                   /* LC_ID_DYLIB or LC_LOAD_DYLIB or LC_LOAD_UPWARD_DYLIB  */
@@ -540,6 +553,7 @@ typedef struct bfd_mach_o_load_command
     bfd_mach_o_dylib_command dylib;
     bfd_mach_o_dylinker_command dylinker;
     bfd_mach_o_prebound_dylib_command prebound_dylib;
+    bfd_mach_o_main_command main;
   }
   command;
 }
@@ -569,6 +583,8 @@ int bfd_mach_o_uses_dylinker (bfd *);
 bfd_boolean bfd_mach_o_encrypted_binary (bfd *);
 /* APPLE LOCAL shared cache  */
 bfd_boolean bfd_mach_o_in_shared_cached_memory (bfd *);
+
+bfd_boolean bfd_mach_o_kernel_image (bfd *);  /* Is this bfd a mach_kernel binary? */
 
 bfd_boolean        bfd_mach_o_valid  (bfd *);
 int                bfd_mach_o_scan_read_symtab_symbol        (bfd *, bfd_mach_o_symtab_command *, asymbol *, unsigned long);

@@ -58,6 +58,7 @@ then
     7) host_arch="armv5" ;;
     9) host_arch="armv7" ;;
     10) host_arch="armv7f" ;;
+    11) host_arch="armv7s" ;;
     12) host_arch="armv7k" ;;
     *) echo warning: unrecognized host cpusubtype ${host_cpusubtype}, defaulting to host==armv7. >&2 ;;
   esac
@@ -83,7 +84,7 @@ fi
 
 case "$1" in
  --help)
-    echo "  -arch x86_64|arm|armv6|armv7||armv7f|i386         Specify a gdb targetting a specific architecture" >&2
+    echo "  -arch x86_64|arm|armv6|armv7||armv7f|armv7s|i386         Specify a gdb targetting a specific architecture" >&2
     ;;
   -arch=* | -a=* | --arch=*)
     requested_arch=`echo "$1" | sed 's,^[^=]*=,,'`
@@ -177,6 +178,8 @@ else
       then
         lipo_archs=`lipo -info "$exec_file" | 
                     sed -e 's,^Archi.* are: ,,' -e 's,^Non-fat.*ture: ,,' | 
+                    sed 's,(cputype (12) cpusubtype (11)),armv7s,' |
+                    sed 's,cputype 12 cpusubtype 11,armv7s,' |
                     tr  ' ' '\n' | grep arm`
         file_archs="$file_archs $lipo_archs"
         file_archs=`echo $file_archs | tr ' ' '\n' | sort | uniq | grep -v '^arm$'`
@@ -234,9 +237,9 @@ else
       continue
     fi
 
-    # If this is an armv7f system, the armv7 slice is
+    # If this is an armv7s or armv7f system, the armv7 slice is
     # the next-best arch to pick if we don't have an exact match.
-    if [ "$host_arch" = armv7f ]
+    if [ "$host_arch" = armv7f -o "$host_arch" = armv7s ]
     then
       if [ "$file_arch" = armv7 ]
       then
@@ -299,6 +302,8 @@ then
   fi
 fi
 
+osabiopts=""
+
 case "$architecture_to_use" in
   i386 | x86_64)
     gdb="${GDB_ROOT}/usr/libexec/gdb/gdb-i386-apple-darwin"
@@ -314,6 +319,9 @@ case "$architecture_to_use" in
           ;;
         armv7k)
           osabiopts="--osabi DarwinV7K" 
+          ;;
+        armv7s)
+          osabiopts="--osabi DarwinV7S" 
           ;;
         armv7f)
           osabiopts="--osabi DarwinV7F" 
@@ -348,9 +356,14 @@ then
     exit 1
 fi
 
+if [ -n "$osabiopts" ]
+then
+  exec $translate_binary "$gdb" $osabiopts "$@"
+fi
+
 if [ -n "$requested_arch" ]
 then
   exec $translate_binary "$gdb" --arch "$requested_arch" "$@"
-else
-  exec $translate_binary "$gdb" $osabiopts "$@"
 fi
+
+exec $translate_binary "$gdb" "$@"

@@ -2919,6 +2919,11 @@ Show number of lines gdb thinks are in a page."), NULL,
 
   init_page_info ();
 
+  /* APPLE LOCAL: Force these to unlimited as the default */
+  chars_per_line = lines_per_page = 0;
+  set_screen_size ();
+  set_width ();
+
   add_setshow_boolean_cmd ("demangle", class_support, &demangle, _("\
 Set demangling of encoded C++/ObjC names when displaying symbols."), _("\
 Show demangling of encoded C++/ObjC names when displaying symbols."), NULL,

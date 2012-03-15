@@ -144,6 +144,7 @@ static const bfd_arch_info_type arch_info_struct[] =
   N (bfd_mach_arm_6,	  "armv6",   FALSE, & arch_info_struct[14]),
   N (bfd_mach_arm_7,      "armv7",   FALSE, & arch_info_struct[15]),
   N (bfd_mach_arm_7f,     "armv7f",  FALSE, & arch_info_struct[16]),
+  N (bfd_mach_arm_7s,     "armv7s",  FALSE, & arch_info_struct[17]),
   N (bfd_mach_arm_7k,     "armv7k",  FALSE, NULL)
 };
 
@@ -373,6 +374,7 @@ architectures[] =
   { "armv6",   bfd_mach_arm_6 },
   { "armv7",   bfd_mach_arm_7 },
   { "armv7f",   bfd_mach_arm_7f },
+  { "armv7s",   bfd_mach_arm_7s },
   { "armv7k",   bfd_mach_arm_7k }
 };
 

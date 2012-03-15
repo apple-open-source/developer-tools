@@ -60,7 +60,7 @@ print_single_dwarf_location (struct ui_file *, gdb_byte **, gdb_byte *,
    can be more than one in the list.  */
 
 static gdb_byte *
-find_location_expression (struct dwarf2_loclist_baton *baton,
+find_location_expression (struct dwarf2_address_translation *baton,
 			  size_t *locexpr_length, CORE_ADDR pc)
 {
   CORE_ADDR low, high;
@@ -95,8 +95,11 @@ find_location_expression (struct dwarf2_loclist_baton *baton,
 
       /* Otherwise, a location expression entry.  */
 
-      low += base_address;
-      high += base_address;
+      if (base_address != INVALID_ADDRESS)
+        {
+          low += base_address;
+          high += base_address;
+        }
 
       /* APPLE LOCAL: for the debug-info-in-.o-files case we need to go through
          the address translation table for the addresses in the DWARF (in the
@@ -184,14 +187,14 @@ dwarf_expr_frame_base (void *baton, gdb_byte **start, size_t * length)
 
   if (SYMBOL_OPS (framefunc) == &dwarf2_loclist_funcs)
     {
-      struct dwarf2_loclist_baton *symbaton;
+      struct dwarf2_address_translation *symbaton;
       symbaton = SYMBOL_LOCATION_BATON (framefunc);
       *start = find_location_expression (symbaton, length,
 					 get_frame_pc (debaton->frame));
     }
   else
     {
-      struct dwarf2_locexpr_baton *symbaton;
+      struct dwarf2_address_translation *symbaton;
       symbaton = SYMBOL_LOCATION_BATON (framefunc);
       *length = symbaton->size;
       *start = symbaton->data;
@@ -320,7 +323,7 @@ dwarf2_evaluate_loc_desc (struct symbol *var, struct frame_info *frame,
   ctx->get_frame_base = dwarf_expr_frame_base;
   ctx->get_tls_address = dwarf_expr_tls_address;
 
-  dwarf_expr_eval (ctx, data, size, 0);
+  dwarf_expr_eval (ctx, data, size, 0, SYMBOL_LOCATION_BATON (var));
   /* APPLE LOCAL begin DW_op_pieces for PPC registers */
   if (ctx->num_pieces == 2
       && ctx->pieces[0].in_reg
@@ -385,7 +388,6 @@ dwarf2_evaluate_loc_desc (struct symbol *var, struct frame_info *frame,
   else
     {
       CORE_ADDR address = dwarf_expr_fetch (ctx, 0);
-
       retval = allocate_value (SYMBOL_TYPE (var));
       VALUE_LVAL (retval) = lval_memory;
       set_value_lazy (retval, 1);
@@ -468,7 +470,7 @@ dwarf2_loc_desc_needs_frame (gdb_byte *data, unsigned short size)
   ctx->get_frame_base = needs_frame_frame_base;
   ctx->get_tls_address = needs_frame_tls_address;
 
-  dwarf_expr_eval (ctx, data, size, 0);
+  dwarf_expr_eval (ctx, data, size, 0, NULL);
 
   in_reg = ctx->in_reg;
 
@@ -543,7 +545,7 @@ dwarf2_tracepoint_var_ref (struct symbol *symbol, struct agent_expr *ax,
 static struct value *
 locexpr_read_variable (struct symbol *symbol, struct frame_info *frame)
 {
-  struct dwarf2_locexpr_baton *dlbaton = SYMBOL_LOCATION_BATON (symbol);
+  struct dwarf2_address_translation *dlbaton = SYMBOL_LOCATION_BATON (symbol);
   struct value *val;
   val = dwarf2_evaluate_loc_desc (symbol, frame, dlbaton->data, dlbaton->size,
 				  dlbaton->objfile);
@@ -555,7 +557,7 @@ locexpr_read_variable (struct symbol *symbol, struct frame_info *frame)
 static int
 locexpr_read_needs_frame (struct symbol *symbol)
 {
-  struct dwarf2_locexpr_baton *dlbaton = SYMBOL_LOCATION_BATON (symbol);
+  struct dwarf2_address_translation *dlbaton = SYMBOL_LOCATION_BATON (symbol);
   return dwarf2_loc_desc_needs_frame (dlbaton->data, dlbaton->size);
 }
 
@@ -564,7 +566,7 @@ static int
 locexpr_describe_location (struct symbol *symbol, struct ui_file *stream)
 {
   /* FIXME: be more extensive.  */
-  struct dwarf2_locexpr_baton *dlbaton = SYMBOL_LOCATION_BATON (symbol);
+  struct dwarf2_address_translation *dlbaton = SYMBOL_LOCATION_BATON (symbol);
   /* APPLE LOCAL begin print better location information.  */
   struct dwarf_expr_context *ctx;
   gdb_byte *loc_ptr;
@@ -645,7 +647,7 @@ static void
 locexpr_tracepoint_var_ref (struct symbol * symbol, struct agent_expr * ax,
 			    struct axs_value * value)
 {
-  struct dwarf2_locexpr_baton *dlbaton = SYMBOL_LOCATION_BATON (symbol);
+  struct dwarf2_address_translation *dlbaton = SYMBOL_LOCATION_BATON (symbol);
 
   dwarf2_tracepoint_var_ref (symbol, ax, value, dlbaton->data, dlbaton->size);
 }
@@ -668,7 +670,7 @@ const struct symbol_ops dwarf2_locexpr_funcs = {
 static struct value *
 loclist_read_variable (struct symbol *symbol, struct frame_info *frame)
 {
-  struct dwarf2_loclist_baton *dlbaton = SYMBOL_LOCATION_BATON (symbol);
+  struct dwarf2_address_translation *dlbaton = SYMBOL_LOCATION_BATON (symbol);
   struct value *val;
   gdb_byte *data;
   size_t size;
@@ -1195,7 +1197,7 @@ static int
 loclist_describe_location (struct symbol *symbol, struct ui_file *stream)
 {
   /* FIXME: Could print the entire list of locations.  */
-  struct dwarf2_loclist_baton *dlbaton = SYMBOL_LOCATION_BATON (symbol);
+  struct dwarf2_address_translation *dlbaton = SYMBOL_LOCATION_BATON (symbol);
   struct dwarf_expr_context *ctx;
   gdb_byte *loc_ptr, *buf_end, *loc_end;
   int length;
@@ -1229,8 +1231,11 @@ loclist_describe_location (struct symbol *symbol, struct ui_file *stream)
 	}
       /* Otherwise, a location expression entry.  */
 
-      low += base_address;
-      high += base_address;
+      if (base_address != INVALID_ADDRESS)
+        {
+          low += base_address;
+          high += base_address;
+        }
 
       /* APPLE LOCAL: for the debug-info-in-.o-files case we need to go through
          the address translation table for the addresses in the DWARF (in the
@@ -1277,7 +1282,7 @@ static void
 loclist_tracepoint_var_ref (struct symbol * symbol, struct agent_expr * ax,
 			    struct axs_value * value)
 {
-  struct dwarf2_loclist_baton *dlbaton = SYMBOL_LOCATION_BATON (symbol);
+  struct dwarf2_address_translation *dlbaton = SYMBOL_LOCATION_BATON (symbol);
   gdb_byte *data;
   size_t size;
 

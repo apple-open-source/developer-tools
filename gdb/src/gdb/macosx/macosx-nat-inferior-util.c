@@ -349,7 +349,7 @@ macosx_save_exception_ports (task_t task, struct macosx_exception_info *info)
   info->count = (sizeof (info->ports) / sizeof (info->ports[0]));
   kret = task_get_exception_ports
     (task,
-     EXC_MASK_ALL,
+     GDB_MACH_EXC_MASK_ALL,
      info->masks, &info->count, info->ports, info->behaviors, info->flavors);
   if (kret != KERN_SUCCESS)
     return kret;

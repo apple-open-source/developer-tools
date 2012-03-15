@@ -1,3 +1,18 @@
+2012-01-18  Jason Molenda  (jmolenda@apple.com)
+
+	* config/mh-macosx: Update -mmacosx-version-min to 10.7.
+
+2011-11-30  Jason Molenda  (jmolenda@apple.com)
+
+	* config/mh-arm-macosx: Specify minimum of iOS 5.
+
+2011-11-16  Jason Molenda  (jmolenda@apple.com)
+
+	* configure.ac: Update to use the arm-specific mac host file
+	if we're building on arm native.
+	* config/mh-arm-macosx: New file.
+	* config/mh-macosx: Add -mmacosx-version-min=10.6.
+
 2011-04-28  Jason Molenda  (jmolenda@apple.com)
 
 	* regex.c: Remove.

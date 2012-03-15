@@ -1337,7 +1337,7 @@ AC_SUBST(TARGET_SYSTEM_ROOT_DEFINE)
 build_warnings="-Wimplicit -Wreturn-type -Wcomment -Wtrigraphs \
 -Wformat -Wparentheses -Wpointer-arith \
 -Wunused-label -Wunused-function \
--Wno-format-security"
+-Wno-format-security -Werror=implicit-function-declaration"
 
 # GCC supports -Wuninitialized only with -O or -On, n != 0.
 if test x${CFLAGS+set} = xset; then
@@ -1394,7 +1394,6 @@ then
     # compiled with it enabled.
     for w in ${build_warnings}; do
 	case $w in
-	-Werr*) WERROR_CFLAGS=-Werror ;;
 	*) # Check that GCC accepts it
 	    saved_CFLAGS="$CFLAGS"
 	    CFLAGS="$CFLAGS $w"

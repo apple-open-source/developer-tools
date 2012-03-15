@@ -13,10 +13,16 @@
 
 #include "symtab.h"
 
+#include <CoreFoundation/CoreFoundation.h>
+
 struct internal_nlist;
 struct external_nlist;
 struct objfile;
 extern enum gdb_osabi osabi_seen_in_attached_dyld;
+
+extern int disable_aslr_flag;
+
+extern CORE_ADDR kernel_slide;
 
 void macosx_internalize_symbol (struct internal_nlist * in, int *sect_p,
                                 struct external_nlist * ext, bfd *abfd);
@@ -65,8 +71,30 @@ struct exception_event_record *macosx_get_current_exception_event ();
 
 struct section_addr_info *get_section_addresses_for_macho_in_memory (CORE_ADDR mh_addr);
 
+struct section_addr_info *get_section_addrs_of_macho_on_disk (const char *filename);
+
+struct section_addr_info *get_section_addresses_for_bfd (bfd *abfd);
+
 struct section_addr_info *macosx_get_kext_sect_addrs_from_kernel (const char *kext_filename, uint8_t **kext_uuids, const char *kext_bundle_ident);
 
 char *macosx_pid_or_tid_to_str (ptid_t ptid);
+
+int exhaustive_search_for_kernel_in_mem (struct objfile *ofile, CORE_ADDR *addr, uuid_t *uuid_output);
+
+char *macosx_locate_executable_by_dbg_shell_command (CFStringRef uuid);
+
+CFUUIDRef get_uuidref_for_uuid_t (uint8_t *uuid);
+
+CORE_ADDR get_load_addr_of_macho_on_disk (const char *filename, enum gdb_osabi osabi);
+
+int get_information_about_macho (const char *filename, CORE_ADDR mh_addr, bfd *abfd,
+                             int require_kernel, int force_live_memory_reads,
+                             uuid_t *uuid, enum gdb_osabi *osabi,
+                             int *wordsize, CORE_ADDR *intended_load_address, CORE_ADDR *slide,
+                             struct section_addr_info **addrs);
+
+int slide_kernel_objfile (struct objfile *o, CORE_ADDR in_memory_addr, uuid_t in_memory_uuid, enum gdb_osabi osabi);
+
+int try_to_find_and_load_kernel_via_uuid (CORE_ADDR in_memory_addr, uuid_t in_memory_uuid, enum gdb_osabi osabi);
 
 #endif /* __GDB_MACOSX_TDEP_H__ */

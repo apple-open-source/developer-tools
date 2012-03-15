@@ -16,6 +16,17 @@
 
 #include <mach/mach.h>
 
+#define GDB_MACH_EXC_MASK_ALL    (EXC_MASK_BAD_ACCESS |         \
+				  EXC_MASK_BAD_INSTRUCTION |	\
+				  EXC_MASK_ARITHMETIC |		\
+				  EXC_MASK_EMULATION |		\
+				  EXC_MASK_SOFTWARE |		\
+				  EXC_MASK_BREAKPOINT |		\
+				  EXC_MASK_SYSCALL |		\
+				  EXC_MASK_MACH_SYSCALL |	\
+				  EXC_MASK_RPC_ALERT)
+
+
 struct kinfo_proc;
 
 struct macosx_inferior_status

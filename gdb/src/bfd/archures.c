@@ -274,6 +274,7 @@ DESCRIPTION
 .#define bfd_mach_arm_6         14
 .#define bfd_mach_arm_7         15
 .#define bfd_mach_arm_7f        16
+.#define bfd_mach_arm_7s        17
 .#define bfd_mach_arm_7k        18
 .  bfd_arch_ns32k,     {* National Semiconductors ns32000 *}
 .  bfd_arch_w65,       {* WDC 65816 *}

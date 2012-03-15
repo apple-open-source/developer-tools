@@ -525,6 +525,7 @@ for t in $TARGETS ; do
   # LLVM LOCAL begin fix broken link
   ln -s ../../../../../bin/as .$DL/as
   ln -s ../../../../../bin/ld .$DL/ld
+  ln -s ../../../../../bin/dsymutil .$DL/dsymutil
   # LLVM LOCAL end fix broken link
 done
 

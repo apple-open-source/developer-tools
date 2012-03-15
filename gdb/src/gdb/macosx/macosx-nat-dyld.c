@@ -661,7 +661,10 @@ dyld_starts_here_p (mach_vm_address_t addr)
       if (exec_bfd 
 	  && gdbarch_lookup_osabi_from_bfd (exec_bfd) != GDB_OSABI_DARWIN
 	  && gdbarch_lookup_osabi_from_bfd (exec_bfd) != GDB_OSABI_DARWINV6
-	  && gdbarch_lookup_osabi_from_bfd (exec_bfd) != GDB_OSABI_DARWINV7)
+	  && gdbarch_lookup_osabi_from_bfd (exec_bfd) != GDB_OSABI_DARWINV7
+	  && gdbarch_lookup_osabi_from_bfd (exec_bfd) != GDB_OSABI_DARWINV7F
+	  && gdbarch_lookup_osabi_from_bfd (exec_bfd) != GDB_OSABI_DARWINV7K
+	  && gdbarch_lookup_osabi_from_bfd (exec_bfd) != GDB_OSABI_DARWINV7S)
 	  {
 	    error ("The exec file is 64 bits but the attach target is 32 bits.\n"
 	      "Quit gdb & restart, using \"--arch\" to select the 32 bit fork of the executable.");
@@ -1106,7 +1109,7 @@ macosx_dyld_init (macosx_dyld_thread_status *s, bfd *exec_bfd)
       struct objfile *o = find_objfile_by_name (s->dyld_name, 1);
       if (o)
         {
-          dyld_slide_objfile (o, s->dyld_slide, NULL);
+          slide_objfile (o, s->dyld_slide, NULL);
           s->dyld_minsyms_have_been_relocated = 1;
         }
     }
@@ -1217,6 +1220,8 @@ macosx_dyld_init (macosx_dyld_thread_status *s, bfd *exec_bfd)
 	    osabi_seen_in_attached_dyld = GDB_OSABI_DARWINV7;
 	  else if (s->dyld_mem_header.cpusubtype == BFD_MACH_O_CPU_SUBTYPE_ARM_7F)
 	    osabi_seen_in_attached_dyld = GDB_OSABI_DARWINV7F;
+	  else if (s->dyld_mem_header.cpusubtype == BFD_MACH_O_CPU_SUBTYPE_ARM_7S)
+	    osabi_seen_in_attached_dyld = GDB_OSABI_DARWINV7S;
 	  else if (s->dyld_mem_header.cpusubtype == BFD_MACH_O_CPU_SUBTYPE_ARM_7K)
 	    osabi_seen_in_attached_dyld = GDB_OSABI_DARWINV7K;
 	  else

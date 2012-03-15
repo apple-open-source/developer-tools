@@ -93,7 +93,19 @@ main(int argc, char *argv[])
 			usage();
 	}
 
-	addarg("llvm-gcc");
+	/* Find the path to this executable. */
+	if (_NSGetExecutablePath(exec_path, &exec_path_size))
+		memcpy(exec_path, "/usr/bin/c89", sizeof("/usr/bin/c89"));
+	if (realpath(exec_path, link_path))
+		compiler_path = link_path;
+
+	/* Chop off c89 and replace it with llvm-gcc. */
+	lastslash = strrchr(compiler_path, '/');
+	if (!lastslash)
+		err(1, "unexpected path name: %s", compiler_path);
+	strcpy(lastslash+1, "llvm-gcc");
+
+	addarg(compiler_path);
 	addarg("-std=iso9899:1990");
 	addarg("-pedantic");
 	for (i = 1; i < optind; i++) {
@@ -187,18 +199,6 @@ main(int argc, char *argv[])
 		} else
 		  addarg(argv[i++]);
 	}
-
-	/* Find the path to this executable. */
-	if (_NSGetExecutablePath(exec_path, &exec_path_size))
-		memcpy(exec_path, "/usr/bin/c89", sizeof("/usr/bin/c89"));
-	if (realpath(exec_path, link_path))
-		compiler_path = link_path;
-
-	/* Chop off c89 and replace it with llvm-gcc. */
-	lastslash = strrchr(compiler_path, '/');
-	if (!lastslash)
-		err(1, "unexpected path name: %s", compiler_path);
-	strcpy(lastslash+1, "llvm-gcc");
 
         /* Exec llvm-gcc. */
 	execv(compiler_path, args);

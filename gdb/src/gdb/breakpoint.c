@@ -3066,7 +3066,8 @@ bpstat_stop_status (CORE_ADDR bp_addr, ptid_t ptid, int stopped_by_watchpoint)
 	&& b->type != bp_gnu_v3_catch_catch
 	&& b->type != bp_gnu_v3_catch_throw)	/* a non-watchpoint bp */
       {
-	if (b->loc->address != bp_addr) 	/* address doesn't match */
+	if (b->loc->address != bp_addr
+            && gdbarch_addr_bits_remove (current_gdbarch, b->loc->address) != bp_addr) 	/* address doesn't match */
 	  continue;
 	if (overlay_debugging		/* unmapped overlay section */
 	    && section_is_overlay (b->loc->section) 

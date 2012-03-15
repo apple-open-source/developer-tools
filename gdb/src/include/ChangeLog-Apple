@@ -1,3 +1,12 @@
+2012-05-21  Jim Ingham  <jingham@apple.com>
+
+	* elf/dwarf2.h: Add DW_TAG_rvalue_reference_type.
+	
+2011-08-22  Jason Molenda  (jmolenda@apple.com)
+
+	* elf/dwarf2.h: Add DW_AT_ defines for Apple local extensions for
+	Objective-C 2.0 setters/getters.
+
 2011-04-28  Jason Molenda  (jmolenda@apple.com)
 
 	* xregex.h: Removed.

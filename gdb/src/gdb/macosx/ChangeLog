@@ -1,3 +1,316 @@
+2012-05-21  Jason Molenda  (jmolenda@apple.com)
+
+	* macosx-tdep.c (kaslr_memory_search_enabled): New set/show
+	variable added to suppress the exhaustive search for a ASLR
+	kernel in memory on 'target remote'.
+
+2012-05-02  Jason Molenda  (jmolenda@apple.com)
+
+	* core-macho.c (core_open): Check the fixed address to find
+	a K32 kernel location in a coredump in addition to the K64
+	kernel location.
+
+2012-03-06  Jason Molenda  (jmolenda@apple.com)
+
+	* macosx-tdep.c (exhaustive_search_for_kernel_in_mem): Add
+	another shortcut: Look for the kernel's load address stored
+	in the kernel's low globals page - it will be there if
+	the appropriate boot-args is set.
+
+2012-02-27  Jason Molenda  (jmolenda@apple.com)
+
+	* macosx-tdep.c (exhaustive_search_for_kernel_in_mem): Add
+	another shortcut: The address of a symbol in the __TEXT,__const
+	section may be present in the low-global memory.  Try searching
+	for the kernel near that address if it looks valid.
+
+2012-02-10  Jim Ingham  <jingham@apple.com>
+
+	* macosx-nat-inferior.h: Add GDB_MACH_EXC_MASK_ALL define.
+	* macosx-nat-inferior.c (macosx_save_exception_ports): Use this
+	instead of the build system's EXC_MASK_ALL.
+	* macosx-nat-excthread.c (macosx_exception_thread_create): Ditto.
+	
+2012-02-01  Jason Molenda  (jmolenda@apple.com)
+
+	* macosx-tdep.c (macosx_locate_executable_by_dbg_shell_command):
+	renamed from find_kext_via_dbg_shell_command_callout to more
+	clearly reflect what it does, as opposed to 
+	macosx_locate_kext_executable_by_symfile_helper.
+	(try_to_find_and_load_kernel_via_uuid): If we fail to find the
+	kernel file via macosx_locate_executable_by_dbg_shell_command,
+	try macosx_locate_executable_by_dbg_shell_command.
+	* macosx-tdep.h: Prototype updated.
+
+2012-01-30  Jason Molenda  (jmolenda@apple.com)
+
+	* macosx-tdep.c (find_kext_via_dbg_shell_command_callout):
+	Handle incorrect setting/not setting DBGShellCommands.
+
+2012-01-25  Jason Molenda  (jmolenda@apple.com)
+
+	* macosx-tdep.c (exhaustive_search_for_kernel_in_mem): 
+	If stop_pc has a valid value, try searching for the kernel
+	around that address; failing that, search exhaustively
+	through the possibly valid memory range.
+
+2012-01-24  Jason Molenda  (jmolenda@apple.com)
+
+	* macosx-tdep.c (find_kext_via_dbg_shell_command_callout): 
+	Tilde expand the executable path returned by this function.
+
+2012-01-12  Jason Molenda  (jmolenda@apple.com)
+
+	* core-macho.c (core_open): Don't look for a kaslr kernel
+	if we have an executable file and it's a non-kernel file.
+	Suppress output when we check for the address of the kernel
+	in the low global page; if it's not a kernel core dump this
+	will error.
+	* macosx-tdep.c (get_dbg_shell_command): New function to
+	retrieve the DBGShellCommands command.
+	(find_kext_via_dbg_shell_command_callout): Use it.
+	(try_to_find_and_load_kernel_via_uuid): Only print "gdb loaded
+	the kernel for you" if it actually did.  And include the
+	DBGShellCommands command responsible for finding it in the
+	text.
+
+2012-01-11  Jason Molenda  (jmolenda@apple.com)
+
+	* core-macho.c (core_open): Search for the kernel via
+	the hard-coded word of memory that has the kernel's
+	location in the low global page.  If we get an address
+	there, and if that address has a Mach-O image, we are
+	working with a kaslr kernel coredump and should do the
+	right thing.
+	(init_macho_core_ops): Call the xfer_memory_from_corefile()
+	access method instead of xfer_memory() so that the
+	"only read from live memory" flag still reads from the
+	core file on disk (the correct thing to do with core file
+	debugging).
+	* macosx-tdep.c (slide_kernel_objfile): Set the architecture
+	and osabi based on the osabi of the kernel file we locate
+	in memory.
+	(try_to_find_and_load_kernel_via_uuid): Ditto.
+	(mach_kernel_starts_here_p): Return the osabi of the kernel
+	we found in memory.
+	(exhaustive_search_for_kernel_in_mem): Pass the osabi along.
+	* macosx-tdep.h: Prototypes updated.
+	* remote-kdp.c (kdp_uuid_and_load_addr): Pass the osabi
+	along.
+
+2012-01-11  Jason Molenda  (jmolenda@apple.com)
+
+	* macosx-tdep.c (slide_kernel_objfile): New function to
+	slide a kernel objfile to its correct address, re-set the
+	gdb state, and print a standard message about the kernel
+	location to the user.
+	(try_to_find_and_load_kernel_via_uuid): New function to
+	find a kernel via DBGShellCommands, load it, slide it to
+	the correct load address, and print a standard message
+	about the kernel location to the user.
+	(exhaustive_search_for_kernel_in_mem): Call the above
+	two functions instead of doing these things in-line.
+	* macosx-tdep.h: Prototypes added.
+	* remote-kdp.c (kdp_uuid_and_load_addr): Call the above
+	two functions instead of doing these thigns in-line;
+	simplify this function a bit in the process.
+
+2012-01-10  Jason Molenda  (jmolenda@apple.com)
+
+	* macosx-tdep.c (exhaustive_search_for_kernel_in_mem):
+	Mark the mach kernel as the main executable binary when
+	we load it.
+	* remote-kdp.c (kdp_uuid_and_load_addr): Ditto.
+
+2012-01-10  Jason Molenda  (jmolenda@apple.com)
+
+	* macosx-tdep.c (exhaustive_search_for_kernel_in_mem): Load
+	the kernel from disk without any slide applied, then add
+	the slide post-load instead of trying to get the section
+	addrs updated correctly beforehand.
+	* remote-kdp.c (kdp_uuid_and_load_addr): Same.
+
+2012-01-10  Jason Molenda  (jmolenda@apple.com)
+
+	* macosx-tdep.c (get_information_about_macho): Also accept
+	a file name as a file on disc to retrieve data about.
+	Update callers.
+	* macosx-tdep.h: Update prototype.
+	* remote-kdp.c: Update caller.
+
+2012-01-09  Jason Molenda  (jmolenda@apple.com)
+
+	* arm-macosx-tdep.c (arm_integer_to_address): Define this
+	integer-to-CORE_ADDR function the same as i386/ppc.
+	(arm_macosx_init_abi_v6): Add to target vector.
+	(arm_macosx_init_abi_v7): Add to target vector.
+
+2012-01-08  Jason Molenda  (jmolenda@apple.com)
+
+	* macosx-tdep.c (get_information_about_macho): Renamed this
+	from get_information_about_macho_in_memory.  Also can fill in
+	a section_addr_info for a Mach-O, and can specify whether
+	live memory reads are required or not. 
+	Add guards to protect against non-Mach-O data being treated
+	as Mach-O.
+	(get_section_addresses_for_macho_in_memory): Use
+	get_information_about_macho.
+	(get_section_addrs_of_macho_on_disk): Ditto.
+	(mach_kernel_starts_here_p): Update call.
+	* macosx-tdep.h: Update prototype.
+	* remote-kdp.c (kdp_uuid_and_load_addr): Update call to
+	get_information_about_macho.
+
+2012-01-05  Jason Molenda  (jmolenda@apple.com)
+
+	* macosx-tdep.c (get_section_addrs_of_macho_on_disk): New
+	helper function.
+	(get_section_addresses_for_bfd): New helper function.
+	(exhaustive_search_for_kernel_in_mem): Apply the slide to
+	every section of the kernel.
+	* remote-kdp.c (kdp_uuid_and_load_addr): Apply the slide ot
+	every section of the kernel.
+
+2012-01-05  Jason Molenda  (jmolenda@apple.com)
+
+	* macosx-tdep.c (get_load_addr_of_macho_on_disk): New helper
+	function.
+	(get_information_about_macho_in_memory): Renamed from
+	get_uuid_and_osabi_for_macho_in_memory, a few other pieces
+	of information are turned about the Mach-O image in memory.
+	(kernel_slide): New global variable to remember the slide of
+	the kernel in this connection, will be used shortly to 
+	slide kexts loaded via a .sym file.
+	(mach_kernel_starts_here_p): Eliminate most code from this
+	func, call get_information_about_macho_in_memory().
+	(exhaustive_search_for_kernel_in_mem): Report the load
+	address, UUID, and slide of the kernel we found in memory
+	with the same order/strings as reported over in remote-kdp.c.
+	* macosx-tdep.h: Prototypes updated.
+	* remote-kdp.c (kdp_uuid_and_load_addr): Record the kernel's
+	slide value, if we can compute it for use with .sym based
+	kexts.
+
+2012-01-05  Jason Molenda  (jmolenda@apple.com)
+
+	* macosx-tdep.c (get_uuidref_for_uuid_t, 
+	find_kext_via_dbg_shell_command_callout): Change linkage
+	to external so I can use them from remote-kdp.c.
+	(get_uuid_and_osabi_for_macho_in_memory): New helper function
+	which can retrieve the UUID and/or OSABI of a file in memory
+	given the address of that file.
+	* macosx-tdep.h: Include prototypes for those two new
+	external linkage functions.
+	* remote-kdp.c (kdp_uuid_and_load_addr): Once we have a 
+	load address and UUID, try to call dsymForUUID to find a
+	symbol rich executable via the UUID.  If found, load it at
+	the correct load addr.
+	Also, report the load address and UUID on kdp-reattach
+	always for people who need to load the kernel by hand.
+
+2012-01-04  Jason Molenda  (jmolenda@apple.com)
+
+	* macosx-tdep.c (mach_kernel_starts_here_p): Set the
+	osabi based on the kernel we find in memory, if one is
+	found.
+
+2012-01-04  Jason Molenda  (jmolenda@apple.com)
+
+	* macosx-tdep.c (exhaustive_search_for_kernel_in_mem): 
+	Report the load address of the kernel and the UUID every
+	time.  If we're handed a symbol file that is not a kernel
+	binary, don't search memory at all -- this is a non-kernel
+	debug session most likely.
+
+2012-01-04  Jason Molenda  (jmolenda@apple.com)
+
+	* macosx-tdep.c (exhaustive_search_for_kernel_in_mem): If
+	we can locate the kernel file via its UUID, load it 
+	automatically for the user.
+
+2012-01-04  Jason Molenda  (jmolenda@apple.com)
+
+	* macosx-tdep.c (mach_kernel_starts_here_p): Test a given
+	address of memory to see if there is a kernel loaded there.
+	(exhaustive_search_for_kernel_in_mem): Step through all likely
+	regions of memory looking for where a kernel may be loaded.
+	* macosx-tdep.h (exhaustive_search_for_kernel_in_mem): prototype.
+
+2011-11-30  Jason Molenda  (jmolenda@apple.com)
+
+	* remote-kdp.c (kdp_uuid_and_load_addr): Don't assume that
+	we have a symfile_objfile - the debugger may have been 
+	started without being given a mach_kernel.
+
+2011-11-29  Jason Molenda  (jmolenda@apple.com)
+
+	* macosx-tdep.c (macosx_locate_kext_executable_by_symfile):
+	Remove warning message when we find a kext dSYM that doesn't 
+	have the per-UUID plist; this is not normally present and
+	shouldn't be warned about if it can't be found.
+
+2011-11-29  Jason Molenda  (jmolenda@apple.com)
+
+	* macosx-nat-dyld-process.c (dyld_slide_objfile): Move up to
+	objfiles.c as slide_objfile().
+	* macosx-nat-dyld-process.h: Remove prototype.
+	* macosx-nat-dyld.c (macosx_dyld_init): dyld_slide_objfile to 
+	slide_objfile.
+	* remote-kdp.c (kdp_hostinfo): New function to get the host
+	architecture at the start of the kdp debug session (instead of
+	including this in the middle of kdp_attach()). 
+	(kdp_uuid_and_load_addr): Get the kernel version string and look
+	for the UUID and load address parameters, if present.  Warn if
+	the UUID doesn't match; slide the dyld binary if necessary.
+	(kdp_attach): Break out the host-arch detection code.  Add a
+	call to check the remote kernel's UUID & load addr.
+
+2011-11-17  Jason Molenda  (jmolenda@apple.com)
+
+	* macosx-tdep.c (macosx_locate_kext_executable_by_symfile): If
+	we fail to parse a dSYM's Info.plist, display the path to the 
+	dSYM that we had problems with, note that we're about to call
+	the DebugSymbols shell command as a workaround.
+
+2011-11-16  Jason Molenda  (jmolenda@apple.com)
+
+	* macosx-tdep.c (look_for_kext_binary_next_to_dsym): New function
+	to look for a bare kext binary file sitting next to a dSYM bundle.
+	This will only be when doing "add-kext .sym" and a shell script
+	plugin to DebugSymbols may have copied the binary to the local
+	filesystem for us.
+	(macosx_locate_kext_executable_by_symfile): Call it.
+
+2011-11-15  Jason Molenda  (jmolenda@apple.com)
+
+	* macosx-tdep.c (find_kext_via_dbg_shell_command_callout): As a
+	backup scheme, when the symbol-rich-executable kv pair in a 
+	dSYM's Info.plist doesn't point to an executable on the local
+	filesystem, and there's a DebugSymbols shell command defined,
+	try calling that shell command to see if it can give us a path
+	to a symbol-rich-executable.
+	(expand_kext_cstr): Handle the tilde and realpath expansion of
+	a pathname.
+	(locate_kext_executable_by_dsym_plist): Use the above two functions
+	to make symbol-rich-executable location to be a little more
+	resiliant.
+
+2011-11-10  Jason Molenda  (jmolenda@apple.com)
+
+	* macosx-tdep.c (locate_kext_executable_by_dsym_plist): Preserve
+	the pathname we get back for the DBGSymbolRichExecutable key
+	before going through tilde expansion and realpathing in case
+	one of those transforms corrupts it.  Add additional warning
+	messages if we can't find the kext where the dSYM's Info.plist
+	says we should find it.
+	(macosx_locate_kext_executable_by_symfile): Add an additional
+	warning if we can't parse the dSYM's Info.plist.
+
+2011-09-27  Jason Molenda  (jmolenda@apple.com)
+
+	* macosx-nat-dyld.c (dyld_starts_here_p): Handle
+	armv7f/k/s the same as armv7.
+
 2011-07-14  Jason Molenda  (jmolenda@apple.com)
 
 	* macosx-nat-dyld-process.c (dyld_load_library_from_file):
@@ -194,10 +507,10 @@
 2011-03-08  Jason Molenda  (jmolenda@apple.com)
 
 	* macosx-nat-dyld-info.c: Add support for new cpusubtypes,
-	ARM_7{F,K}.
+	ARM_7{F,S,K}.
 	* macosx-nat-dyld.c: Ditto.
 	* arm-macosx-tdep.c: Add preliminary support for new cpu
-	subtypes, ARM_7{F,K}.  More work needed to get
+	subtypes, ARM_7{F,S,K}.  More work needed to get
 	slice selection strictly correct.
 
 2011-03-08  Jason Molenda  (jmolenda@apple.com)

@@ -880,5 +880,8 @@ extern void objfile_add_special_psym (struct objfile *objfile,
                                       int short isa_value);
 /* APPLE LOCAL begin differentiate arm & thumb msymbols */
 
+void slide_objfile (struct objfile *objfile, CORE_ADDR dyld_slide,
+                    struct section_offsets *new_offsets);
+
 
 #endif /* !defined (OBJFILES_H) */

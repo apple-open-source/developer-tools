@@ -59,6 +59,11 @@
 #include <errno.h>
 #include <signal.h>
 #include <fcntl.h>
+#include "osabi.h"
+#include "gdbarch.h"
+#include "objfiles.h"
+
+#include "ui-out.h"
 
 struct target_ops macho_core_ops;
 
@@ -262,6 +267,113 @@ core_open (char *filename, int from_tty)
   if (ptid_equal (inferior_ptid, null_ptid))
     {
       error ("Core file contained no thread-specific data\n");
+    }
+
+  /* If the symbol file specified is a kernel image, or we have no
+     symbol file specified at all, check to see if this is a kernel
+     coredump that may have slid due to kaslr.  */
+
+  if (symfile_objfile == NULL || symfile_objfile->obfd == NULL ||  bfd_mach_o_kernel_image (symfile_objfile->obfd))
+    {
+      /* The address of the kernel Mach-O header is at this address in the low globals page.  */
+      ULONGEST possible_kernel_address = INVALID_ADDRESS;
+      struct cleanup *uiclean = make_cleanup_ui_out_suppress_output (uiout);
+      struct ui_file *prev_stderr = gdb_stderr;
+      gdb_stderr = gdb_null;
+
+      int found_kernel = 0;
+      int mem_read_ret = safe_read_memory_unsigned_integer (0xffffff8000002010ULL, 8, &possible_kernel_address);
+      gdb_stderr = prev_stderr;
+      do_cleanups (uiclean);
+      if (mem_read_ret && possible_kernel_address != INVALID_ADDRESS && possible_kernel_address != 0)
+        {
+          CORE_ADDR in_memory_addr;
+          uuid_t in_memory_uuid;
+          enum gdb_osabi in_memory_osabi = GDB_OSABI_UNKNOWN;
+          int got_info;
+          got_info = get_information_about_macho (NULL, possible_kernel_address, NULL, 1, 1, &in_memory_uuid, &in_memory_osabi, NULL, NULL, NULL, NULL);
+          if (got_info)
+            {
+              in_memory_addr = possible_kernel_address;
+              found_kernel = 1;
+            }
+          else
+            {
+              // We had to guess at how many bytes to read above - try 8 bytes.  As a backup, try
+              // again with 4.
+              uiclean = make_cleanup_ui_out_suppress_output (uiout);
+              prev_stderr = gdb_stderr;
+              gdb_stderr = gdb_null;
+              mem_read_ret = safe_read_memory_unsigned_integer (0xffffff8000002010ULL, 4, &possible_kernel_address);
+              gdb_stderr = prev_stderr;
+              do_cleanups (uiclean);
+              
+              if (mem_read_ret
+                  && get_information_about_macho (NULL, possible_kernel_address, NULL, 1, 1, &in_memory_uuid, &in_memory_osabi, NULL, NULL, NULL, NULL))
+                {
+                  got_info = found_kernel = 1;
+                  in_memory_addr = possible_kernel_address;
+                }
+            }
+
+          /* OK we found a Mach-O kernel in the core file memory.  If the user specified a kernel file
+             on startup, slide it to the correct address.  If no kernel was specified, see if we can't
+             find one via DBGShellCommand.  In any case, print a message about the load address and
+             UUID of the kernel we found in memory.  */
+          if (got_info)
+            {
+              CORE_ADDR file_load_addr = INVALID_ADDRESS;
+              if (symfile_objfile
+                  && get_information_about_macho (NULL, INVALID_ADDRESS, symfile_objfile->obfd, 1, 0, NULL, NULL, NULL, &file_load_addr, NULL, NULL))
+                {
+                  slide_kernel_objfile (symfile_objfile, in_memory_addr, in_memory_uuid, in_memory_osabi);
+                }
+              else
+                {
+                  try_to_find_and_load_kernel_via_uuid (in_memory_addr, in_memory_uuid, in_memory_osabi);
+                }
+            }
+        }
+
+      /* Retry with the K32 address location if we haven't found a kernel yet.  */
+      if (found_kernel == 0)
+        {
+          possible_kernel_address = INVALID_ADDRESS;
+          uiclean = make_cleanup_ui_out_suppress_output (uiout);
+          prev_stderr = gdb_stderr;
+          gdb_stderr = gdb_null;
+          mem_read_ret = safe_read_memory_unsigned_integer (0xffff0110, 4, &possible_kernel_address);
+          gdb_stderr = prev_stderr;
+          do_cleanups (uiclean);
+          if (mem_read_ret && possible_kernel_address != INVALID_ADDRESS && possible_kernel_address != 0)
+            {
+              CORE_ADDR in_memory_addr;
+              uuid_t in_memory_uuid;
+              enum gdb_osabi in_memory_osabi = GDB_OSABI_UNKNOWN;
+              int got_info;
+              got_info = get_information_about_macho (NULL, possible_kernel_address, NULL, 1, 1, &in_memory_uuid, &in_memory_osabi, NULL, NULL, NULL, NULL);
+              if (got_info)
+                {
+                  in_memory_addr = possible_kernel_address;
+    
+              /* OK we found a Mach-O kernel in the core file memory.  If the user specified a kernel file
+                 on startup, slide it to the correct address.  If no kernel was specified, see if we can't
+                 find one via DBGShellCommand.  In any case, print a message about the load address and
+                 UUID of the kernel we found in memory.  */
+    
+                  CORE_ADDR file_load_addr = INVALID_ADDRESS;
+                  if (symfile_objfile
+                      && get_information_about_macho (NULL, INVALID_ADDRESS, symfile_objfile->obfd, 1, 0, NULL, NULL, NULL, &file_load_addr, NULL, NULL))
+                    {
+                      slide_kernel_objfile (symfile_objfile, in_memory_addr, in_memory_uuid, in_memory_osabi);
+                    }
+                  else
+                    {
+                      try_to_find_and_load_kernel_via_uuid (in_memory_addr, in_memory_uuid, in_memory_osabi);
+                    }
+                }
+            }
+        }
     }
 
   if (ontop)
@@ -903,7 +1015,7 @@ init_macho_core_ops ()
   macho_core_ops.to_fetch_registers = core_fetch_registers;
   macho_core_ops.to_prepare_to_store = core_prepare_to_store;
   macho_core_ops.to_store_registers = core_store_registers;
-  macho_core_ops.deprecated_xfer_memory = xfer_memory;
+  macho_core_ops.deprecated_xfer_memory = xfer_memory_from_corefile;
   macho_core_ops.to_files_info = core_files_info;
   macho_core_ops.to_create_inferior = find_default_create_inferior;
   macho_core_ops.to_pid_to_str = macosx_core_ptid_to_str;

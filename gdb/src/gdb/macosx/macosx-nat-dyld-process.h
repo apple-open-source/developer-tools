@@ -109,7 +109,5 @@ struct pre_run_memory_map *create_pre_run_memory_map (struct bfd *abfd);
 
 void free_pre_run_memory_map (struct pre_run_memory_map *map);
 
-void dyld_slide_objfile (struct objfile *objfile, CORE_ADDR dyld_slide, struct section_offsets *new_offsets); 
-
 
 #endif /* __GDB_MACOSX_NAT_DYLD_PROCESS_H__ */

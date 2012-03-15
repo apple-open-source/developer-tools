@@ -46,6 +46,7 @@
 #include "dis-asm.h"
 #include "gdbarch.h"
 #include "exceptions.h"
+#include "exec.h"
 
 static void target_info (char *, int);
 
@@ -1039,7 +1040,7 @@ memory_xfer_partial (struct target_ops *ops, void *readbuf,
     }
 
   /* APPLE LOCAL: We use -1 to mean "caching temporarily disabled.  */
-  if (region->attrib.cache == 1)
+  if (region->attrib.cache == 1 && !only_read_from_live_memory)
     {
       /* FIXME drow/2006-08-09: This call discards OPS, so the raw
 	 memory request will start back at current_target.  */

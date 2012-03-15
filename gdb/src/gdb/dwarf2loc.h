@@ -29,29 +29,13 @@ struct symbol_ops;
 /* This header is private to the DWARF-2 reader.  It is shared between
    dwarf2read.c and dwarf2loc.c.  */
 
-/* The symbol location baton types used by the DWARF-2 reader (i.e.
-   SYMBOL_LOCATION_BATON for a LOC_COMPUTED symbol).  "struct
-   dwarf2_locexpr_baton" is for a symbol with a single location
-   expression; "struct dwarf2_loclist_baton" is for a symbol with a
-   location list.  */
+/* We often evaluate expressions lazily -- after the debug_info has
+   all been processed and cleaned up -- and so we need to track the
+   information needed to do address translation along with the
+   location list/location expression for when we finally evaluate
+   it.  */
 
-struct dwarf2_locexpr_baton
-{
-  /* Pointer to the start of the location expression.  */
-  gdb_byte *data;
-
-  /* Length of the location expression.  */
-  unsigned short size;
-
-  /* The objfile containing the symbol whose location we're computing.  */
-  struct objfile *objfile;
-
-  /* APPLE LOCAL we need to translate addresses for location list expressions
-     from .o file addresses to final executable addresses.  */
-  struct oso_to_final_addr_map *addr_map;
-};
-
-struct dwarf2_loclist_baton
+struct dwarf2_address_translation
 {
   /* The initial base address for the location list, based on the compilation
      unit.  */
@@ -61,20 +45,20 @@ struct dwarf2_loclist_baton
      accurate only in terms of the .o file. */
   CORE_ADDR base_address_untranslated;
 
-  /* Pointer to the start of the location list.  */
+  /* Pointer to the start of the location expression/list.  */
   gdb_byte *data;
 
-  /* Length of the location list.  */
+  /* Length of the location expression.  */
   unsigned int size;
 
   /* The objfile containing the symbol whose location we're computing.  */
-  /* Used (only???) by thread local variables.  The objfile in which
-     this symbol is defined.  To find a thread-local variable (e.g., a
-     variable declared with the `__thread' storage class), we may need
-     to know which object file it's in.  */
   struct objfile *objfile;
 
-  /* APPLE LOCAL */
+  /* The objfile section (negative if unknown) for this symbol.  */
+  int section;
+
+  /* APPLE LOCAL we need to translate addresses for location list expressions
+     from .o file addresses to final executable addresses.  */
   struct oso_to_final_addr_map *addr_map;
 };
 

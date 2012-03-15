@@ -4652,10 +4652,13 @@ tSCC zMath_ExceptionSelect0[] =
  */
 tSCC zMath_ExceptionBypass0[] =
        "We have a problem when using C\\+\\+|for C\\+\\+, _[a-z0-9A-Z_]+_exception; for C, exception";
+tSCC zMath_ExceptionBypass1[] =
+       "defined __cplusplus";
 
 #define    MATH_EXCEPTION_TEST_CT  2
 static tTestDesc aMath_ExceptionTests[] = {
   { TT_NEGREP,   zMath_ExceptionBypass0, (regex_t*)NULL },
+  { TT_NEGREP,   zMath_ExceptionBypass1, (regex_t*)NULL },
   { TT_EGREP,    zMath_ExceptionSelect0, (regex_t*)NULL }, };
 
 /*

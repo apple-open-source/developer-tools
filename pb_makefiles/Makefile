@@ -23,7 +23,7 @@ GLOBAL_RESOURCES = aggregate.make app.make build.make bundle.make\
                    wrapped-common.make platform-variables.make\
                    platform-variables-extra.make
 
-CFILES = clonehdrs.c dotdotify.c newer.c readdir.c fastcp.c frameworkFlags.c ofileListTool.c
+CFILES = clonehdrs.c dotdotify.c newer.c readdir.c fastcp.c frameworkFlags.c ofileListTool.c arch_tool.c
 
 OTHERSRCS = Makefile.preamble Makefile Makefile.postamble BUGS.rtf\
             platform.make \

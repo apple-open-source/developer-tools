@@ -68,6 +68,29 @@
 #endif
 /* APPLE LOCAL end section names */
 
+/* When attaching to a KASLR kernel we have a symbol file provided at
+   an address which is incorrect.  We need to hunt around in memory to
+   figure out where it actually landed.  We must read only live memory
+   while doing this.  */
+int only_read_from_live_memory = 0;
+
+int set_only_read_from_live_memory (int newval)
+{
+  int oldval = only_read_from_live_memory;
+  only_read_from_live_memory = newval;
+  return oldval;
+}
+
+/* set_only_read_from_live_memory_cleanup() takes an int but the 
+   cleanup func must take a void* so we use this trampoline func 
+   to avoid sizeof int == sizeof void* confusions.  */
+void
+set_only_read_from_live_memory_cleanup (void *new)
+{
+  set_only_read_from_live_memory ((int) new);
+}
+
+
 /* APPLE LOCAL begin async */
 static void
 standard_async (void (*callback) (enum inferior_event_type event_type, 
@@ -557,8 +580,8 @@ map_vmap (bfd *abfd, bfd *arch)
    The same routine is used to handle both core and exec files;
    we just tail-call it with more arguments to select between them.  */
 
-int
-xfer_memory (CORE_ADDR memaddr, gdb_byte *myaddr, int len, int write,
+static int
+xfer_memory_1 (CORE_ADDR memaddr, gdb_byte *myaddr, int len, int write,
 	     struct mem_attrib *attrib, struct target_ops *target)
 {
   int res;
@@ -628,6 +651,26 @@ xfer_memory (CORE_ADDR memaddr, gdb_byte *myaddr, int len, int write,
   else
     return -(nextsectaddr - memaddr);	/* Next boundary where we can help */
 }
+
+int
+xfer_memory (CORE_ADDR memaddr, gdb_byte *myaddr, int len, int write,
+	     struct mem_attrib *attrib, struct target_ops *target)
+{
+  /* An extraordinary case when looking for a KASLR kernel in
+     remote memory -- we can't read anything out of the exec file. */
+  if (only_read_from_live_memory)
+    return 0;
+
+  return xfer_memory_1 (memaddr, myaddr, len, write, attrib, target);
+}
+
+int
+xfer_memory_from_corefile (CORE_ADDR memaddr, gdb_byte *myaddr, int len, int write,
+	     struct mem_attrib *attrib, struct target_ops *target)
+{
+  return xfer_memory_1 (memaddr, myaddr, len, write, attrib, target);
+}
+
 
 
 void

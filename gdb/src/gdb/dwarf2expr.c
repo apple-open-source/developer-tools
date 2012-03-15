@@ -31,11 +31,14 @@
 /* APPLE LOCAL variable initialized status  */
 #include "exceptions.h"
 #include "dwarf2-frame.h"
+#include "dwarf2loc.h"
+#include "objfiles.h"
 
 /* Local prototypes.  */
 
 static void execute_stack_op (struct dwarf_expr_context *,
-			      gdb_byte *, gdb_byte *, int eh_frame_p);
+			      gdb_byte *, gdb_byte *, int eh_frame_p,
+                              struct dwarf2_address_translation *addr_translation);
 
 /* Create a new context for the expression evaluator.  */
 
@@ -132,13 +135,39 @@ add_piece (struct dwarf_expr_context *ctx,
   p->size = size;
 }
 
+/* Add a new piece to CTX's piece list.  */
+/* APPLE LOCAL variable initialized status  */
+void
+add_bits_piece (struct dwarf_expr_context *ctx,
+           int in_reg, CORE_ADDR value, uint64_t bitmask,
+           int offset_in_bits, ULONGEST size)
+{
+  struct dwarf_expr_piece *p;
+
+  ctx->num_pieces++;
+
+  if (ctx->pieces)
+    ctx->pieces = xrealloc (ctx->pieces,
+                            (ctx->num_pieces
+                             * sizeof (struct dwarf_expr_piece)));
+  else
+    ctx->pieces = xmalloc (ctx->num_pieces
+                           * sizeof (struct dwarf_expr_piece));
+
+  p = &ctx->pieces[ctx->num_pieces - 1];
+  p->in_reg = in_reg;
+  p->value = (value & bitmask) >> offset_in_bits;
+  p->size = size;
+}
+
+
 /* Evaluate the expression at ADDR (LEN bytes long) using the context
    CTX.  */
 
 void
-dwarf_expr_eval (struct dwarf_expr_context *ctx, gdb_byte *addr, size_t len, int eh_frame_p)
+dwarf_expr_eval (struct dwarf_expr_context *ctx, gdb_byte *addr, size_t len, int eh_frame_p, struct dwarf2_address_translation *addr_translation)
 {
-  execute_stack_op (ctx, addr, addr + len, eh_frame_p);
+  execute_stack_op (ctx, addr, addr + len, eh_frame_p, addr_translation);
 }
 
 /* Decode the unsigned LEB128 constant at BUF into the variable pointed to
@@ -261,7 +290,8 @@ signed_address_type (void)
 
 static void
 execute_stack_op (struct dwarf_expr_context *ctx,
-		  gdb_byte *op_ptr, gdb_byte *op_end, int eh_frame_p)
+		  gdb_byte *op_ptr, gdb_byte *op_end, int eh_frame_p,
+                  struct dwarf2_address_translation *addr_translation)
 {
   ctx->in_reg = 0;
   /* APPLE LOCAL variable initialized status.  */
@@ -314,6 +344,15 @@ execute_stack_op (struct dwarf_expr_context *ctx,
 
 	case DW_OP_addr:
 	  result = dwarf2_read_address (op_ptr, op_end, &bytes_read);
+          if (addr_translation && addr_translation->addr_map)
+            {
+              translate_debug_map_address (addr_translation->addr_map, result, &result,  0);
+            }
+          else if (addr_translation && addr_translation->objfile && addr_translation->section >= 0)
+            {
+              result += objfile_section_offset (addr_translation->objfile, addr_translation->section);
+            }
+
 	  op_ptr += bytes_read;
 	  break;
 
@@ -488,7 +527,7 @@ execute_stack_op (struct dwarf_expr_context *ctx,
                get_frame_base_address(), and then implement a dwarf2
                specific this_base method.  */
 	    (ctx->get_frame_base) (ctx->baton, &datastart, &datalen);
-	    dwarf_expr_eval (ctx, datastart, datalen, eh_frame_p);
+	    dwarf_expr_eval (ctx, datastart, datalen, eh_frame_p, addr_translation);
 	    result = dwarf_expr_fetch (ctx, 0);
 	    if (ctx->in_reg)
 	      result = (ctx->read_reg) (ctx->baton, result);

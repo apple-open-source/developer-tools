@@ -1557,7 +1557,7 @@ Use 'show input-radix' or 'show output-radix' to independently show each."),
 	   &showlist);
 
   /* Give people the defaults which they are used to.  */
-  prettyprint_structs = 0;
+  prettyprint_structs = 1;
   prettyprint_arrays = 0;
   unionprint = 1;
   addressprint = 1;

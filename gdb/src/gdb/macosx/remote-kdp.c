@@ -40,12 +40,14 @@
 #endif
 
 #include "defs.h"
-
-#include "defs.h"
 #include "value.h"
 #include "infcall.h"  /* For inferior_function_calls_disabled_p.  */
 #include "gdbarch.h"
 #include "arch-utils.h"
+#include "gdbcore.h"
+#include "bfd.h"
+#include "mach-o.h"
+#include "objfiles.h"
 
 #if KDP_TARGET_POWERPC
 #include "ppc-macosx-thread-status.h"
@@ -71,9 +73,13 @@
 #include "inf-loop.h"
 #include "regcache.h"
 #include "exceptions.h"
+#include "osabi.h"
 
 #include "kdp-udp.h"
 #include "kdp-transactions.h"
+
+#include <CoreFoundation/CoreFoundation.h>
+#include <CoreFoundation/CFPropertyList.h>
 
 #ifndef CPU_TYPE_I386
 #define CPU_TYPE_I386 (7)
@@ -95,6 +101,7 @@
 #define KDP_REMOTE_ID 3
 #endif
 
+
 #define KDP_MAX_BREAKPOINTS 100
 
 /* When major changes are made to the
@@ -110,6 +117,7 @@
 #include <string.h>
 #include <ctype.h>
 #include <mach/mach.h>
+#include <uuid/uuid.h>
 
 extern int standard_is_async_p (void);
 extern int standard_can_async_p (void);
@@ -347,6 +355,208 @@ kdp_kernelversion_command (char *args, int from_tty)
   }
 }
 
+/* Query the remote kernel to find out the host architecture
+   (cpu type, cpu subtype) and set the KDP_CPU_TYPE and KDP_HOST_TYPE
+   global variables as appropriate.  */
+
+static void
+kdp_hostinfo ()
+{
+  kdp_return_t kdpret, kdpret2;
+
+  c.request->readregs_req.hdr.request = KDP_HOSTINFO;
+
+  kdpret = kdp_transaction (&c, c.request, c.response, "kdp_hostinfo");
+  if (kdpret != RR_SUCCESS)
+    {
+      kdpret2 = kdp_disconnect (&c);
+      if (kdpret2 != RR_SUCCESS)
+        {
+          warning
+            ("unable to disconnect from host after error determining cpu type: %s",
+             kdp_return_string (kdpret2));
+        }
+      kdpret2 = kdp_destroy (&c);
+      if (kdpret2 != RR_SUCCESS)
+        {
+          warning
+            ("unable to destroy host connection after error determining cpu type: %s",
+             kdp_return_string (kdpret2));
+        }
+      error ("kdp_attach: unable to determine host type: %s",
+             kdp_return_string (kdpret));
+    }
+
+  if (c.response->hostinfo_reply.cpu_type == CPU_TYPE_X86_64)
+    {
+      struct gdbarch_info info;
+      gdbarch_info_init (&info);
+      gdbarch_info_fill (current_gdbarch, &info);
+      info.byte_order = gdbarch_byte_order (current_gdbarch);
+      info.osabi = GDB_OSABI_DARWIN64;
+      info.bfd_arch_info = bfd_lookup_arch (bfd_arch_i386, bfd_mach_x86_64);
+      gdbarch_update_p (info);
+    }
+
+  kdp_cpu_type = c.response->hostinfo_reply.cpu_type;
+  kdp_host_type = convert_host_type (kdp_cpu_type);
+
+  if (kdp_host_type == -1)
+    {
+      warning
+        ("kdp_attach: unknown host type 0x%lx; trying default (0x%lx)\n",
+         (unsigned long) c.response->hostinfo_reply.cpu_type,
+         (unsigned long) kdp_default_cpu_type);
+	kdp_cpu_type = kdp_default_cpu_type;
+      kdp_host_type = convert_host_type (kdp_default_cpu_type);
+    }
+
+  if (kdp_host_type == -1)
+    {
+      kdpret2 = kdp_disconnect (&c);
+      if (kdpret2 != RR_SUCCESS)
+        {
+          warning
+            ("unable to disconnect from host after error determining cpu type: %s",
+             kdp_return_string (kdpret2));
+        }
+      kdpret2 = kdp_destroy (&c);
+      if (kdpret2 != RR_SUCCESS)
+        {
+          warning
+            ("unable to destroy host connection after error determining cpu type: %s",
+             kdp_return_string (kdpret2));
+        }
+      error ("kdp_attach: unknown host type");
+    }
+}
+
+/* Look at the KDP_VERSIONINFO string to see if the kernel's
+   Mach-O UUID and load address are provided.  
+*/
+
+static void
+kdp_uuid_and_load_addr ()
+{
+  kdp_return_t kdpret, kdpret2;
+
+  c.request->readregs_req.hdr.request = KDP_KERNELVERSION;
+
+  kdpret = kdp_transaction (&c, c.request, c.response, "kdp_kernelversion");
+  if (kdpret != RR_SUCCESS)
+    {
+      kdpret2 = kdp_disconnect (&c);
+      if (kdpret2 != RR_SUCCESS)
+        {
+          warning
+            ("unable to disconnect from host after requesting kernel version string: %s",
+             kdp_return_string (kdpret2));
+        }
+      kdpret2 = kdp_destroy (&c);
+      if (kdpret2 != RR_SUCCESS)
+        {
+          warning
+            ("unable to destroy host connection after error requesting kernel version string: %s",
+             kdp_return_string (kdpret2));
+        }
+      error ("kdp_attach: unable to determine kernel version string: %s",
+             kdp_return_string (kdpret));
+    }
+    
+  if (c.response->kernelversion_reply.version == NULL 
+      || c.response->kernelversion_reply.version[0] == '\0')
+    {
+      return;
+    }
+
+  /* The version string may look something like
+     "Darwin Kernel Version 11.0.0: Thu Nov 17 06:13:06 PST 2011; <blah blah>; UUID=A4B1973D-6A6A-3320-AEB9-585A4579C31A; stext=0xffffff8000400000"
+     The "UUID=" and "stext=" fields may not be present.
+  */
+
+  int uuids_matched = 0;
+  int got_remote_uuid = 0;
+  uuid_t remote_uuid;
+  if (strstr (c.response->kernelversion_reply.version, "; UUID="))
+    {
+      const char *j = strstr (c.response->kernelversion_reply.version, "; UUID=") + strlen ("; UUID=");
+      if (strlen (j) > 36 
+          && (*(j + 36) == '\0' || *(j + 36) == ';'))
+        {
+          char uuid_alone[40];
+          strncpy (uuid_alone, j, 36);
+          uuid_alone[36] = '\0';
+          if (uuid_parse (uuid_alone, remote_uuid) == 0)
+            {
+              logger (KDP_LOG_DEBUG,
+                      "kdp_uuid_and_load_addr: remote kernel image has Mach-O UUID of %s\n",
+                      puuid (remote_uuid));
+              got_remote_uuid = 1;
+            }
+          uuid_t local_kernel_uuid;
+          if (got_remote_uuid
+              && symfile_objfile 
+              && symfile_objfile->obfd 
+              && bfd_mach_o_get_uuid (symfile_objfile->obfd, local_kernel_uuid, sizeof (uuid_t)))
+            {
+              if (memcmp (remote_uuid, local_kernel_uuid, sizeof (uuid_t)) != 0)
+                {
+                  warning ("Host-side kernel file has Mach-O UUID of %s but remote kernel has a UUID of %s -- a mismatched kernel file will result in a poor debugger experience.", puuid (local_kernel_uuid), puuid (remote_uuid));
+                }
+              else
+                {
+                  uuids_matched = 1;
+                }
+            }
+        }
+    }
+
+  /* Slide the objfile even if the UUIDs don't match.
+     Maybe the user has given us a "pretty close" binary.  Sliding
+     it to the correct address can't make anything worse than it
+     would be.. */
+
+  CORE_ADDR slide = 0;
+  CORE_ADDR actual_load_address = INVALID_ADDRESS;
+  if (strstr (c.response->kernelversion_reply.version, "; stext="))
+    {
+      const char *j = strstr (c.response->kernelversion_reply.version, "; stext=") + strlen ("; stext=");
+      if (*j == '0' && tolower (*(j + 1)) == 'x')
+        j += 2;
+
+      errno = 0;
+      actual_load_address = strtoul (j, NULL, 16);
+      if (errno != 0 || actual_load_address == 0 || actual_load_address == INVALID_ADDRESS)
+        return;
+    }
+  else
+    {
+      return;
+    }
+
+  enum gdb_osabi mem_osabi = GDB_OSABI_UNKNOWN;
+  get_information_about_macho (NULL, actual_load_address, NULL, 1, 1, NULL, &mem_osabi, NULL, NULL, NULL, NULL);
+
+  if (symfile_objfile)
+    {
+      CORE_ADDR file_load_addr = INVALID_ADDRESS;
+      if (symfile_objfile 
+          && get_information_about_macho (NULL, INVALID_ADDRESS, symfile_objfile->obfd, 1, 0, NULL, NULL, NULL, &file_load_addr, NULL, NULL))
+        {
+          slide_kernel_objfile (symfile_objfile, actual_load_address, remote_uuid, mem_osabi);
+        }
+      return;
+    }
+
+  /* If we have a UUID and load address, see if there's a debug symbols shell command defined
+     and if it might be a way to fetch the correct kernel binary based on that UUID.  */
+  if (got_remote_uuid)
+    {
+      try_to_find_and_load_kernel_via_uuid (actual_load_address, remote_uuid, mem_osabi);
+    }
+}
+
+
 static void
 kdp_attach (char *args, int from_tty)
 {
@@ -440,105 +650,43 @@ kdp_attach (char *args, int from_tty)
              kdp_return_string (kdpret));
     }
 
-    c.request->readregs_req.hdr.request = KDP_VERSION;
+  c.request->readregs_req.hdr.request = KDP_VERSION;
 
-    kdpret = kdp_transaction (&c, c.request, c.response, "kdp_attach");
-    if (kdpret != RR_SUCCESS)
-      {
-        kdpret2 = kdp_disconnect (&c);
-        if (kdpret2 != RR_SUCCESS)
-          {
-            warning
-              ("unable to disconnect from host after error determining protocol version: %s",
-               kdp_return_string (kdpret2));
-          }
-        kdpret2 = kdp_destroy (&c);
-        if (kdpret2 != RR_SUCCESS)
-          {
-            warning
-              ("unable to destroy host connection after error determining protocol version: %s",
-               kdp_return_string (kdpret2));
-          }
-        error ("kdp_attach: unable to determine protocol version: %s",
-               kdp_return_string (kdpret));
-      }
+  kdpret = kdp_transaction (&c, c.request, c.response, "kdp_attach");
+  if (kdpret != RR_SUCCESS)
+    {
+      kdpret2 = kdp_disconnect (&c);
+      if (kdpret2 != RR_SUCCESS)
+        {
+          warning
+            ("unable to disconnect from host after error determining protocol version: %s",
+             kdp_return_string (kdpret2));
+        }
+      kdpret2 = kdp_destroy (&c);
+      if (kdpret2 != RR_SUCCESS)
+        {
+          warning
+            ("unable to destroy host connection after error determining protocol version: %s",
+             kdp_return_string (kdpret2));
+        }
+      error ("kdp_attach: unable to determine protocol version: %s",
+             kdp_return_string (kdpret));
+    }
 
-    remote_kdp_version = c.response->version_reply.version;
-    remote_kdp_feature = c.response->version_reply.feature;
+  remote_kdp_version = c.response->version_reply.version;
+  remote_kdp_feature = c.response->version_reply.feature;
 
-    set_internalvar (lookup_internalvar ("kdp_protocol_version"),
-		     value_from_longest (builtin_type_int, (LONGEST)remote_kdp_version));
+  set_internalvar (lookup_internalvar ("kdp_protocol_version"),
+                   value_from_longest (builtin_type_int, (LONGEST)remote_kdp_version));
 
-    set_internalvar (lookup_internalvar ("gdb_kdp_support_level"),
-		     value_from_longest (builtin_type_int, (LONGEST)GDB_KDP_SUPPORT_LEVEL));
+  set_internalvar (lookup_internalvar ("gdb_kdp_support_level"),
+                   value_from_longest (builtin_type_int, (LONGEST)GDB_KDP_SUPPORT_LEVEL));
 
-  {
-    c.request->readregs_req.hdr.request = KDP_HOSTINFO;
+  // retrieve the cpu type & cpusubtype, set kdp_cpu_type kdp_host_type globals  
+  kdp_hostinfo ();  
 
-    kdpret = kdp_transaction (&c, c.request, c.response, "kdp_attach");
-    if (kdpret != RR_SUCCESS)
-      {
-        kdpret2 = kdp_disconnect (&c);
-        if (kdpret2 != RR_SUCCESS)
-          {
-            warning
-              ("unable to disconnect from host after error determining cpu type: %s",
-               kdp_return_string (kdpret2));
-          }
-        kdpret2 = kdp_destroy (&c);
-        if (kdpret2 != RR_SUCCESS)
-          {
-            warning
-              ("unable to destroy host connection after error determining cpu type: %s",
-               kdp_return_string (kdpret2));
-          }
-        error ("kdp_attach: unable to determine host type: %s",
-               kdp_return_string (kdpret));
-      }
-
-    if (c.response->hostinfo_reply.cpu_type == CPU_TYPE_X86_64)
-      {
-        struct gdbarch_info info;
-        gdbarch_info_init (&info);
-        gdbarch_info_fill (current_gdbarch, &info);
-        info.byte_order = gdbarch_byte_order (current_gdbarch);
-        info.osabi = GDB_OSABI_DARWIN64;
-        info.bfd_arch_info = bfd_lookup_arch (bfd_arch_i386, bfd_mach_x86_64);
-        gdbarch_update_p (info);
-      }
-
-    kdp_cpu_type = c.response->hostinfo_reply.cpu_type;
-    kdp_host_type = convert_host_type (kdp_cpu_type);
-
-    if (kdp_host_type == -1)
-      {
-        warning
-          ("kdp_attach: unknown host type 0x%lx; trying default (0x%lx)\n",
-           (unsigned long) c.response->hostinfo_reply.cpu_type,
-           (unsigned long) kdp_default_cpu_type);
-	kdp_cpu_type = kdp_default_cpu_type;
-        kdp_host_type = convert_host_type (kdp_default_cpu_type);
-      }
-
-    if (kdp_host_type == -1)
-      {
-        kdpret2 = kdp_disconnect (&c);
-        if (kdpret2 != RR_SUCCESS)
-          {
-            warning
-              ("unable to disconnect from host after error determining cpu type: %s",
-               kdp_return_string (kdpret2));
-          }
-        kdpret2 = kdp_destroy (&c);
-        if (kdpret2 != RR_SUCCESS)
-          {
-            warning
-              ("unable to destroy host connection after error determining cpu type: %s",
-               kdp_return_string (kdpret2));
-          }
-        error ("kdp_attach: unknown host type");
-      }
-  }
+  // See if the kdp_versioninfo tells us where the kernel is loaded in memory
+  kdp_uuid_and_load_addr ();
 
   /* Use breakpoint packets only if the kernel supports them */
   if ((remote_kdp_version >= 10) && (remote_kdp_feature & KDP_FEATURE_BP))

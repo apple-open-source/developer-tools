@@ -1,3 +1,43 @@
+2012-04-02  Jason Molenda  (jmolenda@apple.com)
+
+	* Makefile (SYSTEM_DEVELOPER_TOOLS_DOC_DIR): Update to new
+	packaging location.
+	(CONF_DIR, CONFIG_DIR): Stop installing anything in these
+	locations.
+
+2011-11-30  Jason Molenda  (jmolenda@apple.com)
+
+	* Makefile (CANONICAL_ARCHS): Recognize armv7s if we're asked
+	to build for that arch.
+
+2011-11-30  Jason Molenda  (jmolenda@apple.com)
+
+	* Makefile (CFLAGS): Fix -Werror=implicit-function-declaration
+	flag.
+
+2011-10-28  Jason Molenda  (jmolenda@apple.com)
+
+	* gdb.sh: Add another sed remapping for lipo's possible ways
+	of printing "armv7s".
+
+2011-09-27  Jason Molenda  (jmolenda@apple.com)
+
+	* Makefile: Revert last change, continue to install the gdb
+	man page.  I have another verification warning if I install
+	a /usr/bin binary without an accompanying man page.
+
+2011-09-06  Jason Molenda  (jmolenda@apple.com)
+
+	* Makefile: Don't install gdb man page; we're getting a
+	verification warning because we're using the old man style
+	troff macros instead of mdoc and it's not worth updating the
+	page to fix at this point.
+
+2011-08-30  Jason Molenda  (jmolenda@apple.com)
+
+	* Makefile: Handle "unknown cputype/cpusubtype" for armv7s as
+	temporary workaround until native tools recognize this subtype.
+
 2011-07-06  Jason Molenda  (jmolenda@apple.com)
 
 	* Makefile: Switch to building with clang instead of gcc.
@@ -6,7 +46,7 @@
 
 	* gdb.sh: Update script to pick the correct osabi given an
 	armv6+armv7 binary when run on an armv7f system - also handle
-	armv7k systems and choose a sensible default of armv7
+	armv7s and armv7k systems and choose a sensible default of armv7
 	if this is being run on a non-arm system instead of armv6.
 
 2011-03-16  Jason Molenda  (jmolenda@apple.com)
@@ -15,7 +55,7 @@
 
 2011-03-08  Jason Molenda  (jmolenda@apple.com)
 
-	* gdb.sh: Recognize armv7f and armv7k cpusubtypes,
+	* gdb.sh: Recognize armv7f, armv7k and armv7s cpusubtypes,
 	pass them as distinct osabi arguments to gdb.
 
 2011-03-01  Jason Molenda  (jmolenda@apple.com)

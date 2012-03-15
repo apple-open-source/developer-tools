@@ -1991,7 +1991,10 @@ int
 file_exists_p (const char *filename)
 {
   struct stat sb;
- 
+
+  if (filename == NULL || filename[0] == '\0')
+    return 0;
+
   if (stat (filename, &sb) != 0)
     return 0;
 

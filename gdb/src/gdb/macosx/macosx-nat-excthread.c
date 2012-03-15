@@ -367,7 +367,7 @@ macosx_exception_thread_create (macosx_exception_thread_status *s,
                             MACH_MSG_TYPE_MAKE_SEND);
   MACH_CHECK_ERROR (kret);
 
-  unsigned int which_exceptions = EXC_MASK_ALL;
+  unsigned int which_exceptions = GDB_MACH_EXC_MASK_ALL;
   if (dont_handle_bad_access)
     which_exceptions &= ~EXC_MASK_BAD_ACCESS;
  

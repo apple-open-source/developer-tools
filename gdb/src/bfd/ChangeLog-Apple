@@ -1,10 +1,51 @@
+2012-01-24  Jim Ingham  <jingham@apple.com>
+
+	* mach-o.h: Add the data structure bfd_mach_o_main_command, and
+	add it to the bfd_mach_o_load_command commands union.
+	* mach-o.c (mach_o_scan_read_main_command): New function, read
+	the main command.
+	* (bfd_mach_o_scan_read_command): Read in the main command.
+	* (bfd_mach_o_scan_start_address): If we found an LC_MAIN command
+	use that to set the start address.
+
+2012-01-23  Jason Molenda  (jmolenda@apple.com)
+
+	* mach-o.h: Add new load commands, including one marked as
+	required, LC_MAIN.
+	* mach-o.c (bfd_mach_o_write_contents): Ignore LC_MAIN.
+	(bfd_mach_o_scan_read_command): Ignore LC_MAIN.
+
+2012-01-18  Jason Molenda  (jmolenda@apple.com)
+
+	* configure.host: Update -mmacosx-version-min to 10.7.
+
+2012-01-04  Jason Molenda  (jmolenda@apple.com)
+
+	* mach-o.c (bfd_mach_o_kernel_image): Change kernel
+	detection to use the same algorithm lldb uses.
+
+2011-12-12  Jason Molenda  (jmolenda@apple.com)
+
+	* mach-o.c (bfd_mach_o_kernel_image): New function.
+	* mach-o.h: Add prototype.
+
+2011-11-30  Jason Molenda  (jmolenda@apple.com)
+
+	* configure.host: Specify minimum of iOS 5.
+
+2011-11-16  Jason Molenda  (jmolenda@apple.com)
+
+	* configure.host: Add appropriate 
+	-miphoneos-version-min/-mmacosx-version-min when 
+	_DARWIN_UNLIMITED_STREAMS is defined.
+
 2011-03-08  Jason Molenda  (jmolenda@apple.com)
 
-	* archures.c: Add bfd_mach_arm_7{f,k}.
-	* bfd-in2.h: Add bfd_mach_arm_7{f,k}.
-	* cpu-arm.c: Add bfd_mach_arm_7{f,k}.
-	* mach-o.c: Map CPU_SUBTYPEs to bfd_mach's for armv7{f,k}.
-	* mach-o.h: Add new defines for CPU_SUBTYPE_7{F,K}.
+	* archures.c: Add bfd_mach_arm_7{f,s,k}.
+	* bfd-in2.h: Add bfd_mach_arm_7{f,s,k}.
+	* cpu-arm.c: Add bfd_mach_arm_7{f,s,k}.
+	* mach-o.c: Map CPU_SUBTYPEs to bfd_mach's for armv7{f,s,k}.
+	* mach-o.h: Add new defines for CPU_SUBTYPE_7{F,S,K}.
 
 2010-10-29  Jason Molenda  (jmolenda@apple.com)
 

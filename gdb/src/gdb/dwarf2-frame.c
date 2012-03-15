@@ -291,7 +291,7 @@ execute_stack_op (gdb_byte *exp, ULONGEST len,
   ctx->get_tls_address = no_get_tls_address;
 
   dwarf_expr_push (ctx, initial);
-  dwarf_expr_eval (ctx, exp, len, 1);
+  dwarf_expr_eval (ctx, exp, len, 1, NULL);
   result = dwarf_expr_fetch (ctx, 0);
 
   if (ctx->in_reg)

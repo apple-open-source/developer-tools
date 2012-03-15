@@ -189,6 +189,10 @@ enum dwarf_tag
     DW_TAG_imported_unit = 0x3d,
     DW_TAG_condition = 0x3f,
     DW_TAG_shared_type = 0x40,
+    DW_TAG_type_unit = 0x41,
+    DW_TAG_rvalue_reference_type = 0x42,
+    DW_TAG_template_alias = 0x43,
+
     /* SGI/MIPS Extensions.  */
     DW_TAG_MIPS_loop = 0x4081,
     /* HP extensions.  See: ftp://ftp.hp.com/pub/lang/tools/WDB/wdb-4.0.tar.gz .  */
@@ -390,6 +394,13 @@ enum dwarf_attribute
     /* Indicates that the tag (subprogram/compile unit) containing this attrib
        was built -fomit-frame-pointer.  */
     DW_AT_APPLE_omit_frame_ptr             = 0x3fe7,
+
+    /* Attributes to help with synthesized getters/setters
+       in Objective-C 2.0.  */
+    DW_AT_APPLE_property_getter            = 0x3fe9,
+    DW_AT_APPLE_property_setter            = 0x3fea,
+    DW_AT_APPLE_property_attribute         = 0x3feb,
+    DW_AT_APPLE_objc_complete_type         = 0x3fec,
 
     /* UPC extension.  */
     DW_AT_upc_threads_scaled = 0x3210,

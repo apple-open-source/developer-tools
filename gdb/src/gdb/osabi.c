@@ -76,6 +76,7 @@ static const char * const gdb_osabi_names[] =
   "DarwinV6",
   "DarwinV7",
   "DarwinV7F",
+  "DarwinV7S",
   "DarwinV7K",
   /* APPLE LOCAL end Darwin */
 

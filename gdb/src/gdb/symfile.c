@@ -2986,8 +2986,15 @@ add_kext_command (char *args, int from_tty)
     }
   else if (!strncmp (ext, ".sym", strlen (".sym")))
     {
-       find_kext_files_by_symfile (filename, &kext_bundle_executable_filename);
-       kextload_symbol_filename = xstrdup (filename);
+      find_kext_files_by_symfile (filename, &kext_bundle_executable_filename);
+      kextload_symbol_filename = xstrdup (filename);
+      if (kernel_slide != 0 && kernel_slide != INVALID_ADDRESS && section_addrs == NULL)
+        {
+          section_addrs = get_section_addrs_of_macho_on_disk (filename);
+          int i = 0;
+          for (i = 0; i < section_addrs->num_sections; i++)
+            section_addrs->other[i].addr += kernel_slide;
+        }
     }
   else
       error (usage_string, "supplied file must have a .kext or .sym extension");
@@ -5784,6 +5791,7 @@ open_bfd_matching_arch (bfd *archive_bfd, bfd_format expected_format,
 		case GDB_OSABI_DARWINV7:
 		case GDB_OSABI_DARWINV7K:
 		case GDB_OSABI_DARWINV7F:
+		case GDB_OSABI_DARWINV7S:
 	fallback = abfd;
 		  fallback_osabi = this_osabi;
 		  break;

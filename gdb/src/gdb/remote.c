@@ -59,6 +59,7 @@
 #include "remote-fileio.h"
 
 #include "objc-lang.h"
+#include "macosx-tdep.h"
 #ifdef MACOSX_DYLD
 #include "macosx-nat-dyld.h"
 #include "macosx-nat-dyld-process.h"
@@ -1234,8 +1235,6 @@ send_disable_aslr ()
   struct remote_state *rs = get_remote_state ();
   if (rs->remote_packet_size < 4)
     return 0;
-
-  extern int disable_aslr_flag; /* From macosx-tdep.c  */
 
   char buf[32];
   snprintf (buf, sizeof (buf), "QSetDisableASLR:%i", disable_aslr_flag ? 1 : 0);
@@ -2777,8 +2776,16 @@ remote_open_1 (char *name, int from_tty, struct target_ops *target,
   
   if (!ptid_equal (inferior_ptid, null_ptid))
       observer_notify_inferior_created (&current_target, from_tty);
+
+  // If SYMFILE_OBJFILE is a kernel, try to find it in the remote memory
+  // and relocate SYMFILE_OBJFILE to have the correct addresses.
+
+  // Only do this for "target remote" -- e.g. "target remote-macosx" should
+  // not search through memory for a kernel.
+
+  if (target->to_shortname && strcmp (target->to_shortname, "remote") == 0)
+    exhaustive_search_for_kernel_in_mem (symfile_objfile, NULL, NULL);
 }
-  
 
 /* This takes a program previously attached to and detaches it.  After
    this is done, GDB can be used to debug some other program.  We
@@ -6271,8 +6278,8 @@ remote_macosx_complete_create_or_attach (int from_tty)
   /* Now indicate we have a remote target:  */
   rs->has_target = 1;
 
-  /* And not that we have a target, redo the dyld information.  */
-  macosx_dyld_create_inferior_hook (remote_macosx_get_all_image_infos_addr());
+  /* And now that we have a target, redo the dyld information.  */
+  macosx_dyld_create_inferior_hook (remote_macosx_get_all_image_infos_addr ());
   if (exec_bfd)
     {
       remote_check_symbols (symfile_objfile);

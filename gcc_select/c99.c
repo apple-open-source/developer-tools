@@ -76,7 +76,19 @@ main(int argc, char *argv[])
 	int verbose = 0;
         int m_32_64_set = 0;
 
-	addarg("llvm-gcc");
+	/* Find the path to this executable. */
+	if (_NSGetExecutablePath(exec_path, &exec_path_size))
+		memcpy(exec_path, "/usr/bin/c99", sizeof("/usr/bin/c99"));
+	if (realpath(exec_path, link_path))
+		compiler_path = link_path;
+
+	/* Chop off c99 and replace it with llvm-gcc. */
+	lastslash = strrchr(compiler_path, '/');
+	if (!lastslash)
+		err(EX_OSERR, "unexpected path name: %s", compiler_path);
+	strcpy(lastslash+1, "llvm-gcc");
+
+	addarg(compiler_path);
 	addarg("-std=iso9899:1999");
 	addarg("-pedantic");
 	addarg("-Wextra-tokens"); /* Radar 4205857 */
@@ -192,18 +204,6 @@ main(int argc, char *argv[])
 	      printf ("\"%s\" ", args[i]);
 	    putchar ('\n');
 	  }
-
-	/* Find the path to this executable. */
-	if (_NSGetExecutablePath(exec_path, &exec_path_size))
-		memcpy(exec_path, "/usr/bin/c99", sizeof("/usr/bin/c99"));
-	if (realpath(exec_path, link_path))
-		compiler_path = link_path;
-
-	/* Chop off c99 and replace it with llvm-gcc. */
-	lastslash = strrchr(compiler_path, '/');
-	if (!lastslash)
-		err(EX_OSERR, "unexpected path name: %s", compiler_path);
-	strcpy(lastslash+1, "llvm-gcc");
 
         /* Exec llvm-gcc. */
 	execv(compiler_path, args);

@@ -637,6 +637,9 @@ extern int target_write_memory (CORE_ADDR memaddr, const gdb_byte *myaddr,
 extern int xfer_memory (CORE_ADDR, gdb_byte *, int, int,
 			struct mem_attrib *, struct target_ops *);
 
+extern int xfer_memory_from_corefile (CORE_ADDR, gdb_byte *, int, int,
+			struct mem_attrib *, struct target_ops *);
+
 extern int child_xfer_memory (CORE_ADDR, gdb_byte *, int, int,
 			      struct mem_attrib *, struct target_ops *);
 

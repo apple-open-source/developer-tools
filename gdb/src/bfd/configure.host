@@ -20,8 +20,8 @@ HOST_U_64BIT_TYPE=
 case "${host}" in
 		        # APPLE LOCAL - Allow more than 256 streams to
 			# be open at a time.
-arm-apple-darwin*)	HDEFINES="-D_DARWIN_UNLIMITED_STREAMS" ;;
-*-apple-darwin*)	HDEFINES="-D_DARWIN_UNLIMITED_STREAMS" ;;
+arm-apple-darwin*)	HDEFINES="-D_DARWIN_UNLIMITED_STREAMS -miphoneos-version-min=5.0" ;;
+*-apple-darwin*)	HDEFINES="-D_DARWIN_UNLIMITED_STREAMS -mmacosx-version-min=10.7" ;;
 hppa*-*-hpux*)		# HP/UX's ftello64 et.al. declarations are only
 			# visible when _LARGEFILE64_SOURCE is defined.
 			# Without those declarations, real_ftell et.al.

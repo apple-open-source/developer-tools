@@ -53,7 +53,7 @@ CFM_LIBS =
 
 # APPLE LOCAL - Allow more than 256 streams to be open at a time.
 
-MH_CFLAGS += -DUSE_PTHREADS=1 -Wall -Wimplicit -D_DARWIN_UNLIMITED_STREAMS
+MH_CFLAGS += -DUSE_PTHREADS=1 -Wall -Wimplicit -D_DARWIN_UNLIMITED_STREAMS -mmacosx-version-min=10.7
 
 XM_CLIBS = -framework Security
 

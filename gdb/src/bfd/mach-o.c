@@ -150,6 +150,40 @@ bfd_mach_o_valid (bfd *abfd)
   return 1;
 }
 
+/* If ABFD is a mach kernel file (e.g. mach_kernel), return 1.
+   Any other type of file, return 0. 
+   We detect a kernel by looking for a segment called __KLD.
+   This seems to be the only unique attribute that kernel images
+   have.  (from a Mach-O load command/header point of view)  */
+
+bfd_boolean 
+bfd_mach_o_kernel_image (bfd *abfd)
+{
+  if (abfd == NULL)
+    return 0;
+  if (bfd_get_flavour (abfd) != bfd_target_mach_o_flavour)
+    return 0;
+
+  bfd_mach_o_data_struct *mdata = abfd->tdata.mach_o_data;
+  if (mdata == NULL)
+    return 0;
+
+  unsigned int i;
+  for (i = 0; i < mdata->header.ncmds; i++)
+    {
+      bfd_mach_o_load_command *cur = &mdata->commands[i];
+      if (cur->type == BFD_MACH_O_LC_SEGMENT || cur->type == BFD_MACH_O_LC_SEGMENT_64)
+        {
+	  bfd_mach_o_segment_command *seg = &mdata->commands[i].command.segment;
+          if (strcmp (seg->segname, "__KLD") == 0)
+            {
+              return 1;
+            }
+        }
+    }
+  return 0;
+}
+
 /* Copy any private info we understand from the input symbol
    to the output symbol.  */
 
@@ -485,6 +519,8 @@ bfd_mach_o_convert_architecture (bfd_mach_o_cpu_type mtype,
 	*subtype = bfd_mach_arm_7;
       else if (msubtype == BFD_MACH_O_CPU_SUBTYPE_ARM_7F)
 	*subtype = bfd_mach_arm_7f;
+      else if (msubtype == BFD_MACH_O_CPU_SUBTYPE_ARM_7S)
+	*subtype = bfd_mach_arm_7s;
       else if (msubtype == BFD_MACH_O_CPU_SUBTYPE_ARM_7K)
 	*subtype = bfd_mach_arm_7k;
       break;
@@ -920,6 +956,7 @@ bfd_mach_o_write_contents (bfd *abfd)
 	case BFD_MACH_O_LC_ENCRYPTION_INFO:
 	case BFD_MACH_O_LC_DYLD_INFO:
 	case BFD_MACH_O_LC_DYLD_INFO_ONLY:
+	case BFD_MACH_O_LC_MAIN:
 	  break;
 	default:
 	  fprintf (stderr,
@@ -1559,6 +1596,25 @@ bfd_mach_o_scan_read_dylinker (bfd *abfd,
 }
 
 static int
+bfd_mach_o_scan_read_main_command (bfd *abfd, bfd_mach_o_load_command *command)
+{
+  bfd_mach_o_main_command *cmd = &command->command.main;
+  unsigned char buf[16];
+  BFD_ASSERT (command->type == BFD_MACH_O_LC_MAIN);
+
+  bfd_seek (abfd, command->offset + 8, SEEK_SET);
+  if (bfd_bread ((PTR) buf, 16, abfd) != 16)
+    return -1;
+
+  cmd->entryoffset = bfd_h_get_64 (abfd, buf + 0); /* Note, this is an offset from the
+						      text section, but we haven't read
+						      the full bfd yet, so we probably don't
+						      know where that is yet.  */
+  cmd->stacksize = bfd_h_get_64 (abfd, buf + 8);
+  return 0;
+}
+
+static int
 bfd_mach_o_scan_read_dylib (bfd *abfd, bfd_mach_o_load_command *command)
 {
   bfd_mach_o_dylib_command *cmd = &command->command.dylib;
@@ -2161,6 +2217,10 @@ bfd_mach_o_scan_read_command (bfd *abfd, bfd_mach_o_load_command *command)
     case BFD_MACH_O_LC_DYLD_INFO:
     case BFD_MACH_O_LC_DYLD_INFO_ONLY:
       break;
+    case BFD_MACH_O_LC_MAIN:
+      if (bfd_mach_o_scan_read_main_command (abfd, command) != 0)
+        return -1;
+      break;
     case BFD_MACH_O_LC_ENCRYPTION_INFO:
       {
 	char cryptid_buf[4];
@@ -2236,6 +2296,7 @@ bfd_mach_o_scan_start_address (bfd *abfd)
 {
   bfd_mach_o_data_struct *mdata = abfd->tdata.mach_o_data;
   bfd_mach_o_thread_command *cmd = NULL;
+  bfd_mach_o_main_command *main_cmd = NULL;
   unsigned long i;
 
   /* dyld for instance DOES have LC_UNIXTHREAD commands - the kernel
@@ -2256,80 +2317,107 @@ bfd_mach_o_scan_start_address (bfd *abfd)
 	  else
 	    return 0;
 	}
+      else if (mdata->commands[i].type == BFD_MACH_O_LC_MAIN)
+        {
+          if (main_cmd == NULL)
+            main_cmd = &mdata->commands[i].command.main;
+          else
+            return 0;
+        }
     }
 
-  if (cmd == NULL)
-    return 0;
-
-  for (i = 0; i < cmd->nflavours; i++)
+  if (cmd != NULL)
     {
-      if ((mdata->header.cputype == BFD_MACH_O_CPU_TYPE_I386)
-	  && (cmd->flavours[i].flavour
-	      == (unsigned long) BFD_MACH_O_i386_THREAD_STATE))
-	{
-	  unsigned char buf[4];
-
-	  bfd_seek (abfd, cmd->flavours[i].offset + 40, SEEK_SET);
-
-	  if (bfd_bread (buf, 4, abfd) != 4)
-	    return -1;
-
-	  abfd->start_address = bfd_h_get_32 (abfd, buf);
-	}
-      else if ((mdata->header.cputype == BFD_MACH_O_CPU_TYPE_POWERPC)
-	       && (cmd->flavours[i].flavour == BFD_MACH_O_PPC_THREAD_STATE))
-	{
-	  unsigned char buf[4];
-
-	  bfd_seek (abfd, cmd->flavours[i].offset + 0, SEEK_SET);
-
-	  if (bfd_bread (buf, 4, abfd) != 4)
-	    return -1;
-
-	  abfd->start_address = bfd_h_get_32 (abfd, buf);
-	}
-      else if ((mdata->header.cputype == BFD_MACH_O_CPU_TYPE_POWERPC_64)
-               && (cmd->flavours[i].flavour == BFD_MACH_O_PPC_THREAD_STATE_64))
-        {
-          unsigned char buf[8];
-
-          bfd_seek (abfd, cmd->flavours[i].offset + 0, SEEK_SET);
-
-          if (bfd_bread (buf, 8, abfd) != 8)
-            return -1;
-
-          abfd->start_address = bfd_h_get_64 (abfd, buf);
-        }
-      else if ((mdata->header.cputype == BFD_MACH_O_CPU_TYPE_ARM)
-               && (cmd->flavours[i].flavour == BFD_MACH_O_ARM_THREAD_STATE))
-        {
-          unsigned char buf[8];
-	  
-          bfd_seek (abfd, cmd->flavours[i].offset + 60, SEEK_SET);
-	  
-          if (bfd_bread (buf, 4, abfd) != 4)
-            return -1;
-	  
-          abfd->start_address = bfd_h_get_32 (abfd, buf);
-        }
       
-      /* APPLE LOCAL begin x86_64 */
-      else if ((mdata->header.cputype == BFD_MACH_O_CPU_TYPE_X86_64)
-               && (cmd->flavours[i].flavour == BFD_MACH_O_x86_THREAD_STATE64))
+      for (i = 0; i < cmd->nflavours; i++)
         {
-          unsigned char buf[8];
-
-          bfd_seek (abfd, cmd->flavours[i].offset + (16 * 8), SEEK_SET);
-
-          if (bfd_bread (buf, 8, abfd) != 8)
-            return -1;
-
-          abfd->start_address = bfd_h_get_64 (abfd, buf);
+          if ((mdata->header.cputype == BFD_MACH_O_CPU_TYPE_I386)
+              && (cmd->flavours[i].flavour
+                  == (unsigned long) BFD_MACH_O_i386_THREAD_STATE))
+            {
+              unsigned char buf[4];
+              
+              bfd_seek (abfd, cmd->flavours[i].offset + 40, SEEK_SET);
+              
+              if (bfd_bread (buf, 4, abfd) != 4)
+                return -1;
+              
+              abfd->start_address = bfd_h_get_32 (abfd, buf);
+            }
+          else if ((mdata->header.cputype == BFD_MACH_O_CPU_TYPE_POWERPC)
+                   && (cmd->flavours[i].flavour == BFD_MACH_O_PPC_THREAD_STATE))
+            {
+              unsigned char buf[4];
+              
+              bfd_seek (abfd, cmd->flavours[i].offset + 0, SEEK_SET);
+              
+              if (bfd_bread (buf, 4, abfd) != 4)
+                return -1;
+              
+              abfd->start_address = bfd_h_get_32 (abfd, buf);
+            }
+          else if ((mdata->header.cputype == BFD_MACH_O_CPU_TYPE_POWERPC_64)
+                   && (cmd->flavours[i].flavour == BFD_MACH_O_PPC_THREAD_STATE_64))
+            {
+              unsigned char buf[8];
+              
+              bfd_seek (abfd, cmd->flavours[i].offset + 0, SEEK_SET);
+              
+              if (bfd_bread (buf, 8, abfd) != 8)
+                return -1;
+              
+              abfd->start_address = bfd_h_get_64 (abfd, buf);
+            }
+          else if ((mdata->header.cputype == BFD_MACH_O_CPU_TYPE_ARM)
+                   && (cmd->flavours[i].flavour == BFD_MACH_O_ARM_THREAD_STATE))
+            {
+              unsigned char buf[8];
+              
+              bfd_seek (abfd, cmd->flavours[i].offset + 60, SEEK_SET);
+              
+              if (bfd_bread (buf, 4, abfd) != 4)
+                return -1;
+              
+              abfd->start_address = bfd_h_get_32 (abfd, buf);
+            }
+          
+          /* APPLE LOCAL begin x86_64 */
+          else if ((mdata->header.cputype == BFD_MACH_O_CPU_TYPE_X86_64)
+                   && (cmd->flavours[i].flavour == BFD_MACH_O_x86_THREAD_STATE64))
+            {
+              unsigned char buf[8];
+              
+              bfd_seek (abfd, cmd->flavours[i].offset + (16 * 8), SEEK_SET);
+              
+              if (bfd_bread (buf, 8, abfd) != 8)
+                return -1;
+              
+              abfd->start_address = bfd_h_get_64 (abfd, buf);
+            }
+          /* APPLE LOCAL end x86_64 */
         }
-      /* APPLE LOCAL end x86_64 */
-
     }
-
+  else if (main_cmd != NULL)
+    {
+      bfd_vma text_address = 0;
+      bfd_mach_o_data_struct *mdata = abfd->tdata.mach_o_data;
+      /* The entryoffset in LC_MAIN load command is an offset relative
+         to the TEXT segment.  The 0th section is __TEXT.__text, so we
+         grab the address of that and subtract the offset from the
+         section to get back to the TEXT segment address, and use that to adjust
+         the offset address.  */
+      if (mdata && mdata->nsects > 1)
+	{
+	  bfd_mach_o_section *text_sect = mdata->sections[0];
+	  if (text_sect)
+	    {
+	      text_address = text_sect->addr - text_sect->offset;
+	      abfd->start_address = main_cmd->entryoffset + text_address;
+	      return 0;
+	    }
+	}
+    }
+  
   return 0;
 }
 
@@ -2395,6 +2483,8 @@ bfd_mach_o_scan (bfd *abfd,
 	}
     }
 
+  bfd_mach_o_flatten_sections (abfd);
+
   if (bfd_mach_o_scan_start_address (abfd) < 0)
     {
 #if 0
@@ -2405,7 +2495,6 @@ bfd_mach_o_scan (bfd *abfd,
 #endif
     }
 
-  bfd_mach_o_flatten_sections (abfd);
   mdata->scanning_load_cmds = 0;
 
   return 0;
@@ -2969,6 +3058,11 @@ bfd_mach_o_core_file_matches_executable_p (bfd *core_bfd, bfd *exec_bfd)
   else
     return FALSE;
 }
+
+// If the UUID field of ABFD's bfd_mach_o_data_struct is all zero's, this
+// bfd does not have an LC_UUID load command.  It probably would have been
+// better to step through the load commands and check that directly, but
+// whatever.  
 
 bfd_boolean        
 bfd_mach_o_get_uuid (bfd *abfd, unsigned char *buf, unsigned long buf_len)

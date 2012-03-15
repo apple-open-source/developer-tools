@@ -1,21 +1,21 @@
-# Developer Tools 4.3 Onyx4E109
+# Developer Tools 4.4 GraniteZin4F250
 bison	14	Other
 bootstrap_cmds	84	Other
-cctools	822	Other
-clang	318.0.45	Other
-CoreOSMakefiles	73	Other
-cvs	44	Other
-developer_cmds	58	Other
-gcc_select	114	Other
-gdb	1752	Other
-Git	26	Other
+cctools	829	Other
+clang	421.0.57	Other
+CoreOSMakefiles	75	Other
+cvs	45	Other
+developer_cmds	60	Other
+gcc_select	115	Other
+gdb	1820	Other
+Git	31.1	Other
 gm4	15	Other
-gnumake	129	Other
+gnumake	130	Other
 gperf	9	Other
-headerdoc	8.9.5	Other
-ld64	128.2	Other
-lldb	112	Other
-llvmgcc42	2336.9	Other
-pb_makefiles	1002	Other
+headerdoc	8.9.13	Other
+ld64	133.3	Other
+lldb	159	Other
+llvmgcc42	2336.11	Other
+pb_makefiles	1005	Other
 rcs	16	Other
-subversion	48	Other
+subversion	52	Other

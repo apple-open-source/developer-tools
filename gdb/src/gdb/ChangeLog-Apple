@@ -1,30 +1,195 @@
+2012-05-21  Jim Ingham <jingham@apple.com>
+
+	* dwarf2read.c (process_die): Handle DW_TAG_rvalue_reference_type.
+	(read_type_die): Ditto.
+	(dwarf_tag_name): Ditto.
+
+2012-04-05  Jason Molenda  (jmolenda@apple.com)
+
+	* remote.c (remote_open_1): Only do exhaustive search for
+	kernel when doing "target remote" debugging -- other types
+	of target remote (e.g. remote-macosx) should not search for
+	a kernel.
+
+2012-03-10  Jason Molenda  (jmolenda@apple.com)
+
+	* infcall.c (hand_function_call): Run the entry point
+	address through addr_bits_remove before putting a
+	breakpoint on it - don't want to write the breakpoint
+	at an offset address.
+
+2012-03-09  Jason Molenda  (jmolenda@apple.com)
+
+	* breakpoint.c (bpstat_stop_status): When comparing the
+	stop pc value against the breakpoint pc values, run the
+	breakpoint addrs through the arch addr_bits_remove function
+	before deciding they don't match.
+	* infcall.c (hand_function_call): When creating the dummy
+	frame id to detect when we're back at "start" (or the program's
+	entry point), run that address through addr_bits_remove.
+
+2012-02-22  Jason Molenda  (jmolenda@apple.com)
+
+	* exec.c (only_read_from_live_memory): Make globally accessible.
+	* exec.h: Provide decl.
+	* target.c (memory_xfer_partial): Don't go through the dcache
+	if we're requiring live-memory-reads.
+
+2012-02-01  Jason Molenda  (jmolenda@apple.com)
+
+	* utils.c (_initialize_utils): Set terminal window
+	height/width to unlimited.
+	* valprint.c (_initialize_valprint): Pretty print
+	structs by default.
+
+2012-01-18  Jason Molenda  (jmolenda@apple.com)
+
+	* config/i386/macosx.mh: Update -mmacosx-version-min to 10.7.
+
+2012-01-18  Jason Molenda  (jmolenda@apple.com)
+
+	* dwarf2read.c (find_partial_die_in_comp_unit): Change
+	internal error for reference to die we did not index
+	while creating psymtab to an error -- stop processing that
+	one file's dwarf but do not perturb the entire debug
+	session because of it.
+
+2012-01-16  Jason Molenda  (jmolenda@apple.com)
+
+	* dwarf2expr.c (execute_stack_op): Modify to take a
+	struct dwarf2_address_translation argument for translating
+	DW_OP_addr's correctly.
+	(dwarf_expr_eval): Ditto.
+	* dwarf2expr.h: Prototype updated.
+	* dwarf2loc.h: Rename dwarf2_locexpr_baton to 
+	dwarf2_address_translation to make it clearer what it is 
+	being used to track.
+	* dwarf2loc.c: Structs renamed.
+	(dwarf2_evaluate_loc_desc): Don't try to translate the
+	return of the expression evaluation as an address -- it could
+	be an address on the stack and the translation will do the
+	wrong thing with a non-TEXT, non-DATA addr.  Leave the 
+	translation up to dwarf_expr_eval.
+	* dwarf2read.c: Structs renamed.
+	(dwarf2_symbol_mark_computed): Initialize the new 'section'
+	attribute of dwarf2_address_translation correctly.
+
+2012-01-16  Jason Molenda  (jmolenda@apple.com)
+
+	* dwarf2loc.h: Combine the dwarf2_locexpr_baton and
+	dwarf2_loclist_baton structures into one unified struct;
+	they only differed by one element and it wasn't worth keeping
+	both around for that (and it was bound to lead to bugs
+	eventually).
+	* dwarf2loc.c (find_location_expression): Unify the 
+	address remapping batons.
+	(dwarf_expr_frame_base): Ditto.
+	(loclist_read_variable): Ditto.
+	(loclist_describe_location): Ditto.
+	(loclist_tracepoint_var_ref): Ditto.
+	* dwarf2read.c (dwarf2_symbol_mark_computed): Ditto.
+
+2012-01-16  Jason Molenda  (jmolenda@apple.com)
+
+	* dwarf2loc.c (dwarf2_evaluate_loc_desc): Use the dwarf2
+	location expression baton, or apply the section offset, for
+	a DW_OP_addr address.
+
+2012-01-11  Jason Molenda  (jmolenda@apple.com)
+
+	* corefile.c: Fix formatting mistake.
+	* exec.c (xfer_memory): Rename to xfer_memory_1.  Make an
+	xfer_memory() and xfer_memory_from_corefile() -- most callers
+	can call directly into xfer_memory() like before which will
+	honor the "only read from live memory" flag.  Core file clients
+	should call through xfer_memory_from_corefile() which does
+	not honor the "only read from live memory" flag, or rather 
+	the file IS the live memory in the core-file case.
+	* target.h: Add prototype.
+
+2012-01-11  Jason Molenda  (jmolenda@apple.com)
+
+	* symfile.c (add_kext_command): Add extra test for kernel_slide global
+	to make sure it's been set to a real slide value.
+
+2012-01-05  Jason Molenda  (jmolenda@apple.com)
+
+	* symfile.c (add_kext_command): In the case of add-kext foo.sym, 
+	see if there is a kernel slide present - apply it to all of the
+	sections we find in the .sym file.
+
+2012-01-04  Jason Molenda  (jmolenda@apple.com)
+
+	* remote.c (remote_open_1): When doing a kernel debug session,
+	try to find where the kernel is loaded in memory.
+	* exec.c (set_only_read_from_live_memory, set_only_read_from_live_memory_cleanup):
+	New functions to force the exec.c:xfer_memory to not read anything
+	out of a symbol file, only read from live memory.
+	(xfer_memory): Don't read from the exec file if only_read_from_live_memory
+	is set.
+
+2011-11-30  Jason Molenda  (jmolenda@apple.com)
+
+	* config/arm/macosx.mh: Specify minimum of iOS 5.
+
+2011-11-30  Jason Molenda  (jmolenda@apple.com)
+
+	* configure.ac: Add -Werror=implicit-function-declaration to
+	enforce prototypes being needed with clang.  Don't 
+	rewrite it to just -Werror.
+	* configure: Regenerated.
+	* objfiles.c: Update includes for the slide_objfile function.
+
+2011-11-30  Jason Molenda  (jmolenda@apple.com)
+
+	* objfiles.h (slide_objfile): Fix prototype.
+
+2011-11-29  Jason Molenda  (jmolenda@apple.com)
+
+	* objfiles.c (dyld_slide): Move this function ("dyld_slide_objfile")
+	out of macosx/macosx-nat-dyld-process.c up to objfiles.c because we
+	need to use it in a no-dyld-cross build setup and it's generally
+	useful.
+	* objfiles.h: Add prototype.
+
+2011-11-16  Jason Molenda  (jmolenda@apple.com)
+
+	* config/arm/macosx.mh, config/i386/macosx.mh: Add
+        appropriate  -miphoneos-version-min/-mmacosx-version-min when 
+        _DARWIN_UNLIMITED_STREAMS is defined.
+
 2011-11-14  Jim Ingham  <jingham@apple.com>
 
-        * dwarf2read.c (read_type_die): Handle DW_TAG_unspecified_type.
-        (read_tag_unspecified_type): New function, add a type for the
-        DW_TAG_unspecified_type die.
+	* dwarf2read.c (read_type_die): Handle DW_TAG_unspecified_type.
+	(read_tag_unspecified_type): New function, add a type for the
+	DW_TAG_unspecified_type die.
+	
+2011-11-10  Jason Molenda  (jmolenda@apple.com)
+
+	* fix-and-continue.c (file_exists_p): Handle cases of null
+	filenames or zero-length filenames explicitly.
 
 2011-10-26  Jim Ingham  <jingham@apple.com>
 
-        * valops.c (find_overload_method): Be a little more careful
-        getting target types of the input value so we don't crash on 
-        bad types.
-
+	* valops.c (find_overload_method): Be a little more careful
+	getting target types of the input value so we don't crash on 
+	bad types.
+	
 2011-10-03  Jason Molenda  (jmolenda@apple.com)
 
-        * symfile.c (symbol_file_add_with_addrs_or_offsets_using_objfile):  If
-        adding a main executable file on arm and we don't have an osabi set,
-        set it based on the slice of the main executable that we're using.
+	* symfile.c (symbol_file_add_with_addrs_or_offsets_using_objfile):  If
+	adding a main executable file on arm and we don't have an osabi set,
+	set it based on the slice of the main executable that we're using.
 
 2011-09-26  Jason Molenda  (jmolenda@apple.com)
 
-        * varobj.c (uninstall_variable): Fix typeo.
+	* varobj.c (uninstall_variable): Fix typeo.
 
 2011-09-09  Jim Ingham  <jingham@apple.com>
 
-        * varobj.c (install_variable, uninstall_variable): Explicitly require
-        that all installed variables have non-NULL obj_name fields.
-        
+	* varobj.c (install_variable, uninstall_variable): Explicitly require
+	that all installed variables have non-NULL obj_name fields.
+	
 2011-08-01  Jim Ingham  <jingham@apple.com>
 
 	* objc-lang.c (objc_setup_safe_print): Move suppressing output past
@@ -335,7 +500,7 @@
 
 2011-03-08  Jason Molenda  (jmolenda@apple.com)
 
-	* fork-child.c: Add support for DarwinV7K, DarwinV7F.
+	* fork-child.c: Add support for DarwinV7S, DarwinV7K, DarwinV7F.
 	* symfile.c: Ditto.
 	* osabi.c: Ditto.
 	* defs.h: Ditto.

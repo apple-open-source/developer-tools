@@ -1,5 +1,5 @@
 GDB_VERSION = 6.3.50-20050815
-GDB_RC_VERSION = 1752
+GDB_RC_VERSION = 1820
 
 BINUTILS_VERSION = 2.13-20021117
 BINUTILS_RC_VERSION = 46
@@ -24,7 +24,7 @@ BINUTILS_RC_VERSION = 46
 # the platform-variables.make file exists.
 
 OS=MACOS
-SYSTEM_DEVELOPER_TOOLS_DOC_DIR=/Developer/Documentation/DocSets/com.apple.ADC_Reference_Library.DeveloperTools.docset/Contents/Resources/Documents/documentation/DeveloperTools
+SYSTEM_DEVELOPER_TOOLS_DOC_DIR=/Applications/Xcode.app/Contents/Developer/Documentation/DocSets/com.apple.ADC_Reference_Library.DeveloperTools.docset/Contents/Resources/Documents/documentation/DeveloperTools
 
 
 ifndef RC_ARCHS
@@ -64,6 +64,7 @@ CANONICAL_ARCHS := $(subst macos:armv6t:$(RC_RELEASE),arm-apple-darwin,$(CANONIC
 CANONICAL_ARCHS := $(subst macos:armv6t2:$(RC_RELEASE),arm-apple-darwin,$(CANONICAL_ARCHS))
 CANONICAL_ARCHS := $(subst macos:armv7:$(RC_RELEASE),arm-apple-darwin,$(CANONICAL_ARCHS))
 CANONICAL_ARCHS := $(subst macos:armv7t:$(RC_RELEASE),arm-apple-darwin,$(CANONICAL_ARCHS))
+CANONICAL_ARCHS := $(subst macos:armv7s:$(RC_RELEASE),arm-apple-darwin,$(CANONICAL_ARCHS))
 
 CANONICAL_ARCHS := $(subst powerpc-apple-darwin i386-apple-darwin,i386-apple-darwin powerpc-apple-darwin,$(CANONICAL_ARCHS))
 
@@ -148,8 +149,6 @@ FRAMEWORK_SUFFIX =
 FRAMEWORK_VERSION = A
 FRAMEWORK_VERSION_SUFFIX =
 
-CONFIG_DIR=UNKNOWN
-CONF_DIR=UNKNOWN
 DEVEXEC_DIR=UNKNOWN
 LIBEXEC_BINUTILS_DIR=UNKNOWN
 LIBEXEC_GDB_DIR=UNKNOWN
@@ -215,15 +214,13 @@ OS_DEP_CFLAGS =
 endif
 endif
 
-CFLAGS = $(strip $(RC_NONARCH_CFLAGS) $(CDEBUGFLAGS) -Wall -Wimplicit $(OS_DEP_CFLAGS) -Werror-implicit-function-declaration -funwind-tables -fasynchronous-unwind-tables)
+CFLAGS = $(strip $(RC_NONARCH_CFLAGS) $(CDEBUGFLAGS) -Wall -Wimplicit $(OS_DEP_CFLAGS) -Werror=implicit-function-declaration -funwind-tables -fasynchronous-unwind-tables)
 HOST_ARCHITECTURE = $(shell echo $* | sed -e 's/--.*//' -e 's/powerpc/ppc/' -e 's/-apple-macosx.*//' -e 's/-apple-macos.*//' -e 's/-apple-darwin.*//')
 endif
 
 
 
 MACOSX_FLAGS = \
-	CONFIG_DIR=private/etc \
-	CONF_DIR=usr/share/gdb \
 	DEVEXEC_DIR=usr/bin \
 	LIBEXEC_BINUTILS_DIR=usr/libexec/binutils \
 	LIBEXEC_GDB_DIR=usr/libexec/gdb \
@@ -647,8 +644,6 @@ install-gdb-common:
 	set -e; for dstroot in $(SYMROOT) $(DSTROOT); do \
 		\
 		$(INSTALL) -c -d $${dstroot}/$(DEVEXEC_DIR); \
-		$(INSTALL) -c -d $${dstroot}/$(CONFIG_DIR); \
-		$(INSTALL) -c -d $${dstroot}/$(CONF_DIR); \
 		$(INSTALL) -c -d $${dstroot}/$(MAN_DIR); \
 		\
 		docroot="$${dstroot}/$(SYSTEM_DEVELOPER_TOOLS_DOC_DIR)/gdb"; \
@@ -686,14 +681,6 @@ install-gdb-macosx-common: install-gdb-common
 		$(INSTALL) -c -d $${dstroot}/usr/local/OpenSourceVersions; \
 		$(INSTALL) -c -m 644 $(SRCROOT)/gdb.plist $${dstroot}/usr/local/OpenSourceVersions; \
 		$(INSTALL) -c -m 644 $(SRCROOT)/gdb.txt $${dstroot}/usr/local/OpenSourceLicenses; \
-		\
-		$(INSTALL) -c -d $${dstroot}/$(CONFIG_DIR); \
-		$(INSTALL) -c -m 644 $(SRCROOT)/gdb.conf $${dstroot}/$(CONFIG_DIR)/gdb.conf; \
-		\
-		$(INSTALL) -c -d $${dstroot}/$(CONF_DIR); \
-		for j in $(SRCROOT)/conf/*.gdb; do \
-			$(INSTALL) -c -m 644 $$j $${dstroot}/$(CONF_DIR)/; \
-		done; \
 		\
 		sed -e 's/version=.*/version=$(GDB_VERSION)-$(GDB_RC_VERSION)/' \
 			< $(SRCROOT)/gdb.sh > $${dstroot}/usr/bin/gdb; \

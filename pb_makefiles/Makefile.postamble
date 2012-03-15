@@ -37,4 +37,6 @@ endif
 	$(ECHO) PLATFORM_OS = $(PLATFORM_OS) >> $(DSTROOT)$(INSTALLDIR)/platform.make
 	$(ECHO) 'include $$(MAKEFILEPATH)/$$(MAKEFILE_SOURCE)/platform-variables.make' >> $(DSTROOT)$(INSTALLDIR)/platform.make
 	$(CHMOD) -R a-w $(INSTALLDIRS)
-
+	# symlink /usr/lib/arch_tool to point at /Developer/Makefiles/pb_makefiles/arch_tool, to keep HIToolbox and other Carbon projects happy
+	$(MKDIRS) $(DSTROOT)/usr/lib
+	$(CP) -p $(DSTROOT)$(INSTALLDIR)/arch_tool $(DSTROOT)/usr/lib/arch_tool

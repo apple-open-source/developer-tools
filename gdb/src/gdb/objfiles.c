@@ -47,6 +47,8 @@
 #include "breakpoint.h"
 #include "block.h"
 #include "dictionary.h"
+#include "objc-lang.h"
+#include "macosx-nat-inferior.h"  // need to pick up macho_calculate_offsets_for_dsym() in machoread.c
 
 #include "db-access-functions.h"
 
@@ -2548,7 +2550,7 @@ partial_symbol_special_info (struct objfile *objfile,
       || SYMBOL_VALUE_ADDRESS (psym) == INVALID_ADDRESS)
     return NULL;
 
-  struct partial_symbol *i;
+  struct partial_symbol **i;
   i = bsearch (&psym, objfile->thumb_psyms, 
               objfile->num_thumb_psyms, sizeof (struct partial_symbol *),
               compare_psymbol_ptrs);
@@ -2599,6 +2601,67 @@ objfile_add_special_psym (struct objfile *objfile,
 }
 /* APPLE LOCAL end - Differentiate between arm & thumb  */
 
+/* slide_objfile applies the slide in NEW_OFFSETS, or in
+   SLIDE if NEW_OFFSETS is NULL, to OBJFILE, and to the
+   separate_debug_objfile, if it exists.  */
+
+void 
+slide_objfile (struct objfile *objfile, CORE_ADDR slide,
+               struct section_offsets *new_offsets)
+{
+  int i;
+  if (objfile)
+    {
+      struct cleanup *offset_cleanup;
+      if (new_offsets == NULL)
+        {
+          new_offsets =
+            (struct section_offsets *)
+            xmalloc (SIZEOF_N_SECTION_OFFSETS (objfile->num_sections));
+          for (i = 0; i < objfile->num_sections; i++)
+            {
+              new_offsets->offsets[i] = slide;
+            }
+          offset_cleanup = make_cleanup (xfree, new_offsets);
+        }
+      else
+        offset_cleanup = make_cleanup (null_cleanup, NULL);
+
+      /* Note, I'm not calling tell_breakpoints_objfile_changed here, but
+         instead relying on objfile_relocate to relocate the breakpoints 
+         in this objfile.  */
+
+      objfile_relocate (objfile, new_offsets);
+
+      tell_objc_msgsend_cacher_objfile_changed (objfile);
+      if (info_verbose)
+        printf_filtered ("Relocating symbols from %s...", objfile->name);
+      gdb_flush (gdb_stdout);
+      if (objfile->separate_debug_objfile != NULL)
+        {
+          struct section_offsets *dsym_offsets;
+          int num_dsym_offsets;
+
+          /* The offsets we apply are supposed to be the TOTAL offset,
+             so we have to add the dsym offset to the one passed in
+             for the objfile.  */
+          macho_calculate_offsets_for_dsym (objfile, 
+                                            objfile->separate_debug_objfile->obfd,
+                                            NULL,
+                                            new_offsets,
+                                            objfile->num_sections,
+                                            &dsym_offsets,
+                                            &num_dsym_offsets);
+          make_cleanup (xfree, dsym_offsets);
+          objfile_relocate (objfile->separate_debug_objfile, dsym_offsets);
+        }
+      
+
+      do_cleanups (offset_cleanup);
+      if (info_verbose)
+        printf_filtered ("done\n");
+    }
+}
 
 void
 _initialize_objfiles (void)

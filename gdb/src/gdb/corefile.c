@@ -107,7 +107,8 @@ core_file_command (char *args, int from_tty)
     do_cleanups (cleanups);
 }
 
-void core_file_attach (char *filename, int from_tty)
+void 
+core_file_attach (char *filename, int from_tty)
 {
   /* APPLE LOCAL end refactor corefile */
   struct target_ops *t;

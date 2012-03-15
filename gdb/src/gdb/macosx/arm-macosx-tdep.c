@@ -399,6 +399,8 @@ arm_host_osabi ()
 	return GDB_OSABI_DARWINV7;
       if (info.cpu_subtype == BFD_MACH_O_CPU_SUBTYPE_ARM_7F)
 	return GDB_OSABI_DARWINV7F;
+      if (info.cpu_subtype == BFD_MACH_O_CPU_SUBTYPE_ARM_7S)
+	return GDB_OSABI_DARWINV7S;
       if (info.cpu_subtype == BFD_MACH_O_CPU_SUBTYPE_ARM_7K)
 	return GDB_OSABI_DARWINV7K;
       else
@@ -432,6 +434,9 @@ arm_set_osabi_from_host_info ()
         break;
       case GDB_OSABI_DARWINV7K:
         info.bfd_arch_info = bfd_lookup_arch (bfd_arch_arm, bfd_mach_arm_7k);
+        break;
+      case GDB_OSABI_DARWINV7S:
+        info.bfd_arch_info = bfd_lookup_arch (bfd_arch_arm, bfd_mach_arm_7s);
         break;
       default:
         warning ("Unrecognized osabi %d in arm_set_osabi_from_host_info", (int) info.osabi);
@@ -469,6 +474,8 @@ arm_mach_o_osabi_sniffer (bfd *abfd)
 	    return GDB_OSABI_DARWINV7;
 	  else if (arch_info->mach == bfd_mach_arm_7f)
 	    return GDB_OSABI_DARWINV7F;
+	  else if (arch_info->mach == bfd_mach_arm_7s)
+	    return GDB_OSABI_DARWINV7S;
 	  else if (arch_info->mach == bfd_mach_arm_7k)
 	    return GDB_OSABI_DARWINV7K;
 	  else
@@ -482,7 +489,7 @@ arm_mach_o_osabi_sniffer (bfd *abfd)
   ret = arm_mach_o_osabi_sniffer_use_dyld_hint (abfd);
   if (ret == GDB_OSABI_DARWINV6 || ret == GDB_OSABI_DARWIN ||
       ret == GDB_OSABI_DARWINV7 || ret == GDB_OSABI_DARWINV7F ||
-      ret == GDB_OSABI_DARWINV7K)
+      ret == GDB_OSABI_DARWINV7S || ret == GDB_OSABI_DARWINV7K)
     return ret;
 
   // Iterate over the available slices, pick the best match based
@@ -510,10 +517,20 @@ arm_mach_o_osabi_sniffer (bfd *abfd)
               // bsd/dev/arm/kern_machdep.c::grade_binary()
 
               // If this an armv7k host, don't use any of the
-              // armv7{,f} slices.
+              // armv7{,f,s} slices.
               if (host_osabi == GDB_OSABI_DARWINV7K
                   && (cur == GDB_OSABI_DARWINV7
-                      || cur == GDB_OSABI_DARWINV7F))
+                      || cur == GDB_OSABI_DARWINV7F
+                      || cur == GDB_OSABI_DARWINV7S))
+                {
+                  continue;
+                }
+
+              // If this is an armv7s host, avoid using the armv7f
+              // slice because the errata for that proc. aren't 
+              // needed on this system
+              if (host_osabi == GDB_OSABI_DARWINV7S
+                   && cur == GDB_OSABI_DARWINV7F)
                 {
                   continue;
                 }
@@ -525,15 +542,17 @@ arm_mach_o_osabi_sniffer (bfd *abfd)
               // variant as the current "best", keep it.
               if (cur == GDB_OSABI_DARWINV7K 
                   && (best == GDB_OSABI_DARWINV7
-                      || best == GDB_OSABI_DARWINV7F))
+                      || best == GDB_OSABI_DARWINV7F
+                      || best == GDB_OSABI_DARWINV7S))
                 {
                   continue;
                 }
 
-              // On an armv7 host, don't try to use armv7f
-              // slice.
+              // On an armv7 host, don't try to use armv7f or armv7s
+              // slices.
               if (host_osabi == GDB_OSABI_DARWINV7
-                  && cur == GDB_OSABI_DARWINV7F)
+                  && (cur == GDB_OSABI_DARWINV7F
+                      || cur == GDB_OSABI_DARWINV7S))
                 {
                   continue;
                 }
@@ -590,6 +609,10 @@ arm_mach_o_osabi_sniffer_use_dyld_hint (bfd *abfd)
 	  if (arch_info->mach == bfd_mach_arm_7f
 	      && osabi_seen_in_attached_dyld == GDB_OSABI_DARWINV7F)
 	    return GDB_OSABI_DARWINV7F;
+
+	  if (arch_info->mach == bfd_mach_arm_7s
+	      && osabi_seen_in_attached_dyld == GDB_OSABI_DARWINV7S)
+	    return GDB_OSABI_DARWINV7S;
 
 	  if (arch_info->mach == bfd_mach_arm_7k
 	      && osabi_seen_in_attached_dyld == GDB_OSABI_DARWINV7K)
@@ -1081,6 +1104,18 @@ arm_macosx_register_byte_vfpv3 (int regnum)
   return 0;
 }
 
+static CORE_ADDR
+arm_integer_to_address (struct gdbarch *gdbarch, struct type *type, 
+                        const gdb_byte *buf)
+{
+  gdb_byte *tmp = alloca (TYPE_LENGTH (builtin_type_void_data_ptr));
+  LONGEST val = unpack_long (type, buf);
+  store_unsigned_integer (tmp, TYPE_LENGTH (builtin_type_void_data_ptr), val);
+  return extract_unsigned_integer (tmp,
+                                   TYPE_LENGTH (builtin_type_void_data_ptr));
+}
+
+
 static void
 arm_macosx_init_abi_v6 (struct gdbarch_info info, struct gdbarch *gdbarch)
 {
@@ -1114,6 +1149,8 @@ arm_macosx_init_abi_v6 (struct gdbarch_info info, struct gdbarch *gdbarch)
   
   set_gdbarch_dbx_make_msymbol_special (gdbarch, 
 					arm_macosx_dbx_make_msymbol_special);
+
+  set_gdbarch_integer_to_address (gdbarch, arm_integer_to_address);
 
   /* Disable software single stepping unless otherwise requested.  */
   if (get_arm_single_step_mode () == arm_single_step_mode_auto)
@@ -1175,6 +1212,8 @@ arm_macosx_init_abi_v7 (struct gdbarch_info info, struct gdbarch *gdbarch)
 
   set_gdbarch_dbx_make_msymbol_special (gdbarch, 
 					arm_macosx_dbx_make_msymbol_special);
+
+  set_gdbarch_integer_to_address (gdbarch, arm_integer_to_address);
 
   /* Disable software single stepping unless otherwise requested.  */
   if (get_arm_single_step_mode () == arm_single_step_mode_auto)
@@ -1272,6 +1311,11 @@ _initialize_arm_macosx_tdep ()
   gdbarch_register_osabi ((bfd_lookup_arch (bfd_arch_arm, bfd_mach_arm_7k))->arch, 
 			  bfd_mach_arm_7k,
                           GDB_OSABI_DARWINV7K, 
+			  arm_macosx_init_abi_v7);
+
+  gdbarch_register_osabi ((bfd_lookup_arch (bfd_arch_arm, bfd_mach_arm_7s))->arch, 
+			  bfd_mach_arm_7s,
+                          GDB_OSABI_DARWINV7S, 
 			  arm_macosx_init_abi_v7);
 
 }
