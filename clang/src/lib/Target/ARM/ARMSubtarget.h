@@ -30,7 +30,7 @@ class StringRef;
 class ARMSubtarget : public ARMGenSubtargetInfo {
 protected:
   enum ARMProcFamilyEnum {
-    Others, CortexA8, CortexA9, Swift
+    Others, CortexA8, CortexA9, CortexA15, Swift
   };
 
   /// ARMProcFamily - ARM processor family: Cortex-A8, Cortex-A9, and others.
@@ -61,16 +61,6 @@ protected:
   /// multiply-subtract instructions should be used.
   bool UseMulOps;
 
-  /// UseVLD1 - True if the target prefers to use vld1 instructions instead of
-  /// vldm to load vectors.  The vld1 instructions will be given alignment
-  /// hints.
-  bool UseVLD1;
-
-  /// UseVST1 - True if the target prefers to use vst1 instructions insteac of
-  /// vstm to store vectors.  The vst1 instructions will be given alignment
-  /// hints.
-  bool UseVST1;
-
   /// SlowFPVMLx - If the VFP2 / NEON instructions are available, indicates
   /// whether the FP VML[AS] instructions are slow (if so, don't use them).
   bool SlowFPVMLx;
@@ -89,7 +79,7 @@ protected:
   /// HasThumb2 - True if Thumb2 instructions are supported.
   bool HasThumb2;
 
-  /// IsMClass - True if the subtarget belongs to the 'M' profile of CPUs - 
+  /// IsMClass - True if the subtarget belongs to the 'M' profile of CPUs -
   /// v6m, v7m for example.
   bool IsMClass;
 
@@ -173,6 +163,9 @@ protected:
   /// TargetTriple - What processor and OS we're targeting.
   Triple TargetTriple;
 
+  /// SchedModel - Processor specific instruction costs.
+  const MCSchedModel *SchedModel;
+
   /// Selected instruction itineraries (one entry per itinerary class.)
   InstrItineraryData InstrItins;
 
@@ -215,8 +208,10 @@ protected:
   bool isCortexA7() const { return CPUString == "cortex-a7"; }
   bool isCortexA8() const { return ARMProcFamily == CortexA8; }
   bool isCortexA9() const { return ARMProcFamily == CortexA9; }
+  bool isCortexA15() const { return ARMProcFamily == CortexA15; }
   bool isSwift()    const { return ARMProcFamily == Swift; }
   bool isCortexM3() const { return CPUString == "cortex-m3"; }
+  bool isLikeA9() const { return isCortexA9() || isCortexA15(); }
 
   bool hasARMOps() const { return !NoARM; }
 
@@ -232,8 +227,6 @@ protected:
   bool hasT2ExtractPack() const { return HasT2ExtractPack; }
   bool hasDataBarrier() const { return HasDataBarrier; }
   bool useMulOps() const { return UseMulOps; }
-  bool useVLD1() const { return UseVLD1; }
-  bool useVST1() const { return UseVST1; }
   bool useFPVMLx() const { return !SlowFPVMLx; }
   bool hasVMLxForwarding() const { return HasVMLxForwarding; }
   bool isFPBrccSlow() const { return SlowFPBrcc; }

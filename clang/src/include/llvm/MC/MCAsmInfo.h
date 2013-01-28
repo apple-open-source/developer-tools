@@ -33,7 +33,7 @@ namespace llvm {
   }
 
   namespace LCOMM {
-    enum LCOMMType { None, NoAlignment, ByteAlignment };
+    enum LCOMMType { NoAlignment, ByteAlignment, Log2Alignment };
   }
 
   /// MCAsmInfo - This class is intended to be used as a base class for asm
@@ -43,7 +43,7 @@ namespace llvm {
     //===------------------------------------------------------------------===//
     // Properties to be set by the target writer, used to configure asm printer.
     //
-    
+
     /// PointerSize - Pointer size in bytes.
     ///               Default is 4.
     unsigned PointerSize;
@@ -142,6 +142,10 @@ namespace llvm {
     /// AllowPeriodsInName - This is true if the assembler allows periods in
     /// symbol names.  This defaults to true.
     bool AllowPeriodsInName;
+
+    /// AllowUTF8 - This is true if the assembler accepts UTF-8 input.
+    // FIXME: Make this a more general encoding setting?
+    bool AllowUTF8;
 
     /// UseDataRegionDirectives - This is true if data region markers should
     /// be printed as ".data_region/.end_data_region" directives. If false,
@@ -243,13 +247,13 @@ namespace llvm {
     /// .long a - b
     bool HasAggressiveSymbolFolding;           // Defaults to true.
 
-    /// LCOMMDirectiveType - Describes if the target supports the .lcomm
-    /// directive and whether it has an alignment parameter.
-    LCOMM::LCOMMType LCOMMDirectiveType;     // Defaults to LCOMM::None.
-
-    /// COMMDirectiveAlignmentIsInBytes - True is COMMDirective's optional
+    /// COMMDirectiveAlignmentIsInBytes - True is .comm's and .lcomms optional
     /// alignment is to be specified in bytes instead of log2(n).
     bool COMMDirectiveAlignmentIsInBytes;    // Defaults to true;
+
+    /// LCOMMDirectiveAlignment - Describes if the .lcomm directive for the
+    /// target supports an alignment argument and how it is interpreted.
+    LCOMM::LCOMMType LCOMMDirectiveAlignmentType; // Defaults to NoAlignment.
 
     /// HasDotTypeDotSizeDirective - True if the target has .type and .size
     /// directives, this is true for most ELF targets.
@@ -311,25 +315,13 @@ namespace llvm {
     /// DwarfSectionOffsetDirective - Special section offset directive.
     const char* DwarfSectionOffsetDirective; // Defaults to NULL
 
-    /// DwarfRequiresRelocationForSectionOffset - True if we need to produce a
-    /// relocation when we want a section offset in dwarf.
-    bool DwarfRequiresRelocationForSectionOffset;  // Defaults to true;
-
-    /// DwarfUsesLabelOffsetDifference - True if Dwarf2 output can
-    /// use EmitLabelOffsetDifference.
-    bool DwarfUsesLabelOffsetForRanges;
-
-    /// DwarfUsesRelocationsForStringPool - True if this Dwarf output must use
-    /// relocations to refer to entries in the string pool.
-    bool DwarfUsesRelocationsForStringPool;
+    /// DwarfUsesRelocationsAcrossSections - True if Dwarf2 output generally
+    /// uses relocations for references to other .debug_* sections.
+    bool DwarfUsesRelocationsAcrossSections;
 
     /// DwarfRegNumForCFI - True if dwarf register numbers are printed
     /// instead of symbolic register names in .cfi_* directives.
     bool DwarfRegNumForCFI;  // Defaults to false;
-
-    //===--- CBE Asm Translation Table -----------------------------------===//
-
-    const char *const *AsmTransCBE;          // Defaults to empty
 
     //===--- Prologue State ----------------------------------------------===//
 
@@ -470,6 +462,9 @@ namespace llvm {
     bool doesAllowPeriodsInName() const {
       return AllowPeriodsInName;
     }
+    bool doesAllowUTF8() const {
+      return AllowUTF8;
+    }
     bool doesSupportDataRegionDirectives() const {
       return UseDataRegionDirectives;
     }
@@ -501,13 +496,13 @@ namespace llvm {
     bool hasAggressiveSymbolFolding() const {
       return HasAggressiveSymbolFolding;
     }
-    LCOMM::LCOMMType getLCOMMDirectiveType() const {
-      return LCOMMDirectiveType;
-    }
-    bool hasDotTypeDotSizeDirective() const {return HasDotTypeDotSizeDirective;}
     bool getCOMMDirectiveAlignmentIsInBytes() const {
       return COMMDirectiveAlignmentIsInBytes;
     }
+    LCOMM::LCOMMType getLCOMMDirectiveAlignmentType() const {
+      return LCOMMDirectiveAlignmentType;
+    }
+    bool hasDotTypeDotSizeDirective() const {return HasDotTypeDotSizeDirective;}
     bool hasSingleParameterDotFile() const { return HasSingleParameterDotFile; }
     bool hasNoDeadStrip() const { return HasNoDeadStrip; }
     bool hasSymbolResolver() const { return HasSymbolResolver; }
@@ -540,26 +535,17 @@ namespace llvm {
          ExceptionsType == ExceptionHandling::ARM ||
          ExceptionsType == ExceptionHandling::Win64);
     }
-    bool doesDwarfUsesInlineInfoSection() const {
+    bool doesDwarfUseInlineInfoSection() const {
       return DwarfUsesInlineInfoSection;
     }
     const char *getDwarfSectionOffsetDirective() const {
       return DwarfSectionOffsetDirective;
     }
-    bool doesDwarfRequireRelocationForSectionOffset() const {
-      return DwarfRequiresRelocationForSectionOffset;
-    }
-    bool doesDwarfUsesLabelOffsetForRanges() const {
-      return DwarfUsesLabelOffsetForRanges;
-    }
-    bool doesDwarfUseRelocationsForStringPool() const {
-      return DwarfUsesRelocationsForStringPool;
+    bool doesDwarfUseRelocationsAcrossSections() const {
+      return DwarfUsesRelocationsAcrossSections;
     }
     bool useDwarfRegNumForCFI() const {
       return DwarfRegNumForCFI;
-    }
-    const char *const *getAsmCBE() const {
-      return AsmTransCBE;
     }
 
     void addInitialFrameState(MCSymbol *label, const MachineLocation &D,

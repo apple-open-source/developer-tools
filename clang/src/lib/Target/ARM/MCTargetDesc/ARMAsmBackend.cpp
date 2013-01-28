@@ -11,12 +11,12 @@
 #include "MCTargetDesc/ARMBaseInfo.h"
 #include "MCTargetDesc/ARMFixupKinds.h"
 #include "MCTargetDesc/ARMAddressingModes.h"
-#include "llvm/ADT/Twine.h"
 #include "llvm/MC/MCAssembler.h"
 #include "llvm/MC/MCContext.h"
 #include "llvm/MC/MCDirectives.h"
 #include "llvm/MC/MCELFObjectWriter.h"
 #include "llvm/MC/MCExpr.h"
+#include "llvm/MC/MCFixupKindInfo.h"
 #include "llvm/MC/MCMachObjectWriter.h"
 #include "llvm/MC/MCObjectWriter.h"
 #include "llvm/MC/MCSectionELF.h"
@@ -79,7 +79,8 @@ public:
 { "fixup_t2_condbranch",     0,            32,  MCFixupKindInfo::FKF_IsPCRel },
 { "fixup_t2_uncondbranch",   0,            32,  MCFixupKindInfo::FKF_IsPCRel },
 { "fixup_arm_thumb_br",      0,            16,  MCFixupKindInfo::FKF_IsPCRel },
-{ "fixup_arm_bl",            0,            24,  MCFixupKindInfo::FKF_IsPCRel },
+{ "fixup_arm_uncondbl",      0,            24,  MCFixupKindInfo::FKF_IsPCRel },
+{ "fixup_arm_condbl",        0,            24,  MCFixupKindInfo::FKF_IsPCRel },
 { "fixup_arm_blx",           0,            24,  MCFixupKindInfo::FKF_IsPCRel },
 { "fixup_arm_thumb_bl",      0,            32,  MCFixupKindInfo::FKF_IsPCRel },
 { "fixup_arm_thumb_blx",     0,            32,  MCFixupKindInfo::FKF_IsPCRel },
@@ -350,7 +351,8 @@ static unsigned adjustFixupValue(const MCFixup &Fixup, uint64_t Value,
 
   case ARM::fixup_arm_condbranch:
   case ARM::fixup_arm_uncondbranch:
-  case ARM::fixup_arm_bl:
+  case ARM::fixup_arm_uncondbl:
+  case ARM::fixup_arm_condbl:
   case ARM::fixup_arm_blx:
     // These values don't encode the low two bits since they're always zero.
     // Offset by 8 just as above.
@@ -540,7 +542,8 @@ void ARMAsmBackend::processFixupValue(const MCAssembler &Asm,
   if (A && ((unsigned)Fixup.getKind() == ARM::fixup_arm_thumb_blx ||
             (unsigned)Fixup.getKind() == ARM::fixup_arm_thumb_bl ||
             (unsigned)Fixup.getKind() == ARM::fixup_arm_blx ||
-            (unsigned)Fixup.getKind() == ARM::fixup_arm_bl))
+            (unsigned)Fixup.getKind() == ARM::fixup_arm_uncondbl ||
+            (unsigned)Fixup.getKind() == ARM::fixup_arm_condbl))
     IsResolved = false;
 
   // Try to get the encoded value for the fixup as-if we're mapping it into
@@ -590,7 +593,9 @@ public:
   const object::mach::CPUSubtypeARM Subtype;
   DarwinARMAsmBackend(const Target &T, const StringRef TT,
                       object::mach::CPUSubtypeARM st)
-    : ARMAsmBackend(T, TT), Subtype(st) { }
+    : ARMAsmBackend(T, TT), Subtype(st) {
+      HasDataInCodeSupport = true;
+    }
 
   MCObjectWriter *createObjectWriter(raw_ostream &OS) const {
     return createARMMachObjectWriter(OS, /*Is64Bit=*/false,
@@ -627,7 +632,8 @@ static unsigned getFixupKindNumBytes(unsigned Kind) {
   case ARM::fixup_arm_ldst_pcrel_12:
   case ARM::fixup_arm_pcrel_10:
   case ARM::fixup_arm_adr_pcrel_12:
-  case ARM::fixup_arm_bl:
+  case ARM::fixup_arm_uncondbl:
+  case ARM::fixup_arm_condbl:
   case ARM::fixup_arm_blx:
   case ARM::fixup_arm_condbranch:
   case ARM::fixup_arm_uncondbranch:
@@ -670,7 +676,7 @@ void DarwinARMAsmBackend::applyFixup(const MCFixup &Fixup, char *Data,
 
 } // end anonymous namespace
 
-MCAsmBackend *llvm::createARMAsmBackend(const Target &T, StringRef TT) {
+MCAsmBackend *llvm::createARMAsmBackend(const Target &T, StringRef TT, StringRef CPU) {
   Triple TheTriple(TT);
 
   if (TheTriple.isOSDarwin()) {

@@ -51,7 +51,7 @@ namespace {
     const TargetRegisterInfo *TRI;
     MachineRegisterInfo *MRI;
 
-    bool isA9;
+    bool isLikeA9;
     bool isSwift;
     unsigned MIIdx;
     MachineInstr* LastMIs[4];
@@ -244,8 +244,8 @@ bool MLxExpansion::FindMLxHazard(MachineInstr *MI) {
   // preserves the in-order retirement of the instructions.
   // Look at the next few instructions, if *most* of them can cause hazards,
   // then the scheduler can't *fix* this, we'd better break up the VMLA.
-  unsigned Limit1 = isA9 ? 1 : 4;
-  unsigned Limit2 = isA9 ? 1 : 4;
+  unsigned Limit1 = isLikeA9 ? 1 : 4;
+  unsigned Limit2 = isLikeA9 ? 1 : 4;
   for (unsigned i = 1; i <= 4; ++i) {
     int Idx = ((int)MIIdx - i + 4) % 4;
     MachineInstr *NextMI = LastMIs[Idx];
@@ -285,7 +285,9 @@ MLxExpansion::ExpandFPMLxInstruction(MachineBasicBlock &MBB, MachineInstr *MI,
 
   const MCInstrDesc &MCID1 = TII->get(MulOpc);
   const MCInstrDesc &MCID2 = TII->get(AddSubOpc);
-  unsigned TmpReg = MRI->createVirtualRegister(TII->getRegClass(MCID1, 0, TRI));
+  const MachineFunction &MF = *MI->getParent()->getParent();
+  unsigned TmpReg = MRI->createVirtualRegister(
+                      TII->getRegClass(MCID1, 0, TRI, MF));
 
   MachineInstrBuilder MIB = BuildMI(MBB, MI, MI->getDebugLoc(), MCID1, TmpReg)
     .addReg(Src1Reg, getKillRegState(Src1Kill))
@@ -379,7 +381,7 @@ bool MLxExpansion::runOnMachineFunction(MachineFunction &Fn) {
   TRI = Fn.getTarget().getRegisterInfo();
   MRI = &Fn.getRegInfo();
   const ARMSubtarget *STI = &Fn.getTarget().getSubtarget<ARMSubtarget>();
-  isA9 = STI->isCortexA9() || STI->isSwift();
+  isLikeA9 = STI->isLikeA9() || STI->isSwift();
   isSwift = STI->isSwift();
 
   bool Modified = false;

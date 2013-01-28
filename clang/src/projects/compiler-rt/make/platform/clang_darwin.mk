@@ -70,18 +70,13 @@ Configs += profile_ios
 UniversalArchs.profile_ios := $(call CheckArches,i386 x86_64 armv7,profile_ios)
 
 # Configurations which define the ASAN support functions.
-#
-# Note that ASAN doesn't appear to currently support i386.
-Configs += asan_osx
-UniversalArchs.asan_osx := $(call CheckArches,i386 x86_64,asan_osx)
+# Apple Internal: Disable building asan libraries. <rdar://problem/12423266>
+#Configs += asan_osx
+#UniversalArchs.asan_osx := $(call CheckArches,i386 x86_64,asan_osx)
 
-### H4 Support ###
-UniversalArchs.ios += $(call CheckArches,armv7f armv7k,ios)
-UniversalArchs.cc_kext += $(call CheckArches,armv7f armv7k,cc_kext)
-UniversalArchs.cc_kext_ios5 += $(call CheckArches,armv7f armv7k,cc_kext_ios5)
-UniversalArchs.profile_ios += $(call CheckArches,armv7f armv7k,profile_ios)
+#Configs += asan_osx_dynamic
+#UniversalArchs.asan_osx_dynamic := $(call CheckArches,i386 x86_64,asan_osx_dynamic)
 
-### Swift Support ###
 UniversalArchs.ios += $(call CheckArches,armv7s,ios)
 UniversalArchs.cc_kext += $(call CheckArches,armv7s,cc_kext)
 UniversalArchs.cc_kext_ios5 += $(call CheckArches,armv7s,cc_kext_ios5)
@@ -126,7 +121,10 @@ IOSSIM_DEPLOYMENT_ARGS += -isysroot $(ProjSrcRoot)/SDKs/darwin
 CFLAGS.eprintf		:= $(CFLAGS) $(OSX_DEPLOYMENT_ARGS)
 CFLAGS.10.4		:= $(CFLAGS) $(OSX_DEPLOYMENT_ARGS)
 # FIXME: We can't build ASAN with our stub SDK yet.
-CFLAGS.asan_osx         := $(CFLAGS) -mmacosx-version-min=10.5
+CFLAGS.asan_osx         := $(CFLAGS) -mmacosx-version-min=10.5 -fno-builtin
+CFLAGS.asan_osx_dynamic := \
+	$(CFLAGS) -mmacosx-version-min=10.5 -fno-builtin \
+	-DMAC_INTERPOSE_FUNCTIONS=1
 
 CFLAGS.ios.i386		:= $(CFLAGS) $(IOSSIM_DEPLOYMENT_ARGS)
 CFLAGS.ios.x86_64	:= $(CFLAGS) $(IOSSIM_DEPLOYMENT_ARGS)
@@ -155,6 +153,10 @@ CFLAGS.profile_ios.armv7f := $(CFLAGS) $(IOS_DEPLOYMENT_ARGS)
 CFLAGS.profile_ios.armv7k := $(CFLAGS) $(IOS_DEPLOYMENT_ARGS)
 CFLAGS.profile_ios.armv7s := $(CFLAGS) $(IOS_DEPLOYMENT_ARGS)
 
+# Configure the asan_osx_dynamic library to be built shared.
+SHARED_LIBRARY.asan_osx_dynamic := 1
+LDFLAGS.asan_osx_dynamic := -framework Foundation -lstdc++
+
 FUNCTIONS.eprintf := eprintf
 FUNCTIONS.10.4 := eprintf floatundidf floatundisf floatundixf
 
@@ -170,7 +172,11 @@ FUNCTIONS.osx	:= mulosi4 mulodi4 muloti4
 FUNCTIONS.profile_osx := GCDAProfiling
 FUNCTIONS.profile_ios := GCDAProfiling
 
-FUNCTIONS.asan_osx := $(AsanFunctions)
+FUNCTIONS.asan_osx := $(AsanFunctions) $(InterceptionFunctions) \
+                                       $(SanitizerCommonFunctions)
+FUNCTIONS.asan_osx_dynamic := $(AsanFunctions) $(InterceptionFunctions) \
+                              $(SanitizerCommonFunctions) \
+	                      $(AsanDynamicFunctions)
 
 CCKEXT_COMMON_FUNCTIONS := \
 	absvdi2 \

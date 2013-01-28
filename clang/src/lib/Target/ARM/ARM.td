@@ -90,13 +90,6 @@ def FeatureAvoidPartialCPSR : SubtargetFeature<"avoid-partial-cpsr",
                                                "AvoidCPSRPartialUpdate", "true",
                                  "Avoid CPSR partial update for OOO execution">;
 
-/// Some micro-architectures prefer to use vld1/vst1 for vector loads and
-/// stores instead of vldm/vstm because they have explicit alignment hints.
-def FeatureUseVLD1 : SubtargetFeature<"usevld1", "UseVLD1", "true",
-                                      "Prefer vld1 for vector loads">;
-def FeatureUseVST1 : SubtargetFeature<"usevst1", "UseVST1", "true",
-                                      "Prefer vst1 for vector stores">;
-
 // Some processors perform return stack prediction. CodeGen should avoid issue
 // "normal" call instructions to callees which do not return.
 def FeatureHasRAS : SubtargetFeature<"ras", "HasRAS", "true",
@@ -155,12 +148,17 @@ def ProcSwift   : SubtargetFeature<"swift", "ARMProcFamily", "Swift",
                                    "Swift ARM processors",
                                    [FeatureNEONForFP, FeatureT2XtPk,
                                     FeatureVFP4, FeatureMP, FeatureHWDiv,
-                                    FeatureUseVLD1, FeatureUseVST1,
                                     FeatureHWDivARM, FeatureAvoidPartialCPSR,
                                     FeatureHasSlowFPVMLx]>;
 
+// FIXME: It has not been determined if A15 has these features.
+def ProcA15      : SubtargetFeature<"a15", "ARMProcFamily", "CortexA15",
+                                   "Cortex-A15 ARM processors",
+                                   [FeatureT2XtPk, FeatureFP16,
+                                    FeatureAvoidPartialCPSR]>;
+
 class ProcNoItin<string Name, list<SubtargetFeature> Features>
- : Processor<Name, GenericItineraries, Features>;
+ : Processor<Name, NoItineraries, Features>;
 
 // V4 Processors.
 def : ProcNoItin<"generic",         []>;
@@ -225,7 +223,7 @@ def : Processor<"arm1156t2f-s",     ARMV6Itineraries, [HasV6T2Ops, FeatureVFP2,
 // V7a Processors.
 // FIXME: Cortex-A7 definition is similar to A8, but it has VFP4 and div
 // instructions.
-def : Processor<"cortex-a7",        CortexA8Itineraries,
+def : ProcessorModel<"cortex-a7",   CortexA8Model,
                                     [HasV7Ops, FeatureNEON, FeatureDB,
                                      FeatureDSPThumb2, FeatureHasRAS,
                                      FeatureNEONForFP,
@@ -233,16 +231,21 @@ def : Processor<"cortex-a7",        CortexA8Itineraries,
                                      FeatureT2XtPk,
                                      FeatureVFP4,
                                      FeatureHWDiv, FeatureHWDivARM]>;
-def : Processor<"cortex-a8",        CortexA8Itineraries,
+def : ProcessorModel<"cortex-a8",   CortexA8Model,
                                     [ProcA8, HasV7Ops, FeatureNEON, FeatureDB,
                                      FeatureDSPThumb2, FeatureHasRAS]>;
-def : Processor<"cortex-a9",        CortexA9Itineraries,
+def : ProcessorModel<"cortex-a9",   CortexA9Model,
                                     [ProcA9, HasV7Ops, FeatureNEON, FeatureDB,
                                      FeatureDSPThumb2, FeatureHasRAS]>;
-def : Processor<"cortex-a9-mp",     CortexA9Itineraries,
+def : ProcessorModel<"cortex-a9-mp", CortexA9Model,
                                     [ProcA9, HasV7Ops, FeatureNEON, FeatureDB,
                                      FeatureDSPThumb2, FeatureMP,
                                      FeatureHasRAS]>;
+
+// FIXME: A15 has currently the same ProcessorModel as A9.
+def : ProcessorModel<"cortex-a15",   CortexA9Model,
+                                    [ProcA15, HasV7Ops, FeatureNEON, FeatureDB,
+                                     FeatureDSPThumb2, FeatureHasRAS]>;
 
 // V7M Processors.
 def : ProcNoItin<"cortex-m3",       [HasV7Ops,
@@ -253,11 +256,11 @@ def : ProcNoItin<"cortex-m3",       [HasV7Ops,
 def : ProcNoItin<"cortex-m4",       [HasV7Ops,
                                      FeatureThumb2, FeatureNoARM, FeatureDB,
                                      FeatureHWDiv, FeatureDSPThumb2,
-                                     FeatureT2XtPk, FeatureVFP2,
+                                     FeatureT2XtPk, FeatureVFP4,
                                      FeatureVFPOnlySP, FeatureMClass]>;
 
 // Swift uArch Processors.
-def : Processor<"swift",            SwiftItineraries,
+def : ProcessorModel<"swift",       SwiftModel,
                                     [ProcSwift, HasV7Ops, FeatureNEON,
                                      FeatureDB, FeatureDSPThumb2,
                                      FeatureHasRAS]>;

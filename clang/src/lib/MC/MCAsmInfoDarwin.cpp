@@ -18,7 +18,7 @@
 #include "llvm/MC/MCStreamer.h"
 using namespace llvm;
 
-void MCAsmInfoDarwin::anchor() { } 
+void MCAsmInfoDarwin::anchor() { }
 
 MCAsmInfoDarwin::MCAsmInfoDarwin() {
   // Common settings for all Darwin targets.
@@ -32,6 +32,7 @@ MCAsmInfoDarwin::MCAsmInfoDarwin() {
 
   AlignmentIsInBytes = false;
   COMMDirectiveAlignmentIsInBytes = false;
+  LCOMMDirectiveAlignmentType = LCOMM::Log2Alignment;
   InlineAsmStart = " InlineAsm Start";
   InlineAsmEnd = " InlineAsm End";
 
@@ -54,12 +55,10 @@ MCAsmInfoDarwin::MCAsmInfoDarwin() {
 
   // Doesn't support protected visibility.
   ProtectedVisibilityAttr = MCSA_Invalid;
-  
+
   HasDotTypeDotSizeDirective = false;
   HasNoDeadStrip = true;
   HasSymbolResolver = true;
 
-  DwarfRequiresRelocationForSectionOffset = false;
-  DwarfUsesLabelOffsetForRanges = false;
-  DwarfUsesRelocationsForStringPool = false;
+  DwarfUsesRelocationsAcrossSections = false;
 }

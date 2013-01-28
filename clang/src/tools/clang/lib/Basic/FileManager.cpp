@@ -57,6 +57,10 @@ FileEntry::~FileEntry() {
   if (FD != -1) ::close(FD);
 }
 
+bool FileEntry::isNamedPipe() const {
+  return FileMode & S_IFIFO;
+}
+
 //===----------------------------------------------------------------------===//
 // Windows.
 //===----------------------------------------------------------------------===//
@@ -111,6 +115,14 @@ public:
   }
 
   size_t size() const { return UniqueFiles.size(); }
+
+  void erase(const FileEntry *Entry) {
+    std::string FullPath(GetFullPath(Entry->getName()));
+
+    // Lowercase string because Windows filesystem is case insensitive.
+    FullPath = StringRef(FullPath).lower();
+    UniqueFiles.erase(FullPath);
+  }
 };
 
 //===----------------------------------------------------------------------===//
@@ -152,6 +164,8 @@ public:
   }
 
   size_t size() const { return UniqueFiles.size(); }
+
+  void erase(const FileEntry *Entry) { UniqueFiles.erase(*Entry); }
 };
 
 #endif
@@ -213,6 +227,10 @@ void FileManager::removeStatCache(FileSystemStatCache *statCache) {
   PrevCache->setNextStatCache(statCache->getNextStatCache());
 }
 
+void FileManager::clearStatCaches() {
+  StatCache.reset(0);
+}
+
 /// \brief Retrieve the directory that the given file name resides in.
 /// Filename can point to either a real file or a virtual file.
 static const DirectoryEntry *getDirectoryFromFile(FileManager &FileMgr,
@@ -259,16 +277,14 @@ void FileManager::addAncestorsAsVirtualDirs(StringRef Path) {
   addAncestorsAsVirtualDirs(DirName);
 }
 
-/// getDirectory - Lookup, cache, and verify the specified directory
-/// (real or virtual).  This returns NULL if the directory doesn't
-/// exist.
-///
 const DirectoryEntry *FileManager::getDirectory(StringRef DirName,
                                                 bool CacheFailure) {
-  // stat doesn't like trailing separators.
+  // stat doesn't like trailing separators except for root directory.
   // At least, on Win32 MSVCRT, stat() cannot strip trailing '/'.
   // (though it can strip '\\')
-  if (DirName.size() > 1 && llvm::sys::path::is_separator(DirName.back()))
+  if (DirName.size() > 1 &&
+      DirName != llvm::sys::path::root_path(DirName) &&
+      llvm::sys::path::is_separator(DirName.back()))
     DirName = DirName.substr(0, DirName.size()-1);
 
   ++NumDirLookups;
@@ -315,9 +331,6 @@ const DirectoryEntry *FileManager::getDirectory(StringRef DirName,
   return &UDE;
 }
 
-/// getFile - Lookup, cache, and verify the specified file (real or
-/// virtual).  This returns NULL if the file doesn't exist.
-///
 const FileEntry *FileManager::getFile(StringRef Filename, bool openFile,
                                       bool CacheFailure) {
   ++NumFileLookups;
@@ -569,6 +582,18 @@ bool FileManager::getNoncachedStatValue(StringRef Path,
 
   return ::stat(FilePath.c_str(), &StatBuf) != 0;
 }
+
+void FileManager::invalidateCache(const FileEntry *Entry) {
+  assert(Entry && "Cannot invalidate a NULL FileEntry");
+
+  SeenFileEntries.erase(Entry->getName());
+
+  // FileEntry invalidation should not block future optimizations in the file
+  // caches. Possible alternatives are cache truncation (invalidate last N) or
+  // invalidation of the whole cache.
+  UniqueRealFiles.erase(Entry);
+}
+
 
 void FileManager::GetUniqueIDMapping(
                    SmallVectorImpl<const FileEntry *> &UIDToFiles) const {

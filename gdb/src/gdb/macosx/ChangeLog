@@ -1,3 +1,9 @@
+2012-09-20  Jason Molenda  (jmolenda@apple.com)
+
+	* macosx-nat-infthread.c (get_dispatch_queue_name): Don't
+	parse the libdispatch queue structure if the version
+	num is higher than 3.
+
 2012-07-16  Jason Molenda  (jmolenda@apple.com)
 
 	* macosx-tdep.c (exhaustive_search_for_kernel_in_memory): 

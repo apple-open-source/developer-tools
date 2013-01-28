@@ -351,7 +351,8 @@ void AggExprEmitter::EmitStdInitializerList(llvm::Value *destPtr,
     CGF.ErrorUnsupported(initList, "weird std::initializer_list");
     return;
   }
-  LValue start = CGF.EmitLValueForFieldInitialization(destPtr, *field, 0);
+  LValue DestLV = CGF.MakeNaturalAlignAddrLValue(destPtr, initList->getType());
+  LValue start = CGF.EmitLValueForFieldInitialization(DestLV, *field);
   llvm::Value *arrayStart = Builder.CreateStructGEP(alloc, 0, "arraystart");
   CGF.EmitStoreThroughLValue(RValue::get(arrayStart), start);
   ++field;
@@ -360,7 +361,7 @@ void AggExprEmitter::EmitStdInitializerList(llvm::Value *destPtr,
     CGF.ErrorUnsupported(initList, "weird std::initializer_list");
     return;
   }
-  LValue endOrLength = CGF.EmitLValueForFieldInitialization(destPtr, *field, 0);
+  LValue endOrLength = CGF.EmitLValueForFieldInitialization(DestLV, *field);
   if (ctx.hasSameType(field->getType(), elementPtr)) {
     // End pointer.
     llvm::Value *arrayEnd = Builder.CreateStructGEP(alloc,numInits, "arrayend");
@@ -548,8 +549,10 @@ AggExprEmitter::VisitCompoundLiteralExpr(CompoundLiteralExpr *E) {
 void AggExprEmitter::VisitCastExpr(CastExpr *E) {
   switch (E->getCastKind()) {
   case CK_Dynamic: {
+    // FIXME: Can this actually happen? We have no test coverage for it.
     assert(isa<CXXDynamicCastExpr>(E) && "CK_Dynamic without a dynamic_cast?");
-    LValue LV = CGF.EmitCheckedLValue(E->getSubExpr());
+    LValue LV = CGF.EmitCheckedLValue(E->getSubExpr(),
+                                      CodeGenFunction::TCK_Load);
     // FIXME: Do we also need to handle property references here?
     if (LV.isSimple())
       CGF.EmitDynamicCast(LV.getAddress(), cast<CXXDynamicCastExpr>(E));
@@ -644,6 +647,7 @@ void AggExprEmitter::VisitCastExpr(CastExpr *E) {
   case CK_ARCReclaimReturnedObject:
   case CK_ARCExtendBlockObject:
   case CK_CopyAndAutoreleaseBlockObject:
+  case CK_BuiltinFnToFnPtr:
     llvm_unreachable("cast kind invalid for aggregate types");
   }
 }
@@ -997,28 +1001,24 @@ void AggExprEmitter::VisitInitListExpr(InitListExpr *E) {
     return;
   }
 
-  llvm::Value *DestPtr = EnsureSlot(E->getType()).getAddr();
+  AggValueSlot Dest = EnsureSlot(E->getType());
+  LValue DestLV = CGF.MakeAddrLValue(Dest.getAddr(), E->getType(),
+                                     Dest.getAlignment());
 
   // Handle initialization of an array.
   if (E->getType()->isArrayType()) {
-    if (E->getNumInits() > 0) {
-      QualType T1 = E->getType();
-      QualType T2 = E->getInit(0)->getType();
-      if (CGF.getContext().hasSameUnqualifiedType(T1, T2)) {
-        EmitAggLoadOfLValue(E->getInit(0));
-        return;
-      }
-    }
+    if (E->isStringLiteralInit())
+      return Visit(E->getInit(0));
 
     QualType elementType =
         CGF.getContext().getAsArrayType(E->getType())->getElementType();
 
     llvm::PointerType *APType =
-      cast<llvm::PointerType>(DestPtr->getType());
+      cast<llvm::PointerType>(Dest.getAddr()->getType());
     llvm::ArrayType *AType =
       cast<llvm::ArrayType>(APType->getElementType());
 
-    EmitArrayInit(DestPtr, AType, elementType, E);
+    EmitArrayInit(Dest.getAddr(), AType, elementType, E);
     return;
   }
 
@@ -1051,7 +1051,7 @@ void AggExprEmitter::VisitInitListExpr(InitListExpr *E) {
     // FIXME: volatility
     FieldDecl *Field = E->getInitializedFieldInUnion();
 
-    LValue FieldLoc = CGF.EmitLValueForFieldInitialization(DestPtr, Field, 0);
+    LValue FieldLoc = CGF.EmitLValueForFieldInitialization(DestLV, Field);
     if (NumInitElements) {
       // Store the initializer into the field
       EmitInitializationToLValue(E->getInit(0), FieldLoc);
@@ -1089,8 +1089,8 @@ void AggExprEmitter::VisitInitListExpr(InitListExpr *E) {
         CGF.getTypes().isZeroInitializable(E->getType()))
       break;
     
-    // FIXME: volatility
-    LValue LV = CGF.EmitLValueForFieldInitialization(DestPtr, *field, 0);
+
+    LValue LV = CGF.EmitLValueForFieldInitialization(DestLV, *field);
     // We never generate write-barries for initialized fields.
     LV.setNonGC(true);
     
@@ -1249,9 +1249,6 @@ static void CheckAggExprForMemSetUse(AggValueSlot &Slot, const Expr *E,
 /// type.  The result is computed into DestPtr.  Note that if DestPtr is null,
 /// the value of the aggregate expression is not needed.  If VolatileDest is
 /// true, DestPtr cannot be 0.
-///
-/// \param IsInitializer - true if this evaluation is initializing an
-/// object whose lifetime is already being managed.
 void CodeGenFunction::EmitAggExpr(const Expr *E, AggValueSlot Slot) {
   assert(E && hasAggregateLLVMType(E->getType()) &&
          "Invalid aggregate expression to emit");
@@ -1277,7 +1274,8 @@ LValue CodeGenFunction::EmitAggExprToLValue(const Expr *E) {
 void CodeGenFunction::EmitAggregateCopy(llvm::Value *DestPtr,
                                         llvm::Value *SrcPtr, QualType Ty,
                                         bool isVolatile,
-                                        CharUnits alignment) {
+                                        CharUnits alignment,
+                                        bool isAssignment) {
   assert(!Ty->isAnyComplexType() && "Shouldn't happen for complex");
 
   if (getContext().getLangOpts().CPlusPlus) {
@@ -1306,9 +1304,13 @@ void CodeGenFunction::EmitAggregateCopy(llvm::Value *DestPtr,
   // implementation handles this case safely.  If there is a libc that does not
   // safely handle this, we can add a target hook.
 
-  // Get size and alignment info for this aggregate.
-  std::pair<CharUnits, CharUnits> TypeInfo = 
-    getContext().getTypeInfoInChars(Ty);
+  // Get data size and alignment info for this aggregate. If this is an
+  // assignment don't copy the tail padding. Otherwise copying it is fine.
+  std::pair<CharUnits, CharUnits> TypeInfo;
+  if (isAssignment)
+    TypeInfo = getContext().getTypeInfoDataSizeInChars(Ty);
+  else
+    TypeInfo = getContext().getTypeInfoInChars(Ty);
 
   if (alignment.isZero())
     alignment = TypeInfo.second;
@@ -1365,11 +1367,17 @@ void CodeGenFunction::EmitAggregateCopy(llvm::Value *DestPtr,
       }
     }
   }
+
+  // Determine the metadata to describe the position of any padding in this
+  // memcpy, as well as the TBAA tags for the members of the struct, in case
+  // the optimizer wishes to expand it in to scalar memory operations.
+  llvm::MDNode *TBAAStructTag = CGM.getTBAAStructInfo(Ty);
   
   Builder.CreateMemCpy(DestPtr, SrcPtr,
                        llvm::ConstantInt::get(IntPtrTy, 
                                               TypeInfo.first.getQuantity()),
-                       alignment.getQuantity(), isVolatile);
+                       alignment.getQuantity(), isVolatile,
+                       /*TBAATag=*/0, TBAAStructTag);
 }
 
 void CodeGenFunction::MaybeEmitStdInitializerListCleanup(llvm::Value *loc,

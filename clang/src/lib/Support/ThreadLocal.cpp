@@ -25,9 +25,18 @@ namespace llvm {
 using namespace sys;
 ThreadLocalImpl::ThreadLocalImpl() { }
 ThreadLocalImpl::~ThreadLocalImpl() { }
-void ThreadLocalImpl::setInstance(const void* d) { data = const_cast<void*>(d);}
-const void* ThreadLocalImpl::getInstance() { return data; }
-void ThreadLocalImpl::removeInstance() { data = 0; }
+void ThreadLocalImpl::setInstance(const void* d) {
+  typedef int SIZE_TOO_BIG[sizeof(d) <= sizeof(data) ? 1 : -1];
+  void **pd = reinterpret_cast<void**>(&data);
+  *pd = const_cast<void*>(d);
+}
+const void* ThreadLocalImpl::getInstance() {
+  void **pd = reinterpret_cast<void**>(&data);
+  return *pd;
+}
+void ThreadLocalImpl::removeInstance() {
+  setInstance(0);
+}
 }
 #else
 
@@ -40,7 +49,7 @@ void ThreadLocalImpl::removeInstance() { data = 0; }
 namespace llvm {
 using namespace sys;
 
-ThreadLocalImpl::ThreadLocalImpl() : data(0) {
+ThreadLocalImpl::ThreadLocalImpl() : data() {
   typedef int SIZE_TOO_BIG[sizeof(pthread_key_t) <= sizeof(data) ? 1 : -1];
   pthread_key_t* key = reinterpret_cast<pthread_key_t*>(&data);
   int errorcode = pthread_key_create(key, NULL);
