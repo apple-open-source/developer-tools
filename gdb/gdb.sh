@@ -307,7 +307,7 @@ then
     gdb_bin=`readlink "$gdb_bin"`
   fi
   gdb_bin_dirname=`dirname "$gdb_bin"`
-  GDB_ROOT=`cd "$gdb_bin_dirname"/../.. ; pwd`
+  GDB_ROOT=$gdb_bin_dirname
   if [ "$GDB_ROOT" = "/" ]
       then
         GDB_ROOT=
@@ -318,10 +318,10 @@ osabiopts=""
 
 case "$architecture_to_use" in
   i386 | x86_64)
-    gdb="${GDB_ROOT}/usr/libexec/gdb/gdb-i386-apple-darwin"
+    gdb="${GDB_ROOT}/gdb-i386-apple-darwin"
     ;;
   arm*)
-    gdb="${GDB_ROOT}/usr/libexec/gdb/gdb-arm-apple-darwin"
+    gdb="${GDB_ROOT}/gdb-arm-apple-darwin"
       case "$architecture_to_use" in
         armv6) 
           osabiopts="--osabi DarwinV6" 
@@ -347,7 +347,7 @@ case "$architecture_to_use" in
       ;;
   *)
     echo "Unknown architecture '$architecture_to_use'; using 'i386' instead.";
-    gdb="${GDB_ROOT}/usr/libexec/gdb/gdb-i386-apple-darwin"
+    gdb="${GDB_ROOT}/gdb-i386-apple-darwin"
     ;;
 esac
 

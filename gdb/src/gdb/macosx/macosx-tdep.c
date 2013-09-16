@@ -3333,7 +3333,7 @@ exhaustive_search_for_kernel_in_mem (struct objfile *ofile, CORE_ADDR *addr, uui
   ULONGEST val = 0;
   if (!found_kernel
       && wordsize == 4
-      && !safe_read_memory_unsigned_integer (0xffff0110, 4, &val)
+      && safe_read_memory_unsigned_integer (0xffff0110, 4, &val)
       && val > cur_addr
       && val < stop_addr
       && mach_kernel_starts_here_p (val, uuid, &in_memory_uuid, &in_memory_osabi))
@@ -3345,7 +3345,7 @@ exhaustive_search_for_kernel_in_mem (struct objfile *ofile, CORE_ADDR *addr, uui
   val = 0;
   if (!found_kernel
       && wordsize == 8
-      && !safe_read_memory_unsigned_integer (0xffffff8000002010ULL, 8, &val)
+      && safe_read_memory_unsigned_integer (0xffffff8000002010ULL, 8, &val)
       && val > cur_addr
       && val < stop_addr
       && mach_kernel_starts_here_p (val, uuid, &in_memory_uuid, &in_memory_osabi))
@@ -3362,7 +3362,7 @@ exhaustive_search_for_kernel_in_mem (struct objfile *ofile, CORE_ADDR *addr, uui
   // Read the uint32_t address of 'version' 
   if (!found_kernel
       && wordsize == 4
-      && !safe_read_memory_unsigned_integer (0xffff011c, 4, &val)
+      && safe_read_memory_unsigned_integer (0xffff011c, 4, &val)
       && val > cur_addr
       && val < stop_addr)
     {

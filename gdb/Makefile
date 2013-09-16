@@ -1,5 +1,5 @@
 GDB_VERSION = 6.3.50-20050815
-GDB_RC_VERSION = 1824
+GDB_RC_VERSION = 2831
 
 BINUTILS_VERSION = 2.13-20021117
 BINUTILS_RC_VERSION = 46
@@ -11,20 +11,12 @@ BINUTILS_RC_VERSION = 46
 	build-core build-binutils build-gdb \
 	install-frameworks-headers\
 	install-frameworks-macosx \
-	install-binutils-macosx \
 	install-gdb-fat \
 	install-chmod-macosx install-chmod-macosx-noprocmod \
 	install-clean install-source check \
 	cross-installhdrs \
 	cross-install-frameworks-headers \
 	cross-install-frameworks-headers-finalize
-
-
-# Get the correct setting for SYSTEM_DEVELOPER_TOOLS_DOC_DIR if 
-# the platform-variables.make file exists.
-
-OS=MACOS
-SYSTEM_DEVELOPER_TOOLS_DOC_DIR=/Applications/Xcode.app/Contents/Developer/Documentation/DocSets/com.apple.ADC_Reference_Library.DeveloperTools.docset/Contents/Resources/Documents/documentation/DeveloperTools
 
 
 ifndef RC_ARCHS
@@ -106,7 +98,7 @@ ifndef BINUTILS_BUILD_ROOT
 BINUTILS_BUILD_ROOT = $(SDKROOT)
 endif
 
-BINUTILS_FRAMEWORK_PATH = $(BINUTILS_BUILD_ROOT)/System/Library/PrivateFrameworks
+BINUTILS_FRAMEWORK_PATH = $(DEVELOPER_DIR)/usr/local/gdb
 BINUTILS_LIB_PATH = $(BINUTILS_BUILD_ROOT)/usr/lib
 
 BFD_FRAMEWORK = $(BINUTILS_FRAMEWORK_PATH)/bfd.framework
@@ -128,7 +120,7 @@ export SDKROOT_FOR_BUILD = $(shell xcodebuild -version -sdk macosx Path | head -
 
 export AR       = $(shell xcrun -find ar)
 export CC       = $(shell xcrun -find clang)
-export CPP      = $(shell xcrun -find cpp) -I$(SDKROOT_FOR_BUILD)/usr/include
+export CPP      = $(shell xcrun -find clang) -E -isysroot$(SDKROOT_FOR_BUILD)
 export CXX      = $(shell xcrun -find clang++)
 export LD       = $(shell xcrun -find ld)
 export LIBTOOL  = $(shell xcrun -find libtool)
@@ -157,9 +149,7 @@ FRAMEWORK_VERSION = A
 FRAMEWORK_VERSION_SUFFIX =
 
 DEVEXEC_DIR=UNKNOWN
-LIBEXEC_BINUTILS_DIR=UNKNOWN
 LIBEXEC_GDB_DIR=UNKNOWN
-LIBEXEC_LIB_DIR=UNKNOWN
 MAN_DIR=UNKNOWN
 PRIVATE_FRAMEWORKS_DIR=UNKNOWN
 
@@ -228,12 +218,9 @@ endif
 
 
 MACOSX_FLAGS = \
-	DEVEXEC_DIR=usr/bin \
-	LIBEXEC_BINUTILS_DIR=usr/libexec/binutils \
-	LIBEXEC_GDB_DIR=usr/libexec/gdb \
-	LIB_DIR=usr/lib \
-	MAN_DIR=usr/share/man \
-	PRIVATE_FRAMEWORKS_DIR=System/Library/PrivateFrameworks \
+	DEVEXEC_DIR=$(DEVELOPER_DIR)/usr/local/gdb \
+	LIBEXEC_GDB_DIR=$(DEVELOPER_DIR)/usr/local/gdb \
+	PRIVATE_FRAMEWORKS_DIR=$(DEVELOPER_DIR)/usr/local/gdb \
 	SOURCE_DIR=System/Developer/Source/Commands/gdb
 
 CONFIGURE_OPTIONS = $(filter-out ,\
@@ -328,10 +315,10 @@ crossarm:;
 		$(SYMROOT)/$(LIBEXEC_GDB_DIR)/gdb-arm-apple-darwin
 	chown root:wheel $(DSTROOT)/$(LIBEXEC_GDB_DIR)/gdb-arm-apple-darwin
 	chmod 755 $(DSTROOT)/$(LIBEXEC_GDB_DIR)/gdb-arm-apple-darwin
-	mkdir -p ${DSTROOT}/usr/bin
+	mkdir -p ${DSTROOT}/$(DEVELOPER_DIR)/usr/local/gdb
 	sed -e 's/version=.*/version=$(GDB_VERSION)-$(GDB_RC_VERSION)/' \
-                < $(SRCROOT)/gdb.sh > ${DSTROOT}/usr/bin/gdb
-	chmod 755 ${DSTROOT}/usr/bin/gdb
+                < $(SRCROOT)/gdb.sh > ${DSTROOT}/$(DEVELOPER_DIR)/usr/local/gdb/gdb
+	chmod 755 ${DSTROOT}/$(DEVELOPER_DIR)/usr/local/gdb/gdb
 
 #
 # cross
@@ -411,10 +398,10 @@ cross:;
                 (cd $(SYMROOT)/$(LIBEXEC_GDB_DIR)/ ; dsymutil gdb-$${target_arch_vendor_os}); \
 		strip -S -o $(DSTROOT)/$(LIBEXEC_GDB_DIR)/gdb-$${target_arch_vendor_os} "$${curr_symroot_output_file}"; \
 	done; \
-	mkdir -p ${DSTROOT}/usr/bin; \
+	mkdir -p ${DSTROOT}/$(DEVELOPER_DIR)/usr/local/gdb; \
 	sed -e 's/version=.*/version=$(GDB_VERSION)-$(GDB_RC_VERSION)/' \
-                < $(SRCROOT)/gdb.sh > ${DSTROOT}/usr/bin/gdb; \
-	chmod 755 ${DSTROOT}/usr/bin/gdb; \
+                < $(SRCROOT)/gdb.sh > ${DSTROOT}/$(DEVELOPER_DIR)/usr/local/gdb/gdb; \
+	chmod 755 ${DSTROOT}/$(DEVELOPER_DIR)/usr/local/gdb/gdb; \
 
 
 cross-installhdrs:
@@ -665,14 +652,6 @@ install-gdb-common:
 	set -e; for dstroot in $(SYMROOT) $(DSTROOT); do \
 		\
 		$(INSTALL) -c -d $${dstroot}/$(DEVEXEC_DIR); \
-		$(INSTALL) -c -d $${dstroot}/$(MAN_DIR); \
-		\
-		docroot="$${dstroot}/$(SYSTEM_DEVELOPER_TOOLS_DOC_DIR)/gdb"; \
-		\
-		$(INSTALL) -c -d "$${docroot}"; \
-		\
-		$(INSTALL) -c -m 644 $(SRCROOT)/doc/refcard.pdf "$${docroot}/refcard.pdf"; \
-		\
 	done;
 
 install-gdb-macosx-common: install-gdb-common
@@ -681,31 +660,14 @@ install-gdb-macosx-common: install-gdb-common
 		\
 		$(INSTALL) -c -d $${dstroot}/$(LIBEXEC_GDB_DIR); \
 		\
-		docroot="$${dstroot}/$(SYSTEM_DEVELOPER_TOOLS_DOC_DIR)/gdb"; \
-		\
-		for i in gdb gdbint stabs; do \
-			$(INSTALL) -c -d "$${docroot}/$${i}"; \
-			(cd "$${docroot}/$${i}" && \
-				$(SRCROOT)/texi2html \
-					-split_chapter \
-					-I$(OBJROOT)/$(firstword $(NATIVE_TARGETS))/gdb/doc \
-					-I$(SRCROOT)/src/readline/doc \
-					-I$(SRCROOT)/src/gdb/mi \
-					$(SRCROOT)/src/gdb/doc/$${i}.texinfo); \
-		done; \
-		\
-		$(INSTALL) -c -d $${dstroot}/$(MAN_DIR)/man1; \
-		$(INSTALL) -c -m 644 $(SRCROOT)/src/gdb/gdb.1 $${dstroot}/$(MAN_DIR)/man1/gdb.1; \
-		perl -pi -e 's,GDB_DOCUMENTATION_DIRECTORY,$(SYSTEM_DEVELOPER_TOOLS_DOC_DIR)/gdb,' $${dstroot}/$(MAN_DIR)/man1/gdb.1; \
-		\
-		$(INSTALL) -c -d $${dstroot}/usr/local/OpenSourceLicenses; \
-		$(INSTALL) -c -d $${dstroot}/usr/local/OpenSourceVersions; \
-		$(INSTALL) -c -m 644 $(SRCROOT)/gdb.plist $${dstroot}/usr/local/OpenSourceVersions; \
-		$(INSTALL) -c -m 644 $(SRCROOT)/gdb.txt $${dstroot}/usr/local/OpenSourceLicenses; \
+		$(INSTALL) -c -d $${dstroot}/$(DEVELOPER_DIR)/usr/local/gdb/OpenSourceLicenses; \
+		$(INSTALL) -c -d $${dstroot}/$(DEVELOPER_DIR)/usr/local/gdb/OpenSourceVersions; \
+		$(INSTALL) -c -m 644 $(SRCROOT)/gdb.plist $${dstroot}/$(DEVELOPER_DIR)/usr/local/gdb/OpenSourceVersions; \
+		$(INSTALL) -c -m 644 $(SRCROOT)/gdb.txt $${dstroot}/$(DEVELOPER_DIR)/usr/local/gdb/OpenSourceLicenses; \
 		\
 		sed -e 's/version=.*/version=$(GDB_VERSION)-$(GDB_RC_VERSION)/' \
-			< $(SRCROOT)/gdb.sh > $${dstroot}/usr/bin/gdb; \
-		chmod 755 $${dstroot}/usr/bin/gdb; \
+			< $(SRCROOT)/gdb.sh > $${dstroot}/$(DEVELOPER_DIR)/usr/local/gdb/gdb; \
+		chmod 755 $${dstroot}/$(DEVELOPER_DIR)/usr/local/gdb/gdb; \
 		\
 	done;
 
@@ -741,15 +703,6 @@ dsym-and-strip-fat-gdbs:
 			$(SYMROOT)/$(LIBEXEC_GDB_DIR)/gdb-$${target}; \
 		cp $(DSTROOT)/$(LIBEXEC_GDB_DIR)/gdb-$${target} \
                    $(SYMROOT)/$(LIBEXEC_GDB_DIR)/gdb-$${target}; \
-	done
-
-install-binutils-macosx:
-
-	set -e; for i in $(BINUTILS_BINARIES); do \
-		instname=`echo $${i} | sed -e 's/\\-new//'`; \
-		lipo -create $(patsubst %,$(OBJROOT)/%/binutils/$${i},$(NATIVE_TARGETS)) \
-			-output $(SYMROOT)/$(LIBEXEC_BINUTILS_DIR)/$${instname}; \
-		strip -S -o $(DSTROOT)/$(LIBEXEC_BINUTILS_DIR)/$${instname} $(SYMROOT)/$(LIBEXEC_BINUTILS_DIR)/$${instname}; \
 	done
 
 install-chmod-macosx:
@@ -857,7 +810,6 @@ install-clean:
 install-macosx:
 	$(SUBMAKE) install-clean
 	$(SUBMAKE) install-frameworks-macosx 
-	$(SUBMAKE) install-binutils-macosx 
 ifneq (,$(findstring i386-apple-darwin, $(CANONICAL_ARCHS)))
 	$(SUBMAKE) install-gdb-fat HOSTCOMBOS="$(sort $(filter i386-apple-darwin--i386-apple-darwin, $(NATIVE_TARGETS)) $(filter %--i386-apple-darwin, $(CROSS_TARGETS)) $(filter x86_64-apple-darwin--x86_64-apple-darwin, $(NATIVE_TARGETS)) $(filter %--x86_64-apple-darwin, $(CROSS_TARGETS)))" NATIVE=i386-apple-darwin
 endif

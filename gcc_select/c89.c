@@ -99,11 +99,11 @@ main(int argc, char *argv[])
 	if (realpath(exec_path, link_path))
 		compiler_path = link_path;
 
-	/* Chop off c89 and replace it with llvm-gcc. */
+	/* Chop off c89 and replace it with clang. */
 	lastslash = strrchr(compiler_path, '/');
 	if (!lastslash)
 		err(1, "unexpected path name: %s", compiler_path);
-	strcpy(lastslash+1, "llvm-gcc");
+	strcpy(lastslash+1, "clang");
 
 	addarg(compiler_path);
 	addarg("-std=iso9899:1990");
@@ -200,7 +200,7 @@ main(int argc, char *argv[])
 		  addarg(argv[i++]);
 	}
 
-        /* Exec llvm-gcc. */
+        /* Exec clang. */
 	execv(compiler_path, args);
 	err(1, "failed to exec compiler %s", compiler_path);
 }

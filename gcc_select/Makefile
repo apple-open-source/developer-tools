@@ -8,16 +8,16 @@
 SRCROOT = .
 SRC = `cd $(SRCROOT) && pwd | sed s,/private,,`
 DEVELOPER_DIR ?= /
-DEST_DIR = $(DSTROOT)$(DEVELOPER_DIR)
+DEV_DIR = $(DEVELOPER_DIR)
+DT_TOOLCHAIN_DIR ?= $(DEVELOPER_DIR)
+DEST_DIR = $(DSTROOT)$(DT_TOOLCHAIN_DIR)
+GCC_LIBDIR = $(DSTROOT)$(DEV_DIR)/usr/lib/llvm-gcc/4.2.1
+CLTOOLS_DIR = /Library/Developer/CommandLineTools
 
-.PHONY: all install installhdrs installsrc installdoc clean mklinks installsym
-.PHONY: Embedded
+.PHONY: all install install-toolchain install-developer-dir \
+	installhdrs installsrc installdoc clean installsym
 
 all: install
-
-Embedded:
-	ARM_PLATFORM=`xcodebuild -version -sdk iphoneos PlatformPath` && \
-	$(MAKE) DEST_DIR=$(DSTROOT)$$ARM_PLATFORM/Developer mklinks
 
 $(OBJROOT)/c89.o : $(SRCROOT)/c89.c
 	$(CC) -c $^ -Wall -Os -g $(RC_CFLAGS) -o $@
@@ -25,31 +25,56 @@ $(OBJROOT)/c89.o : $(SRCROOT)/c89.c
 $(OBJROOT)/c99.o : $(SRCROOT)/c99.c
 	$(CC) -c $^ -Wall -Werror -Os -g $(RC_CFLAGS) -o $@
 
+$(OBJROOT)/ld.o : $(SRCROOT)/ld.c
+	$(CC) -c $^ -Wall -Werror -Os -g $(RC_CFLAGS) -o $@
+
+$(OBJROOT)/gcc.o : $(SRCROOT)/gcc.c
+	$(CC) -c $^ -Wall -Werror -Os -g $(RC_CFLAGS) -o $@
+
+$(OBJROOT)/libgcc.o : $(SRCROOT)/libgcc.c
+	$(CC) -c $^ -arch x86_64 -arch i386 -o $@
+
+$(OBJROOT)/libgcc.a: $(OBJROOT)/libgcc.o
+	rm -f $@
+	ar cru $@ $^
+	ranlib $@
+
 % : %.o
 	$(CC) $^ -g $(RC_CFLAGS) -o $@
 
 %.dSYM : %
 	dsymutil $^
 
-install: installdoc mklinks $(OBJROOT)/c99 $(OBJROOT)/c89 installsym
+install: install-toolchain install-developer-dir $(OBJROOT)/ld installsym
+	install -s -c -m 555 $(OBJROOT)/ld $(DSTROOT)$(DEV_DIR)/usr/bin/ld
+	$(MAKE) DT_TOOLCHAIN_DIR=$(CLTOOLS_DIR) install-toolchain
+	$(MAKE) DEV_DIR=$(CLTOOLS_DIR) install-developer-dir
+
+install-toolchain: installdoc $(OBJROOT)/c99 $(OBJROOT)/c89
 	mkdir -p $(DEST_DIR)/usr/bin
 	install -s -c -m 555 $(OBJROOT)/c99 $(DEST_DIR)/usr/bin/c99
 	install -s -c -m 555 $(OBJROOT)/c89 $(DEST_DIR)/usr/bin/c89
 	install -c -m 555 $(SRCROOT)/cpp $(DEST_DIR)/usr/bin/cpp
 
-installsym: $(OBJROOT)/c99.dSYM $(OBJROOT)/c89.dSYM
-	cp -rp $^ $(SYMROOT)
+install-developer-dir: $(OBJROOT)/gcc $(OBJROOT)/libgcc.a
+	mkdir -p $(DSTROOT)$(DEV_DIR)/usr/bin
+	install -s -c -m 555 $(OBJROOT)/gcc $(DSTROOT)$(DEV_DIR)/usr/bin/gcc
+	ln -s gcc $(DSTROOT)$(DEV_DIR)/usr/bin/g++
+	mkdir -p $(GCC_LIBDIR)/include
+	for f in $(SRCROOT)/gcc-headers/*; do \
+	  install -c -m 444 $$f $(GCC_LIBDIR)/include; \
+	done
+	install -c -m 444 $(OBJROOT)/libgcc.a $(GCC_LIBDIR)
 
-mklinks:
-	mkdir -p $(DEST_DIR)/usr/bin
-	ln -s llvm-gcc-4.2 $(DEST_DIR)/usr/bin/gcc
-	ln -s llvm-g++-4.2 $(DEST_DIR)/usr/bin/g++
-	ln -s gcov-4.2 $(DEST_DIR)/usr/bin/gcov
-	ln -s ../llvm-gcc-4.2/bin/gcov-4.2 $(DEST_DIR)/usr/bin/gcov-4.2
+installsym: $(OBJROOT)/c99.dSYM $(OBJROOT)/c89.dSYM $(OBJROOT)/gcc.dSYM $(OBJROOT)/ld.dSYM
+	cp -rp $^ $(SYMROOT)
 
 installsrc:
 	if [ $(SRCROOT) != . ]; then  \
-	    cp Makefile cpp c99.c c89.c c99.1 c89.1 $(SRCROOT); \
+	  mkdir -p $(SRCROOT); \
+	  rsync -ar . $(SRCROOT) --exclude .git --exclude .svn \
+	    --exclude .DS_Store --exclude '*~' --exclude '.*~' \
+	    --copy-unsafe-links; \
 	fi
 
 installdoc:

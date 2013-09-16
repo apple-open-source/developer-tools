@@ -1,3 +1,9 @@
+2012-12-14  Jason Molenda  (jmolenda@apple.com)
+
+	* macosx-tdep.c (exhaustive_search_for_kernel_in_mem): 
+	Fix return type checking in safe_read_memory_unsigned_integer()
+	calls so KASLR kernel is correctly found in memory.
+
 2012-09-20  Jason Molenda  (jmolenda@apple.com)
 
 	* macosx-nat-infthread.c (get_dispatch_queue_name): Don't

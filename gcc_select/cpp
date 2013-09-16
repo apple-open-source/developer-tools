@@ -47,10 +47,13 @@
 #
 #	@(#)usr.bin.cpp.sh	6.5 (Berkeley) 4/1/91
 #
-PATH="`xcode-select -print-path`/usr/bin:/usr/bin:/bin"
-CPP="llvm-gcc-4.2 -E"
-OUTPUT="-o -"
-ALST="-traditional"
+unset xcrun_log
+if xcrun -find cc > /dev/null 2>&1; then
+  CPP="xcrun cc -E"
+else
+  CPP="cc -E"
+fi
+OUTPUT="-"
 NSI=no
 OPTS=""
 INCS=""
@@ -61,52 +64,43 @@ do
 	A="$1"
 	shift
 
-	case $A in
+	case "$A" in
 	-nostdinc)
 		NSI=yes
 		;;
 	-traditional)
 		;;
 	-I*)
-		INCS="$INCS $A"
-		;;
-	-U__GNUC__)
-		ALST=`echo $ALST | sed -e 's/-D__GNUC__//'`
+		INCS=("${INCS[@]}" "$A")
 		;;
 	-imacros|-include|-idirafter|-iprefix|-iwithprefix)
-		INCS="$INCS '$A' '$1'"
+		INCS=("${INCS[@]}" "$A" "$1")
 		shift
 		;;
 	-*)
-		OPTS="$OPTS '$A'"
+		OPTS=("${OPTS[@]}" "$A")
 		;;
 	*)
 		FOUNDFILES=yes
-		if [ $NSI = "no" ]
-		then
-			NSI=skip
-		fi
-		# If we've found an input  name and there's still an arg left, 
+		# If we've found an input name and there's still an arg left, 
 		# that next arg will be the output file.  
-		if [ $# -eq 1 ]
-                then
-		    OUTPUT="-o $1"
+		if [ $# -eq 1 ]; then
+		    OUTPUT="$1"
 		    # and get rid of last arg
 		    shift
 		fi
-		eval $CPP $ALST $INCS $OPTS -x c $A $OUTPUT || exit $?
+		$CPP -traditional "${INCS[@]}" "${OPTS[@]}" -x c "$A" \
+		     -o "$OUTPUT" || exit $?
 		;;
 	esac
 done
 
-if [ $FOUNDFILES = "no" ]
-then
+if [ $FOUNDFILES = "no" ]; then
 	# read standard input
-	if [ $NSI = "no" ]
-	then
-		INCS="$INCS -I/usr/include"
+	if [ $NSI = "no" ]; then
+		INCS=("${INCS[@]}" "-I/usr/include")
 	fi
-	eval exec $CPP $ALST $INCS $OPTS "-" 
+	$CPP -traditional "${INCS[@]}" "${OPTS[@]}" -x c "-" || exit $?
 fi
 
 exit 0

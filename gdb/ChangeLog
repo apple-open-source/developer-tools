@@ -1,3 +1,42 @@
+2013-03-08  Jason Molenda  (jmolenda@apple.com)
+
+	* Makefile (CPP): Add -E to args.
+
+2012-11-13  Jason Molenda  (jmolenda@apple.com)
+
+	* Makefile:  Install PrivateFrameworks headers and
+	OpenSource registry files in $DEVELOPER_DIR/usr/local/gdb
+	along with everything else.
+
+2012-11-12  Jason Molenda  (jmolenda@apple.com)
+
+	* Makefile: Use -isysroot so clang knows that these are
+	the system header files and warnings should be suppressed.
+
+2012-11-12  Jason Molenda  (jmolenda@apple.com)
+
+	* Makefile: Install both gdb shell script and gdb binaries
+	into /A/Xcode.app/C/Developer/usr/local/gdb.
+	* gdb.sh: Run the gdb binary in the same directory as the
+	gdb shell script.
+
+2012-11-09  Jason Molenda  (jmolenda@apple.com)
+
+	* gdb.sh: Update to expect that it is launched from usr/local/bin
+	instead of usr/bin.
+
+2012-11-09  Jason Molenda  (jmolenda@apple.com)
+
+	* Makefile: Install into $DEVELOPER_DIR/usr/local instead of
+	into /usr and letting buildit to copy the files into 
+	$DEVELOPER_DIR/usr after the makefile had completed.
+	Don't install anything into /usr or /usr/local -- it's all
+	in $DEVELOPER_DIR/usr/local now.
+
+2012-11-09  Jason Molenda  (jmolenda@apple.com)
+
+	* Makefile: Stop installing man/textinfo/info documentation.
+
 2012-06-19  Jason Molenda  (jmolenda@apple.com)
 
 	* gdb.sh: If bdgdb exists, exec that.

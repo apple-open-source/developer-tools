@@ -82,24 +82,21 @@ main(int argc, char *argv[])
 	if (realpath(exec_path, link_path))
 		compiler_path = link_path;
 
-	/* Chop off c99 and replace it with llvm-gcc. */
+	/* Chop off c99 and replace it with clang. */
 	lastslash = strrchr(compiler_path, '/');
 	if (!lastslash)
 		err(EX_OSERR, "unexpected path name: %s", compiler_path);
-	strcpy(lastslash+1, "llvm-gcc");
+	strcpy(lastslash+1, "clang");
 
 	addarg(compiler_path);
 	addarg("-std=iso9899:1999");
 	addarg("-pedantic");
 	addarg("-Wextra-tokens"); /* Radar 4205857 */
-#if defined (__ppc__) || defined (__ppc64__)
-	/* on ppc long double doesn't work */
-	addarg("-mlong-double-64");
-#endif
+	addarg("-Wno-error=return-type"); /* Radar 13535926 */
+	addarg("-Wstatic-in-inline"); /* Radar 12866627 */
+	addarg("-Wignored-qualifiers"); /* Radar 13535742 */
 	addarg("-fmath-errno");  /* Radar 4011622 */
-	addarg("-fno-builtin-pow");
-	addarg("-fno-builtin-powl");
-	addarg("-fno-builtin-powf");
+	addarg("-fno-blocks");  /* Radar 13118788 */
 
 	for (;;)
 	  {
@@ -205,7 +202,7 @@ main(int argc, char *argv[])
 	    putchar ('\n');
 	  }
 
-        /* Exec llvm-gcc. */
+        /* Exec clang. */
 	execv(compiler_path, args);
 	err(EX_OSERR, "failed to exec compiler %s", compiler_path);
 }

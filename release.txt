@@ -1,21 +1,19 @@
-# Developer Tools 4.6 Breccia4H127
+# Developer Tools 5.0 5A1413
+CoreOSMakefiles	76	Other
+Git	47	Other
 bison	14	Other
-bootstrap_cmds	85	Other
-cctools	839	Other
-clang	425.0.24	Other
-CoreOSMakefiles	75	Other
-cvs	45	Other
-developer_cmds	60	Other
-gcc_select	115	Other
-gdb	1824	Other
-Git	37	Other
+bootstrap_cmds	86	Other
+cctools	846.2.1	Other
+clang	500.2.76	Other
+cvs	47	Other
+developer_cmds	62	Other
+gcc_select	131	Other
+gdb	2831	Other
 gm4	15	Other
-gnumake	130	Other
-gperf	9	Other
-headerdoc	8.9.14	Other
-ld64	136	Other
-lldb	179.1	Other
-llvmgcc42	2336.11	Other
+gnumake	131	Other
+gperf	11	Other
+headerdoc	8.9.17	Other
+ld64	224.1	Other
+lldb	300.2.47	Other
 pb_makefiles	1005	Other
-rcs	16	Other
-subversion	52	Other
+subversion	62	Other

@@ -93,6 +93,7 @@ struct load_command *load_commands)
     struct rpath_command *rpath;
     struct encryption_info_command *ec;
     struct encryption_info_command_64 *ec64;
+    struct linker_option_command *lo;
     struct dyld_info_command *dc;
     struct version_min_command *vc;
     uint32_t flavor, count;
@@ -958,6 +959,43 @@ check_dylinker_command:
 		    }
 		    break;
 		}
+	    	if(cputype == CPU_TYPE_ARM64){
+		    arm_thread_state64_t *cpu;
+
+		    nflavor = 0;
+		    p = (char *)ut + ut->cmdsize;
+		    while(state < p){
+			flavor = *((uint32_t *)state);
+			state += sizeof(uint32_t);
+			count = *((uint32_t *)state);
+			state += sizeof(uint32_t);
+			switch(flavor){
+			case ARM_THREAD_STATE:
+			    if(count != ARM_THREAD_STATE_COUNT){
+				error("in swap_object_headers(): malformed "
+				    "load commands (count "
+				    "not ARM_THREAD_STATE_COUNT for "
+				    "flavor number %lu which is a ARM_THREAD_"
+				    "STATE flavor in %s command %lu)",
+				    nflavor, ut->cmd == LC_UNIXTHREAD ? 
+				    "LC_UNIXTHREAD" : "LC_THREAD", i);
+				return(FALSE);
+			    }
+			    cpu = (arm_thread_state64_t *)state;
+			    state += sizeof(arm_thread_state64_t);
+			    break;
+			default:
+			    error("in swap_object_headers(): malformed load "
+				  "commands (unknown flavor for flavor number "
+				  "%lu in %s command %lu can't byte swap it)",
+				  nflavor, ut->cmd == LC_UNIXTHREAD ?
+				  "LC_UNIXTHREAD" : "LC_THREAD", i);
+			    return(FALSE);
+			}
+			nflavor++;
+		    }
+		    break;
+		}
 		error("in swap_object_headers(): malformed load commands "
 		    "(unknown cputype (%d) and cpusubtype (%d) of object and "
                     "can't byte swap %s command %lu)", cputype, 
@@ -1151,6 +1189,15 @@ check_dylinker_command:
 		    error("in swap_object_headers(): malformed load commands "
 			  "(LC_ENCRYPTION_INFO_64 command %lu has incorrect "
 			  "cmdsize", i);
+		    return(FALSE);
+		}
+		break;
+
+	    case LC_LINKER_OPTION:
+		lo = (struct linker_option_command *)lc;
+		if(lo->cmdsize < sizeof(struct linker_option_command)){
+		    error("in swap_object_headers(): malformed load commands "
+			  "(LC_LINKER_OPTION command %lu is too small", i);
 		    return(FALSE);
 		}
 		break;
@@ -1586,6 +1633,26 @@ check_dylinker_command:
 		    }
 		    break;
 		}
+	    	if(cputype == CPU_TYPE_ARM64){
+		    arm_thread_state64_t *cpu;
+
+		    while(state < p){
+			flavor = *((uint32_t *)state);
+			*((uint32_t *)state) = SWAP_INT(flavor);
+			state += sizeof(uint32_t);
+			count = *((uint32_t *)state);
+			*((uint32_t *)state) = SWAP_INT(count);
+			state += sizeof(uint32_t);
+			switch(flavor){
+			case ARM_THREAD_STATE64:
+			    cpu = (arm_thread_state64_t *)state;
+			    swap_arm_thread_state64_t(cpu, target_byte_sex);
+			    state += sizeof(arm_thread_state64_t);
+			    break;
+			}
+		    }
+		    break;
+		}
 		break;
 
 	    case LC_MAIN:
@@ -1646,10 +1713,15 @@ check_dylinker_command:
 		ec = (struct encryption_info_command *)lc;
 		swap_encryption_command(ec, target_byte_sex);
 		break;
-
+		
 	    case LC_ENCRYPTION_INFO_64:
 		ec64 = (struct encryption_info_command_64 *)lc;
 		swap_encryption_command_64(ec64, target_byte_sex);
+		break;
+		
+	    case LC_LINKER_OPTION:
+		lo = (struct linker_option_command *)lc;
+		swap_linker_option_command(lo, target_byte_sex);
 		break;
 		
 	    case LC_DYLD_INFO:
