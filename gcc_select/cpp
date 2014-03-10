@@ -89,7 +89,7 @@ do
 		    # and get rid of last arg
 		    shift
 		fi
-		$CPP -traditional "${INCS[@]}" "${OPTS[@]}" -x c "$A" \
+		$CPP -traditional "${INCS[@]}" -x c "${OPTS[@]}" "$A" \
 		     -o "$OUTPUT" || exit $?
 		;;
 	esac
@@ -100,7 +100,7 @@ if [ $FOUNDFILES = "no" ]; then
 	if [ $NSI = "no" ]; then
 		INCS=("${INCS[@]}" "-I/usr/include")
 	fi
-	$CPP -traditional "${INCS[@]}" "${OPTS[@]}" -x c "-" || exit $?
+	$CPP -traditional "${INCS[@]}" -x c "${OPTS[@]}" "-" || exit $?
 fi
 
 exit 0
