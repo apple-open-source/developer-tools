@@ -8,7 +8,7 @@ FrT;@1|>>0|$15|HeaderDoc::Test%22|$4|CODE$7|COMMENT$7|CPPCODE$15|EXPECTED_RESULT
 	end bar
 end script
 $40|(*! This is a comment about MyScript *)
-$0|$16157|-=: TOP LEVEL COMMENT PARSE VALUES :=-
+$0|$15034|-=: TOP LEVEL COMMENT PARSE VALUES :=-
 inHeader: 0
 inClass: 0
 inInterface: 0
@@ -584,12 +584,7 @@ END OF OBJECT
 
 -=: HTML OUTPUT OF PARSE TREES :=-
 OBJECT: MyScript (HeaderDoc::CPPClass)
-	<span class="keyword">script</span> <!-- a logicalPath="//test_ref/applescript/econst/MyScript //test_ref/applescript/data/MyScript //test_ref/applescript/clconst/MyScript " machineGenerated="true" --><span class="var">MyScript</span><!-- /a --> <span class="comment">(*! This is a comment about foo *)</span>
-	    <span class="keyword">on</span> <!-- a logicalPath="//test_ref/applescript/instm/foo //test_ref/applescript/clm/foo //test_ref/applescript/intfcm/foo //test_ref/applescript/intfm/foo //test_ref/applescript/func/foo //test_ref/applescript/ftmplt/foo //test_ref/applescript/defn/foo //test_ref/applescript/macro/foo //test_ref/doc/anysymbol/foo" machineGenerated="true" --><span class="function">foo</span><!-- /a -->(
-	        <span class="param">x</span>,
-	        <span class="param">y</span>) <span class="keyword">end</span>   <span class="comment">(*! This is a comment about bar *)</span>
-	    <span class="keyword">on</span> <!-- a logicalPath="//test_ref/applescript/instm/bar //test_ref/applescript/clm/bar //test_ref/applescript/intfcm/bar //test_ref/applescript/intfm/bar //test_ref/applescript/func/bar //test_ref/applescript/ftmplt/bar //test_ref/applescript/defn/bar //test_ref/applescript/macro/bar //test_ref/doc/anysymbol/bar" machineGenerated="true" --><span class="function">bar</span><!-- /a -->(
-	        <span class="param">z</span>)
+	<span class="keyword">script</span> <!-- a logicalPath="//test_ref/applescript/econst/MyScript //test_ref/applescript/data/MyScript //test_ref/applescript/clconst/MyScript " machineGenerated="true" --><span class="var">MyScript</span><!-- /a --> 
 END OF OBJECT
 
 

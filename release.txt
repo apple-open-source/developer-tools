@@ -1,19 +1,17 @@
-# Developer Tools 5.1 Acadia5B130a
-bison	14	Other
-bootstrap_cmds	86	Other
-cctools	855	Other
-clang	503.0.38	Other
+# Developer Tools 6.0 6A317
 CoreOSMakefiles	76	Other
+Git	50	Other
+bison	14	Other
+bootstrap_cmds	91	Other
+cctools	862	Other
+clang	600.0.51	Other
 cvs	47	Other
 developer_cmds	62	Other
-gcc_select	132	Other
-gdb	2831	Other
-Git	48	Other
+gcc_select	133	Other
 gm4	15	Other
 gnumake	131	Other
-gperf	11	Other
-headerdoc	8.9.17	Other
-ld64	236.3	Other
-lldb	310.2.36	Other
+gperf	13	Other
+headerdoc	8.9.26	Other
+ld64	241.9	Other
 pb_makefiles	1005	Other
-subversion	62	Other
+subversion	65	Other

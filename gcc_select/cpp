@@ -48,11 +48,7 @@
 #	@(#)usr.bin.cpp.sh	6.5 (Berkeley) 4/1/91
 #
 unset xcrun_log
-if xcrun -find cc > /dev/null 2>&1; then
-  CPP="xcrun cc -E"
-else
-  CPP="cc -E"
-fi
+CPP="xcrun cc -E"
 OUTPUT="-"
 NSI=no
 OPTS=""
