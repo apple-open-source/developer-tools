@@ -1,17 +1,17 @@
-# Developer Tools 6.1 OzarkUpdate6A1052d
+# Developer Tools 6.2 Zion6C131e
 bison	14	Other
 bootstrap_cmds	91	Other
 cctools	862	Other
-clang	600.0.54	Other
+clang	600.0.57	Other
 CoreOSMakefiles	76	Other
 cvs	47	Other
 developer_cmds	62	Other
 gcc_select	133	Other
-Git	50	Other
+Git	50.3	Other
 gm4	15	Other
 gnumake	131	Other
 gperf	13	Other
 headerdoc	8.9.26	Other
 ld64	241.9	Other
 pb_makefiles	1005	Other
-subversion	65	Other
+subversion	66	Other
