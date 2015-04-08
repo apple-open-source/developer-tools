@@ -18,7 +18,7 @@
 #include "llvm/Support/MemoryBuffer.h"
 #include "llvm/Support/Path.h"
 #include "llvm/Support/raw_ostream.h"
-#include "llvm/Support/system_error.h"
+#include <system_error>
 
 #ifndef NDEBUG
 #include "llvm/Support/GraphWriter.h"
@@ -33,22 +33,23 @@ ModuleFile *ModuleManager::lookup(StringRef Name) {
   if (Entry)
     return lookup(Entry);
 
-  return 0;
+  return nullptr;
 }
 
 ModuleFile *ModuleManager::lookup(const FileEntry *File) {
   llvm::DenseMap<const FileEntry *, ModuleFile *>::iterator Known
     = Modules.find(File);
   if (Known == Modules.end())
-    return 0;
+    return nullptr;
 
   return Known->second;
 }
 
-llvm::MemoryBuffer *ModuleManager::lookupBuffer(StringRef Name) {
+std::unique_ptr<llvm::MemoryBuffer>
+ModuleManager::lookupBuffer(StringRef Name) {
   const FileEntry *Entry = FileMgr.getFile(Name, /*openFile=*/false,
                                            /*cacheFailure=*/false);
-  return InMemoryBuffers[Entry];
+  return std::move(InMemoryBuffers[Entry]);
 }
 
 ModuleManager::AddModuleResult
@@ -61,7 +62,7 @@ ModuleManager::addModule(StringRef FileName, ModuleKind Type,
                              ReadSignature,
                          ModuleFile *&Module,
                          std::string &ErrorStr) {
-  Module = 0;
+  Module = nullptr;
 
   // Look for the file entry. This only fails if the expected size or
   // modification time differ.
@@ -101,17 +102,20 @@ ModuleManager::addModule(StringRef FileName, ModuleKind Type,
     }
 
     // Load the contents of the module
-    if (llvm::MemoryBuffer *Buffer = lookupBuffer(FileName)) {
+    if (std::unique_ptr<llvm::MemoryBuffer> Buffer = lookupBuffer(FileName)) {
       // The buffer was already provided for us.
-      assert(Buffer && "Passed null buffer");
-      New->Buffer.reset(Buffer);
+      New->Buffer = std::move(Buffer);
     } else {
       // Open the AST file.
-      llvm::error_code ec;
+      std::error_code ec;
       if (FileName == "-") {
-        ec = llvm::MemoryBuffer::getSTDIN(New->Buffer);
+        llvm::ErrorOr<std::unique_ptr<llvm::MemoryBuffer>> Buf =
+            llvm::MemoryBuffer::getSTDIN();
+        ec = Buf.getError();
         if (ec)
           ErrorStr = ec.message();
+        else
+          New->Buffer = std::move(Buf.get());
       } else {
         // Leave the FileEntry open so if it gets read again by another
         // ModuleManager it must be the same underlying file.
@@ -167,22 +171,6 @@ ModuleManager::addModule(StringRef FileName, ModuleKind Type,
   return NewModule? NewlyLoaded : AlreadyLoaded;
 }
 
-namespace {
-  /// \brief Predicate that checks whether a module file occurs within
-  /// the given set.
-  class IsInModuleFileSet : public std::unary_function<ModuleFile *, bool> {
-    llvm::SmallPtrSet<ModuleFile *, 4> &Removed;
-
-  public:
-    IsInModuleFileSet(llvm::SmallPtrSet<ModuleFile *, 4> &Removed)
-    : Removed(Removed) { }
-
-    bool operator()(ModuleFile *MF) const {
-      return Removed.count(MF);
-    }
-  };
-}
-
 void ModuleManager::removeModules(
     ModuleIterator first, ModuleIterator last,
     llvm::SmallPtrSetImpl<ModuleFile *> &LoadedSuccessfully,
@@ -194,9 +182,10 @@ void ModuleManager::removeModules(
   llvm::SmallPtrSet<ModuleFile *, 4> victimSet(first, last);
 
   // Remove any references to the now-destroyed modules.
-  IsInModuleFileSet checkInSet(victimSet);
   for (unsigned i = 0, n = Chain.size(); i != n; ++i) {
-    Chain[i]->ImportedBy.remove_if(checkInSet);
+    Chain[i]->ImportedBy.remove_if([&](ModuleFile *MF) {
+      return victimSet.count(MF);
+    });
   }
 
   // Delete the modules and erase them from the various structures.
@@ -206,7 +195,7 @@ void ModuleManager::removeModules(
     if (modMap) {
       StringRef ModuleName = (*victim)->ModuleName;
       if (Module *mod = modMap->findModule(ModuleName)) {
-        mod->setASTFile(0);
+        mod->setASTFile(nullptr);
       }
     }
 
@@ -223,12 +212,13 @@ void ModuleManager::removeModules(
   Chain.erase(first, last);
 }
 
-void ModuleManager::addInMemoryBuffer(StringRef FileName, 
-                                      llvm::MemoryBuffer *Buffer) {
-  
-  const FileEntry *Entry = FileMgr.getVirtualFile(FileName, 
-                                                  Buffer->getBufferSize(), 0);
-  InMemoryBuffers[Entry] = Buffer;
+void
+ModuleManager::addInMemoryBuffer(StringRef FileName,
+                                 std::unique_ptr<llvm::MemoryBuffer> Buffer) {
+
+  const FileEntry *Entry =
+      FileMgr.getVirtualFile(FileName, Buffer->getBufferSize(), 0);
+  InMemoryBuffers[Entry] = std::move(Buffer);
 }
 
 ModuleManager::VisitState *ModuleManager::allocateVisitState() {
@@ -236,7 +226,7 @@ ModuleManager::VisitState *ModuleManager::allocateVisitState() {
   if (FirstVisitState) {
     VisitState *Result = FirstVisitState;
     FirstVisitState = FirstVisitState->NextState;
-    Result->NextState = 0;
+    Result->NextState = nullptr;
     return Result;
   }
 
@@ -245,7 +235,7 @@ ModuleManager::VisitState *ModuleManager::allocateVisitState() {
 }
 
 void ModuleManager::returnVisitState(VisitState *State) {
-  assert(State->NextState == 0 && "Visited state is in list?");
+  assert(State->NextState == nullptr && "Visited state is in list?");
   State->NextState = FirstVisitState;
   FirstVisitState = State;
 }
@@ -274,7 +264,7 @@ void ModuleManager::moduleFileAccepted(ModuleFile *MF) {
 }
 
 ModuleManager::ModuleManager(FileManager &FileMgr)
-  : FileMgr(FileMgr), GlobalIndex(), FirstVisitState(0) { }
+  : FileMgr(FileMgr), GlobalIndex(), FirstVisitState(nullptr) {}
 
 ModuleManager::~ModuleManager() {
   for (unsigned i = 0, e = Chain.size(); i != e; ++i)
@@ -285,7 +275,7 @@ ModuleManager::~ModuleManager() {
 void
 ModuleManager::visit(bool (*Visitor)(ModuleFile &M, void *UserData),
                      void *UserData,
-                     llvm::SmallPtrSet<ModuleFile *, 4> *ModuleFilesHit) {
+                     llvm::SmallPtrSetImpl<ModuleFile *> *ModuleFilesHit) {
   // If the visitation order vector is the wrong size, recompute the order.
   if (VisitOrder.size() != Chain.size()) {
     unsigned N = size();
@@ -334,7 +324,7 @@ ModuleManager::visit(bool (*Visitor)(ModuleFile &M, void *UserData),
     assert(VisitOrder.size() == N && "Visitation order is wrong?");
 
     delete FirstVisitState;
-    FirstVisitState = 0;
+    FirstVisitState = nullptr;
   }
 
   VisitState *State = allocateVisitState();

@@ -1,17 +1,17 @@
-# Developer Tools 6.2 Zion6C131e
+# Developer Tools 6.3 Bryce6D570
 bison	14	Other
-bootstrap_cmds	91	Other
-cctools	862	Other
-clang	600.0.57	Other
+bootstrap_cmds	93	Other
+cctools	870	Other
+clang	602.0.53	Other
 CoreOSMakefiles	76	Other
 cvs	47	Other
 developer_cmds	62	Other
 gcc_select	133	Other
-Git	50.3	Other
+Git	55	Other
 gm4	15	Other
 gnumake	131	Other
 gperf	13	Other
 headerdoc	8.9.26	Other
-ld64	241.9	Other
+ld64	242	Other
 pb_makefiles	1005	Other
 subversion	66	Other

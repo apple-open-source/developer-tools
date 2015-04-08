@@ -12,8 +12,8 @@
 //
 //===----------------------------------------------------------------------===//
 
-#ifndef LLVM_CLANG_ANALYZEROPTIONS_H
-#define LLVM_CLANG_ANALYZEROPTIONS_H
+#ifndef LLVM_CLANG_STATICANALYZER_CORE_ANALYZEROPTIONS_H
+#define LLVM_CLANG_STATICANALYZER_CORE_ANALYZEROPTIONS_H
 
 #include "clang/Basic/LLVM.h"
 #include "llvm/ADT/IntrusiveRefCntPtr.h"
@@ -54,6 +54,7 @@ NumConstraints
 enum AnalysisDiagClients {
 #define ANALYSIS_DIAGNOSTICS(NAME, CMDFLAG, DESC, CREATFN) PD_##NAME,
 #include "clang/StaticAnalyzer/Core/Analyses.def"
+PD_NONE,
 NUM_ANALYSIS_DIAG_CLIENTS
 };
 
@@ -147,7 +148,7 @@ public:
   unsigned AnalyzeAll : 1;
   unsigned AnalyzerDisplayProgress : 1;
   unsigned AnalyzeNestedBlocks : 1;
-  
+
   /// \brief The flag regulates if we should eagerly assume evaluations of
   /// conditionals, thus, bifurcating the path.
   ///
@@ -205,6 +206,9 @@ private:
   /// \sa mayInlineTemplateFunctions
   Optional<bool> InlineTemplateFunctions;
 
+  /// \sa mayInlineCXXAllocator
+  Optional<bool> InlineCXXAllocator;
+
   /// \sa mayInlineCXXContainerMethods
   Optional<bool> InlineCXXContainerMethods;
 
@@ -235,6 +239,9 @@ private:
 
   /// \sa reportIssuesInMainSourceFile
   Optional<bool> ReportIssuesInMainSourceFile;
+
+  /// \sa StableReportFilename
+  Optional<bool> StableReportFilename;
 
   /// \sa getGraphTrimInterval
   Optional<unsigned> GraphTrimInterval;
@@ -297,6 +304,12 @@ public:
   /// accepts the values "true" and "false".
   bool mayInlineTemplateFunctions();
 
+  /// Returns whether or not allocator call may be considered for inlining.
+  ///
+  /// This is controlled by the 'c++-allocator-inlining' config option, which
+  /// accepts the values "true" and "false".
+  bool mayInlineCXXAllocator();
+
   /// Returns whether or not methods of C++ container objects may be considered
   /// for inlining.
   ///
@@ -355,6 +368,12 @@ public:
   /// This is controlled by the 'report-in-main-source-file' config option,
   /// which accepts the values "true" and "false".
   bool shouldReportIssuesInMainSourceFile();
+
+  /// Returns whether or not the report filename should be random or not.
+  ///
+  /// This is controlled by the 'stable-report-filename' config option,
+  /// which accepts the values "true" and "false". Default = false
+  bool shouldWriteStableReportFilename();
 
   /// Returns whether irrelevant parts of a bug report path should be pruned
   /// out of the final output.
