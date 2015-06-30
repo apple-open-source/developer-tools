@@ -1,4 +1,4 @@
-# Developer Tools 6.3 Bryce6D570
+# Developer Tools 6.4 BryceCamp6E35b
 bison	14	Other
 bootstrap_cmds	93	Other
 cctools	870	Other
@@ -12,6 +12,6 @@ gm4	15	Other
 gnumake	131	Other
 gperf	13	Other
 headerdoc	8.9.26	Other
-ld64	242	Other
+ld64	242.2	Other
 pb_makefiles	1005	Other
 subversion	66	Other
