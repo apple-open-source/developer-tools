@@ -1,17 +1,16 @@
-# Developer Tools 6.4 BryceCamp6E35b
+# Developer Tools 7.0 7A220
+CoreOSMakefiles	76	Other
+Git	58	Other
 bison	14	Other
 bootstrap_cmds	93	Other
-cctools	870	Other
-clang	602.0.53	Other
-CoreOSMakefiles	76	Other
-cvs	47	Other
+cctools	877.5	Other
+clang	700.0.72	Other
 developer_cmds	62	Other
 gcc_select	133	Other
-Git	55	Other
 gm4	15	Other
 gnumake	131	Other
 gperf	13	Other
 headerdoc	8.9.26	Other
-ld64	242.2	Other
+ld64	253.3	Other
 pb_makefiles	1005	Other
-subversion	66	Other
+subversion	67	Other
