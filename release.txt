@@ -1,16 +1,16 @@
-# Developer Tools 7.0 7A220
-CoreOSMakefiles	76	Other
-Git	58	Other
+# Developer Tools 7.1 Blueridge7B91b
 bison	14	Other
 bootstrap_cmds	93	Other
-cctools	877.5	Other
-clang	700.0.72	Other
+cctools	877.7	Other
+clang	700.1.76	Other
+CoreOSMakefiles	76	Other
 developer_cmds	62	Other
 gcc_select	133	Other
+Git	60	Other
 gm4	15	Other
 gnumake	131	Other
 gperf	13	Other
 headerdoc	8.9.26	Other
-ld64	253.3	Other
+ld64	253.6	Other
 pb_makefiles	1005	Other
 subversion	67	Other
