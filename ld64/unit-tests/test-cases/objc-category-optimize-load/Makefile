@@ -43,7 +43,7 @@ all-armv6: all-rest
 all-armv7: all-rest
 
 all-rest:
-	# check optimzation of category methods
+	# check optimization of category methods
 	${CC} ${CCFLAGS} ${OPTIONS} -dynamiclib foo.m cat1.m  -framework Foundation -o libfoo.dylib
 	size -l libfoo.dylib | grep "__objc_catlist:" | ${FAIL_IF_EMPTY}
 	${PASS_IFF_GOOD_MACHO} libfoo.dylib

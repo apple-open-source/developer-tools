@@ -40,7 +40,7 @@ typedef bool lto_bool_t;
  * @{
  */
 
-#define LTO_API_VERSION 15
+#define LTO_API_VERSION 17
 #define LTO_APPLE_INTERNAL 1
 
 /**
@@ -63,7 +63,9 @@ typedef enum {
     LTO_SYMBOL_SCOPE_HIDDEN                = 0x00001000,
     LTO_SYMBOL_SCOPE_PROTECTED             = 0x00002000,
     LTO_SYMBOL_SCOPE_DEFAULT               = 0x00001800,
-    LTO_SYMBOL_SCOPE_DEFAULT_CAN_BE_HIDDEN = 0x00002800
+    LTO_SYMBOL_SCOPE_DEFAULT_CAN_BE_HIDDEN = 0x00002800,
+    LTO_SYMBOL_COMDAT                      = 0x00004000,
+    LTO_SYMBOL_ALIAS                       = 0x00008000
 } lto_symbol_attributes;
 
 /**
@@ -298,39 +300,15 @@ lto_module_get_asm_symbol_name(lto_module_t mod, unsigned int index);
 
 
 /**
- * Returns the number of dependent libraries in the object module.
+ * Returns the module's linker options.
  *
- * \since LTO_API_VERSION=8
- */
-extern unsigned int
-lto_module_get_num_deplibs(lto_module_t mod);
-
-
-/**
- * Returns the ith dependent library in the module.
+ * The linker options may consist of multiple flags. It is the linker's
+ * responsibility to split the flags using a platform-specific mechanism.
  *
- * \since LTO_API_VERSION=8
+ * \since LTO_API_VERSION=16
  */
 extern const char*
-lto_module_get_deplib(lto_module_t mod, unsigned int index);
-
-
-/**
- * Returns the number of linker options in the object module.
- *
- * \since LTO_API_VERSION=8
- */
-extern unsigned int
-lto_module_get_num_linkeropts(lto_module_t mod);
-
-
-/**
- * Returns the ith linker option in the module.
- *
- * \since LTO_API_VERSION=8
- */
-extern const char*
-lto_module_get_linkeropt(lto_module_t mod, unsigned int index);
+lto_module_get_linkeropts(lto_module_t mod);
 
 
 /**
@@ -428,8 +406,8 @@ extern lto_bool_t
 lto_codegen_add_module(lto_code_gen_t cg, lto_module_t mod);
 
 /**
- * Sets the object module for code generation. This will transfer the ownship of
- * the module to code generator.
+ * Sets the object module for code generation. This will transfer the ownership
+ * of the module to the code generator.
  *
  * \c cg and \c mod must both be in the same context.
  *
@@ -566,7 +544,7 @@ lto_codegen_compile_optimized(lto_code_gen_t cg, size_t* length);
 extern bool lto_codegen_hide_symbols(lto_code_gen_t cg);
 
 /**
- * When hiding non-exported symbols, write the reverse map to a file
+ * When hiding non-exported symbols, write the reverse map to a file.
  *
  * On success returns true.
  *
@@ -579,7 +557,7 @@ extern bool lto_codegen_write_symbol_reverse_map(lto_code_gen_t cg,
 /**
  * Lookup the hidden name for the symbol.
  *
- * On success returns the hiddened name. If name not hidden, returns nullptr
+ * On success returns the hidden name. If not hidden, returns nullptr.
  *
  * \since LTO_API_VERSION=17
  *        LTO_APPLE_INTERNAL

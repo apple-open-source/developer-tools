@@ -33,6 +33,7 @@ void llvm::initializeTransformUtils(PassRegistry &Registry) {
   initializeInstSimplifierPass(Registry);
   initializeMetaRenamerPass(Registry);
   initializeStripNonLineTableDebugInfoPass(Registry);
+  initializeObfuscateModulePass(Registry);
 }
 
 /// LLVMInitializeTransformUtils - C binding for initializeTransformUtilsPasses.

@@ -56,21 +56,6 @@ DISubprogram *llvm::getDISubprogram(const Function *F) {
   return nullptr;
 }
 
-DICompositeTypeBase *llvm::getDICompositeType(DIType *T) {
-  if (auto *C = dyn_cast_or_null<DICompositeTypeBase>(T))
-    return C;
-
-  if (auto *D = dyn_cast_or_null<DIDerivedTypeBase>(T)) {
-    // This function is currently used by dragonegg and dragonegg does
-    // not generate identifier for types, so using an empty map to resolve
-    // DerivedFrom should be fine.
-    DITypeIdentifierMap EmptyMap;
-    return getDICompositeType(D->getBaseType().resolve(EmptyMap));
-  }
-
-  return nullptr;
-}
-
 DITypeIdentifierMap
 llvm::generateDITypeIdentifierMap(const NamedMDNode *CU_Nodes) {
   DITypeIdentifierMap Map;
@@ -164,20 +149,22 @@ void DebugInfoFinder::processType(DIType *DT) {
   if (!addType(DT))
     return;
   processScope(DT->getScope().resolve(TypeIdentifierMap));
-  if (auto *DCT = dyn_cast<DICompositeTypeBase>(DT)) {
+  if (auto *ST = dyn_cast<DISubroutineType>(DT)) {
+    for (DITypeRef Ref : ST->getTypeArray())
+      processType(Ref.resolve(TypeIdentifierMap));
+    return;
+  }
+  if (auto *DCT = dyn_cast<DICompositeType>(DT)) {
     processType(DCT->getBaseType().resolve(TypeIdentifierMap));
-    if (auto *ST = dyn_cast<DISubroutineType>(DCT)) {
-      for (DITypeRef Ref : ST->getTypeArray())
-        processType(Ref.resolve(TypeIdentifierMap));
-      return;
-    }
     for (Metadata *D : DCT->getElements()) {
       if (auto *T = dyn_cast<DIType>(D))
         processType(T);
       else if (auto *SP = dyn_cast<DISubprogram>(D))
         processSubprogram(SP);
     }
-  } else if (auto *DDT = dyn_cast<DIDerivedTypeBase>(DT)) {
+    return;
+  }
+  if (auto *DDT = dyn_cast<DIDerivedType>(DT)) {
     processType(DDT->getBaseType().resolve(TypeIdentifierMap));
   }
 }
@@ -313,6 +300,10 @@ bool DebugInfoFinder::addScope(DIScope *Scope) {
 
 bool llvm::stripDebugInfo(Function &F) {
   bool Changed = false;
+  if (F.getSubprogram()) {
+    Changed = true;
+    F.setSubprogram(nullptr);
+  }
   for (BasicBlock &BB : F) {
     for (Instruction &I : BB) {
       if (I.getDebugLoc()) {
@@ -349,7 +340,7 @@ bool llvm::StripDebugInfo(Module &M) {
 
   for (Module::named_metadata_iterator NMI = M.named_metadata_begin(),
          NME = M.named_metadata_end(); NMI != NME;) {
-    NamedMDNode *NMD = NMI;
+    NamedMDNode *NMD = &*NMI;
     ++NMI;
     if (NMD->getName().startswith("llvm.dbg.")) {
       NMD->eraseFromParent();
@@ -418,7 +409,6 @@ private:
     auto Type = cast_or_null<DISubroutineType>(map(MDS->getType()));
     auto ContainingType = map(MDS->getContainingType());
     auto Variables = cast<MDTuple>(EmptyNode);
-    auto Function = MDS->getFunction();
     auto TemplateParams = nullptr;
 
     // Make a distinct DISubprogram, for situations that warrent it.
@@ -428,7 +418,7 @@ private:
           LinkageName, FileAndScope, MDS->getLine(), Type, MDS->isLocalToUnit(),
           MDS->isDefinition(), MDS->getScopeLine(), DITypeRef(ContainingType),
           MDS->getVirtuality(), MDS->getVirtualIndex(), MDS->getFlags(),
-          MDS->isOptimized(), Function, TemplateParams, Declaration, Variables);
+          MDS->isOptimized(), TemplateParams, Declaration, Variables);
     };
 
     if (MDS->isDistinct())
@@ -439,7 +429,7 @@ private:
         FileAndScope, MDS->getLine(), Type, MDS->isLocalToUnit(),
         MDS->isDefinition(), MDS->getScopeLine(), DITypeRef(ContainingType),
         MDS->getVirtuality(), MDS->getVirtualIndex(), MDS->getFlags(),
-        MDS->isOptimized(), Function, TemplateParams, Declaration, Variables);
+        MDS->isOptimized(), TemplateParams, Declaration, Variables);
 
     auto OldLinkageName = MDS->getLinkageName();
 
@@ -466,11 +456,11 @@ private:
 
     auto EmissionKind = 2; // -g-line-tables-only
     auto *File = cast_or_null<DIFile>(map(CU->getFile()));
-    auto *EnumTypes = cast<MDTuple>(EmptyNode);
-    auto *RetainedTypes = cast<MDTuple>(EmptyNode);
+    MDTuple *EnumTypes = nullptr;
+    MDTuple *RetainedTypes = nullptr;
     auto *Subprograms = cast_or_null<MDTuple>(map(CU->getSubprograms().get()));
-    auto *GlobalVariables = cast<MDTuple>(EmptyNode);
-    auto *ImportedEntities = cast<MDTuple>(EmptyNode);
+    MDTuple *GlobalVariables = nullptr;
+    MDTuple *ImportedEntities = nullptr;
     return DICompileUnit::getDistinct(
         CU->getContext(), CU->getSourceLanguage(), File, CU->getProducer(),
         CU->isOptimized(), CU->getFlags(), CU->getRuntimeVersion(),
@@ -505,7 +495,8 @@ private:
   void remap(MDNode *N) {
     if (Replacements.count(N))
       return;
-    auto tryRemap = [&](MDNode * N) -> MDNode * {
+
+    auto doRemap = [&](MDNode * N) -> MDNode * {
       if (!N)
         return nullptr;
       if (auto MDSub = dyn_cast<DISubprogram>(N))
@@ -529,8 +520,7 @@ private:
 
       return getReplacementMDNode(N);
     };
-    if (auto NewN = tryRemap(N))
-      Replacements[N] = NewN;
+    Replacements[N] = doRemap(N);
   }
 
   // Do the re-mapping traversal
@@ -571,8 +561,8 @@ void GLTOMapper::traverse(MDNode *N) {
 }
 
 bool llvm::convertDebugInfoToLineTables(Module &M) {
-  // In order to convert debug info to what -gline-tables-only would of created,
-  // we need to do the following:
+  // In order to convert debug info to what -gline-tables-only would have
+  // created, we need to do the following:
   //   1) Delete all debug intrinsics
   //   2) Delete all non-CU named metadata debug infos
   //   3) Create new DebugLocs for each instruction
@@ -581,7 +571,7 @@ bool llvm::convertDebugInfoToLineTables(Module &M) {
 
   bool Changed = false;
 
-  // 1) First off, delete the debug intrinsics
+  // 1) First off, delete the debug intrinsics.
   if (Function *Declare = M.getFunction("llvm.dbg.declare")) {
     while (!Declare->use_empty()) {
       auto *DDI = cast<DbgDeclareInst>(Declare->user_back());
@@ -599,11 +589,11 @@ bool llvm::convertDebugInfoToLineTables(Module &M) {
     Changed = true;
   }
 
-  // 2) Delete non-cu debug infos
+  // 2) Delete non-cu debug info named metadata nodes.
   for (Module::named_metadata_iterator NMI = M.named_metadata_begin(),
                                        NME = M.named_metadata_end();
        NMI != NME;) {
-    NamedMDNode *NMD = NMI;
+    NamedMDNode *NMD = &*NMI;
     ++NMI;
     // Specifically keep dbg.cu around
     if (NMD->getName() == "llvm.dbg.cu")
@@ -617,9 +607,16 @@ bool llvm::convertDebugInfoToLineTables(Module &M) {
 
   GLTOMapper Mapper(M.getContext());
 
-  // 3) Rewrite the DebugLocs to be equivalent to what -gline-tables-only would
-  // of created
+  // 3) Rewrite the DebugLocs to be equivalent to what
+  // -gline-tables-only would have created.
   for (auto &F : M) {
+    auto *SP = F.getSubprogram();
+    if (SP) {
+      Mapper.traverseAndRemap(SP);
+      auto *NewSP = cast<DISubprogram>(Mapper.mapNode(SP));
+      Changed |= SP != NewSP;
+      F.setSubprogram(NewSP);
+    }
     for (auto &BB : F) {
       for (auto &I : BB) {
         if (I.getDebugLoc() == DebugLoc())
@@ -670,7 +667,6 @@ bool llvm::convertDebugInfoToLineTables(Module &M) {
           NMD.addOperand(Op);
     }
   }
-
   return Changed;
 }
 
@@ -679,22 +675,4 @@ unsigned llvm::getDebugMetadataVersionFromModule(const Module &M) {
           M.getModuleFlag("Debug Info Version")))
     return Val->getZExtValue();
   return 0;
-}
-
-DenseMap<const llvm::Function *, DISubprogram *>
-llvm::makeSubprogramMap(const Module &M) {
-  DenseMap<const Function *, DISubprogram *> R;
-
-  NamedMDNode *CU_Nodes = M.getNamedMetadata("llvm.dbg.cu");
-  if (!CU_Nodes)
-    return R;
-
-  for (MDNode *N : CU_Nodes->operands()) {
-    auto *CUNode = cast<DICompileUnit>(N);
-    for (auto *SP : CUNode->getSubprograms()) {
-      if (Function *F = SP->getFunction())
-        R.insert(std::make_pair(F, SP));
-    }
-  }
-  return R;
 }
