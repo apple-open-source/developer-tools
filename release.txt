@@ -1,16 +1,16 @@
-# Developer Tools 7.3 Everest7D175
+# Developer Tools 7.3.1 Everest7D1014
 bison	14	Other
 bootstrap_cmds	93	Other
 cctools	886	Other
-clang	703.0.29	Other
+clang	703.0.31	Other
 CoreOSMakefiles	77	Other
 developer_cmds	62	Other
 gcc_select	133	Other
-Git	63	Other
+Git	66	Other
 gm4	15	Other
 gnumake	131	Other
 gperf	13	Other
 headerdoc	8.9.26	Other
-ld64	264.3.101	Other
+ld64	264.3.102	Other
 pb_makefiles	1005	Other
 subversion	68	Other
