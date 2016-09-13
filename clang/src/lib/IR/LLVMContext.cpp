@@ -127,6 +127,21 @@ LLVMContext::LLVMContext() : pImpl(new LLVMContextImpl(*this)) {
   unsigned AlignID = getMDKindID("align");
   assert(AlignID == MD_align && "align kind id drifted");
   (void)AlignID;
+
+  // Create the 'llvm.loop' metadata kind.
+  unsigned LoopID = getMDKindID("llvm.loop");
+  assert(LoopID == MD_loop && "llvm.loop kind id drifted");
+  (void)LoopID;
+
+  auto *DeoptEntry = pImpl->getOrInsertBundleTag("deopt");
+  assert(DeoptEntry->second == LLVMContext::OB_deopt &&
+         "deopt operand bundle id drifted!");
+  (void)DeoptEntry;
+
+  auto *FuncletEntry = pImpl->getOrInsertBundleTag("funclet");
+  assert(FuncletEntry->second == LLVMContext::OB_funclet &&
+         "funclet operand bundle id drifted!");
+  (void)FuncletEntry;
 }
 LLVMContext::~LLVMContext() { delete pImpl; }
 
@@ -275,4 +290,37 @@ void LLVMContext::getOperandBundleTags(SmallVectorImpl<StringRef> &Tags) const {
 
 uint32_t LLVMContext::getOperandBundleTagID(StringRef Tag) const {
   return pImpl->getOperandBundleTagID(Tag);
+}
+
+void LLVMContext::setGC(const Function &Fn, std::string GCName) {
+  auto It = pImpl->GCNames.find(&Fn);
+
+  if (It == pImpl->GCNames.end()) {
+    pImpl->GCNames.insert(std::make_pair(&Fn, std::move(GCName)));
+    return;
+  }
+  It->second = std::move(GCName);
+}
+const std::string &LLVMContext::getGC(const Function &Fn) {
+  return pImpl->GCNames[&Fn];
+}
+void LLVMContext::deleteGC(const Function &Fn) {
+  pImpl->GCNames.erase(&Fn);
+}
+
+bool LLVMContext::discardValueNames() const { return pImpl->DiscardValueNames; }
+
+bool LLVMContext::isODRUniquingDebugTypes() const { return !!pImpl->DITypeMap; }
+
+void LLVMContext::enableDebugTypeODRUniquing() {
+  if (pImpl->DITypeMap)
+    return;
+
+  pImpl->DITypeMap.emplace();
+}
+
+void LLVMContext::disableDebugTypeODRUniquing() { pImpl->DITypeMap.reset(); }
+
+void LLVMContext::setDiscardValueNames(bool Discard) {
+  pImpl->DiscardValueNames = Discard;
 }

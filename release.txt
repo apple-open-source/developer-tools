@@ -1,16 +1,17 @@
-# Developer Tools 7.3.1 Everest7D1014
+# Developer Tools 8.0 Whitney8A218a
 bison	14	Other
-bootstrap_cmds	93	Other
-cctools	886	Other
-clang	703.0.31	Other
+bootstrap_cmds	96	Other
+cctools	895	Other
+clang	800.0.38	Other
 CoreOSMakefiles	77	Other
-developer_cmds	62	Other
-gcc_select	133	Other
-Git	66	Other
+developer_cmds	63	Other
+gcc_select	134	Other
+Git	73	Other
 gm4	15	Other
 gnumake	131	Other
 gperf	13	Other
-headerdoc	8.9.26	Other
-ld64	264.3.102	Other
+headerdoc	8.9.28	Other
+ld64	274.1	Other
 pb_makefiles	1005	Other
-subversion	68	Other
+subversion	71	Other
+tapi	1.30	Other
