@@ -1,12 +1,12 @@
-# Developer Tools 8.0 Whitney8A218a
+# Developer Tools 8.1 Badger8B62
 bison	14	Other
-bootstrap_cmds	96	Other
+bootstrap_cmds	96.20.2	Other
 cctools	895	Other
-clang	800.0.38	Other
+clang	800.0.42.1	Other
 CoreOSMakefiles	77	Other
 developer_cmds	63	Other
 gcc_select	134	Other
-Git	73	Other
+Git	75	Other
 gm4	15	Other
 gnumake	131	Other
 gperf	13	Other
