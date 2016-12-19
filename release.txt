@@ -1,4 +1,4 @@
-# Developer Tools 8.1 Badger8B62
+# Developer Tools 8.2.1 Catskills8C1002
 bison	14	Other
 bootstrap_cmds	96.20.2	Other
 cctools	895	Other
@@ -6,12 +6,12 @@ clang	800.0.42.1	Other
 CoreOSMakefiles	77	Other
 developer_cmds	63	Other
 gcc_select	134	Other
-Git	75	Other
+Git	78	Other
 gm4	15	Other
 gnumake	131	Other
 gperf	13	Other
 headerdoc	8.9.28	Other
-ld64	274.1	Other
+ld64	274.2	Other
 pb_makefiles	1005	Other
 subversion	71	Other
 tapi	1.30	Other
