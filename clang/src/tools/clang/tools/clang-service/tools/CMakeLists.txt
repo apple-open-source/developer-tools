@@ -1,1 +1,0 @@
-add_clang_subdirectory(service)
