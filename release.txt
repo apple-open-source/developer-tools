@@ -1,4 +1,4 @@
-# Developer Tools 8.3 Empire8E162
+# Developer Tools 8.3.1 Empire8E1000a
 bison	14	Other
 bootstrap_cmds	96.20.2	Other
 cctools	898	Other
