@@ -1,15 +1,15 @@
-# Developer Tools 8.3.3 Empire8E3004b
+# Developer Tools 9.0 Tioga9A235
 bison	14	Other
 bootstrap_cmds	96.20.2	Other
-cctools	898	Other
-CoreOSMakefiles	77	Other
-developer_cmds	63	Other
+cctools	900	Other
+CoreOSMakefiles	78	Other
+developer_cmds	66	Other
 gcc_select	134	Other
-Git	81	Other
-gm4	15	Other
+Git	94	Other
+gm4	16	Other
 gnumake	131	Other
 gperf	13	Other
 headerdoc	8.9.28	Other
-ld64	278.4	Other
+ld64	302.3	Other
 pb_makefiles	1005	Other
-subversion	71	Other
+subversion	74	Other

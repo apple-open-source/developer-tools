@@ -9,7 +9,8 @@ GnuAfterInstall       = post-install install-plist
 Extra_Configure_Flags = --enable-shared --disable-static \
                         --without-berkeley-db \
                         --without-apxs \
-                        --with-apr=/usr --with-apr-util=/usr \
+                        --with-apr=$(APR_TOOLCHAIN_DIR) \
+                        --with-apr-util=$(APR_TOOLCHAIN_DIR) \
                         --with-neon=$(DEVELOPER_DIR)/usr/local \
                         --with-serf=$(DEVELOPER_DIR)/usr \
                         --with-swig=$(shell test -e /usr/bin/swig && echo /usr || echo /usr/local) \

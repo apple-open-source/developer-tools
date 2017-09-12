@@ -6,6 +6,8 @@ ifndef DEVELOPER_DIR
 DEVELOPER_DIR := $(shell xcode-select -p)
 endif
 
+APR_TOOLCHAIN_DIR=$(dir $(shell xcrun --toolchain $(TOOLCHAINS) -f apr-1-config))/..
+
 Project               = subversion
 ProjectVersion        = 1.9.4
 

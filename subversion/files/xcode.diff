@@ -19,16 +19,17 @@
  
    /* Look up the tunnel specification in config. */
    cfg = config ? svn_hash_gets(config, SVN_CONFIG_CATEGORY_CONFIG) : NULL;
-@@ -405,7 +410,11 @@
+@@ -405,7 +410,12 @@
         * versions have it too. If the user is using some other ssh
         * implementation that doesn't accept it, they can override it
         * in the [tunnels] section of the config. */
 -      val = "$SVN_SSH ssh -q";
 +      // <rdar://7252724>
++      // The '--' was added for <rdar://problem/33850216> CVE-2017-9800
 +      dispatch_once(&once, ^{
 +        this_is_xcode = (strcmp(*_NSGetProgname(), "Xcode") == 0);
 +      });
-+      val = this_is_xcode ? "$SVN_SSH ssh" : "$SVN_SSH ssh -q";
++      val = this_is_xcode ? "$SVN_SSH ssh --" : "$SVN_SSH ssh -q --";
      }
  
    if (!val || !*val)

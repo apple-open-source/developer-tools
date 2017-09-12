@@ -411,10 +411,11 @@ static svn_error_t *find_tunnel_agent(const char *tunnel,
        * implementation that doesn't accept it, they can override it
        * in the [tunnels] section of the config. */
       // <rdar://7252724>
+      // The '--' was added for <rdar://problem/33850216> CVE-2017-9800
       dispatch_once(&once, ^{
         this_is_xcode = (strcmp(*_NSGetProgname(), "Xcode") == 0);
       });
-      val = this_is_xcode ? "$SVN_SSH ssh" : "$SVN_SSH ssh -q";
+      val = this_is_xcode ? "$SVN_SSH ssh --" : "$SVN_SSH ssh -q --";
     }
 
   if (!val || !*val)

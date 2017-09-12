@@ -9,7 +9,8 @@ GnuAfterInstall       = perl-bindings post-install
 Extra_Configure_Flags = --enable-shared --disable-static \
                         --without-berkeley-db \
                         --without-apxs \
-                        --with-apr=/usr --with-apr-util=/usr \
+                        --with-apr=$(APR_TOOLCHAIN_DIR) \
+                        --with-apr-util=$(APR_TOOLCHAIN_DIR) \
                         --with-neon=/usr/local \
                         --with-swig=$(shell test -e /usr/bin/swig && echo /usr || echo /usr/local) \
                         --with-ruby-sitedir=$(RBLIBDIR)/ruby \
