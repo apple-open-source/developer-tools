@@ -23,7 +23,7 @@
 #    under the License.
 # ====================================================================
 #
-# $HeadURL: http://svn.apache.org/repos/asf/subversion/branches/1.9.x/tools/dev/which-error.py $
+# $HeadURL: https://svn.apache.org/repos/asf/subversion/branches/1.9.x/tools/dev/which-error.py $
 # $LastChangedDate: 2013-12-05 00:42:34 +0000 (Thu, 05 Dec 2013) $
 # $LastChangedBy: breser $
 # $LastChangedRevision: 1547977 $

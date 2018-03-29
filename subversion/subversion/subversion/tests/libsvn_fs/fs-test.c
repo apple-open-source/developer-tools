@@ -42,6 +42,7 @@
 #include "private/svn_fs_util.h"
 #include "private/svn_fs_private.h"
 #include "private/svn_fspath.h"
+#include "private/svn_sqlite.h"
 
 #include "../svn_test_fs.h"
 
@@ -7036,6 +7037,136 @@ freeze_and_commit(const svn_test_opts_t *opts,
   return SVN_NO_ERROR;
 }
 
+static svn_error_t *
+commit_with_locked_rep_cache(const svn_test_opts_t *opts,
+                             apr_pool_t *pool)
+{
+  svn_fs_t *fs;
+  svn_fs_txn_t *txn;
+  svn_fs_root_t *txn_root;
+  svn_revnum_t new_rev;
+  svn_sqlite__db_t *sdb;
+  svn_error_t *err;
+  const char *fs_path;
+  const char *statements[] = { "SELECT MAX(revision) FROM rep_cache", NULL };
+
+  if (strcmp(opts->fs_type, SVN_FS_TYPE_FSFS) != 0)
+    return svn_error_create(SVN_ERR_TEST_SKIPPED, NULL,
+                            "this will test FSFS repositories only");
+
+  if (opts->server_minor_version && (opts->server_minor_version < 6))
+    return svn_error_create(SVN_ERR_TEST_SKIPPED, NULL,
+                            "pre-1.6 SVN doesn't support FSFS rep-sharing");
+
+  fs_path = "test-repo-commit-with-locked-rep-cache";
+  SVN_ERR(svn_test__create_fs(&fs, fs_path, opts, pool));
+
+  /* r1: Add a file. */
+  SVN_ERR(svn_fs_begin_txn2(&txn, fs, 0, 0, pool));
+  SVN_ERR(svn_fs_txn_root(&txn_root, txn, pool));
+  SVN_ERR(svn_fs_make_file(txn_root, "/foo", pool));
+  SVN_ERR(svn_test__set_file_contents(txn_root, "/foo", "a", pool));
+  SVN_ERR(test_commit_txn(&new_rev, txn, NULL, pool));
+  SVN_TEST_INT_ASSERT(new_rev, 1);
+
+  /* Begin a new transaction based on r1. */
+  SVN_ERR(svn_fs_begin_txn2(&txn, fs, 1, 0, pool));
+  SVN_ERR(svn_fs_txn_root(&txn_root, txn, pool));
+  SVN_ERR(svn_test__set_file_contents(txn_root, "/foo", "b", pool));
+
+  /* Obtain a shared lock on the rep-cache.db by starting a new read
+   * transaction. */
+  SVN_ERR(svn_sqlite__open(&sdb,
+                           svn_dirent_join(fs_path, "rep-cache.db", pool),
+                           svn_sqlite__mode_readonly, statements, 0, NULL,
+                           0, pool, pool));
+  SVN_ERR(svn_sqlite__begin_transaction(sdb));
+  SVN_ERR(svn_sqlite__exec_statements(sdb, 0));
+
+  /* Attempt to commit fs transaction.  This should result in a commit
+   * post-processing error due to us still holding the shared lock on the
+   * rep-cache.db. */
+  err = svn_fs_commit_txn(NULL, &new_rev, txn, pool);
+  SVN_TEST_ASSERT_ERROR(err, SVN_ERR_SQLITE_BUSY);
+  SVN_TEST_INT_ASSERT(new_rev, 2);
+
+  /* Release the shared lock. */
+  SVN_ERR(svn_sqlite__finish_transaction(sdb, SVN_NO_ERROR));
+  SVN_ERR(svn_sqlite__close(sdb));
+
+  /* Try an operation that reads from rep-cache.db.
+   *
+   * XFAIL: Around r1740802, this call was producing an error due to the
+   * svn_fs_t keeping an unusable db connection (and associated file
+   * locks) within it.
+   */
+  SVN_ERR(svn_fs_verify(fs_path, NULL, 0, SVN_INVALID_REVNUM, NULL, NULL,
+                        NULL, NULL, pool));
+
+  return SVN_NO_ERROR;
+}
+
+static svn_error_t *
+test_rep_sharing_strict_content_check(const svn_test_opts_t *opts,
+                                      apr_pool_t *pool)
+{
+  svn_fs_t *fs;
+  svn_fs_txn_t *txn;
+  svn_fs_root_t *txn_root;
+  svn_revnum_t new_rev;
+  const char *fs_path, *fs_path2;
+  apr_pool_t *subpool = svn_pool_create(pool);
+  svn_error_t *err;
+
+  /* Bail (with success) on known-untestable scenarios */
+  if (strcmp(opts->fs_type, SVN_FS_TYPE_BDB) == 0)
+    return svn_error_create(SVN_ERR_TEST_SKIPPED, NULL,
+                            "BDB repositories don't support rep-sharing");
+
+  /* Create 2 repos with same structure & size but different contents */
+  fs_path = "test-rep-sharing-strict-content-check1";
+  fs_path2 = "test-rep-sharing-strict-content-check2";
+
+  SVN_ERR(svn_test__create_fs(&fs, fs_path, opts, subpool));
+
+  SVN_ERR(svn_fs_begin_txn2(&txn, fs, 0, 0, subpool));
+  SVN_ERR(svn_fs_txn_root(&txn_root, txn, subpool));
+  SVN_ERR(svn_fs_make_file(txn_root, "/foo", subpool));
+  SVN_ERR(svn_test__set_file_contents(txn_root, "foo", "quite bad", subpool));
+  SVN_ERR(test_commit_txn(&new_rev, txn, NULL, subpool));
+  SVN_TEST_INT_ASSERT(new_rev, 1);
+
+  SVN_ERR(svn_test__create_fs(&fs, fs_path2, opts, subpool));
+
+  SVN_ERR(svn_fs_begin_txn2(&txn, fs, 0, 0, subpool));
+  SVN_ERR(svn_fs_txn_root(&txn_root, txn, subpool));
+  SVN_ERR(svn_fs_make_file(txn_root, "foo", subpool));
+  SVN_ERR(svn_test__set_file_contents(txn_root, "foo", "very good", subpool));
+  SVN_ERR(test_commit_txn(&new_rev, txn, NULL, subpool));
+  SVN_TEST_INT_ASSERT(new_rev, 1);
+
+  /* Close both repositories. */
+  svn_pool_clear(subpool);
+
+  /* Doctor the first repo such that it uses the wrong rep-cache. */
+  SVN_ERR(svn_io_copy_file(svn_relpath_join(fs_path2, "rep-cache.db", pool),
+                           svn_relpath_join(fs_path, "rep-cache.db", pool),
+                           FALSE, pool));
+
+  /* Changing the file contents such that rep-sharing would kick in if
+     the file contents was not properly compared. */
+  SVN_ERR(svn_fs_open2(&fs, fs_path, NULL, subpool, subpool));
+
+  SVN_ERR(svn_fs_begin_txn2(&txn, fs, 1, 0, subpool));
+  SVN_ERR(svn_fs_txn_root(&txn_root, txn, subpool));
+  err = svn_test__set_file_contents(txn_root, "foo", "very good", subpool);
+  SVN_TEST_ASSERT_ERROR(err, SVN_ERR_FS_GENERAL);
+
+  svn_pool_destroy(subpool);
+
+  return SVN_NO_ERROR;
+}
+
 /* ------------------------------------------------------------------------ */
 
 /* The test table.  */
@@ -7173,6 +7304,11 @@ static struct svn_test_descriptor_t test_funcs[] =
                        "test svn_fs_check_related for transactions"),
     SVN_TEST_OPTS_PASS(freeze_and_commit,
                        "freeze and commit"),
+    SVN_TEST_OPTS_PASS(commit_with_locked_rep_cache,
+                       "test commit with locked rep-cache"),
+    SVN_TEST_OPTS_XFAIL_OTOH(test_rep_sharing_strict_content_check,
+                             "test rep-sharing on content rather than SHA1",
+                             SVN_TEST_PASS_IF_FS_TYPE_IS(SVN_FS_TYPE_FSFS)),
     SVN_TEST_NULL
   };
 

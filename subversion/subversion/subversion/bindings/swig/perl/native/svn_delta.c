@@ -2877,6 +2877,7 @@ XS(_wrap_svn_txdelta_window_dup) {
     
     {
       _global_pool = arg2 = svn_swig_pl_make_pool (ST(items-1));
+      SPAGAIN;
     }
     if ((items < 1) || (items > 2)) {
       SWIG_croak("Usage: svn_txdelta_window_dup(window,pool);");
@@ -2923,6 +2924,7 @@ XS(_wrap_svn_txdelta_compose_windows) {
     
     {
       _global_pool = arg3 = svn_swig_pl_make_pool (ST(items-1));
+      SPAGAIN;
     }
     if ((items < 2) || (items > 3)) {
       SWIG_croak("Usage: svn_txdelta_compose_windows(window_A,window_B,pool);");
@@ -3049,9 +3051,11 @@ XS(_wrap_svn_txdelta_run) {
     
     {
       _global_pool = arg9 = svn_swig_pl_make_pool (ST(items-1));
+      SPAGAIN;
     }
     {
       _global_pool = arg10 = svn_swig_pl_make_pool (ST(items-1));
+      SPAGAIN;
     }
     arg6 = &temp6;
     if ((items < 6) || (items > 8)) {
@@ -3059,9 +3063,11 @@ XS(_wrap_svn_txdelta_run) {
     }
     {
       svn_swig_pl_make_stream (&arg1, ST(0));
+      SPAGAIN;
     }
     {
       svn_swig_pl_make_stream (&arg2, ST(1));
+      SPAGAIN;
     }
     {
       int res = SWIG_ConvertFunctionPtr(ST(2), (void**)(&arg3), SWIGTYPE_p_f_p_svn_txdelta_window_t_p_void__p_svn_error_t);
@@ -3156,6 +3162,7 @@ XS(_wrap_svn_txdelta_stream_create) {
     
     {
       _global_pool = arg4 = svn_swig_pl_make_pool (ST(items-1));
+      SPAGAIN;
     }
     if ((items < 3) || (items > 4)) {
       SWIG_croak("Usage: svn_txdelta_stream_create(baton,next_window,md5_digest,pool);");
@@ -3216,6 +3223,7 @@ XS(_wrap_svn_txdelta_next_window) {
     
     {
       _global_pool = arg3 = svn_swig_pl_make_pool (ST(items-1));
+      SPAGAIN;
     }
     arg1 = &temp1;
     if ((items < 1) || (items > 2)) {
@@ -3316,6 +3324,7 @@ XS(_wrap_svn_txdelta2) {
     
     {
       _global_pool = arg5 = svn_swig_pl_make_pool (ST(items-1));
+      SPAGAIN;
     }
     arg1 = &temp1;
     if ((items < 3) || (items > 4)) {
@@ -3323,9 +3332,11 @@ XS(_wrap_svn_txdelta2) {
     }
     {
       svn_swig_pl_make_stream (&arg2, ST(0));
+      SPAGAIN;
     }
     {
       svn_swig_pl_make_stream (&arg3, ST(1));
+      SPAGAIN;
     }
     ecode4 = SWIG_AsVal_int SWIG_PERL_CALL_ARGS_2(ST(2), &val4);
     if (!SWIG_IsOK(ecode4)) {
@@ -3375,6 +3386,7 @@ XS(_wrap_svn_txdelta) {
     
     {
       _global_pool = arg4 = svn_swig_pl_make_pool (ST(items-1));
+      SPAGAIN;
     }
     arg1 = &temp1;
     if ((items < 2) || (items > 3)) {
@@ -3382,9 +3394,11 @@ XS(_wrap_svn_txdelta) {
     }
     {
       svn_swig_pl_make_stream (&arg2, ST(0));
+      SPAGAIN;
     }
     {
       svn_swig_pl_make_stream (&arg3, ST(1));
+      SPAGAIN;
     }
     if (items > 2) {
       
@@ -3428,6 +3442,7 @@ XS(_wrap_svn_txdelta_target_push) {
     
     {
       _global_pool = arg4 = svn_swig_pl_make_pool (ST(items-1));
+      SPAGAIN;
     }
     if ((items < 3) || (items > 4)) {
       SWIG_croak("Usage: svn_txdelta_target_push(handler,handler_baton,source,pool);");
@@ -3444,6 +3459,7 @@ XS(_wrap_svn_txdelta_target_push) {
     }
     {
       svn_swig_pl_make_stream (&arg3, ST(2));
+      SPAGAIN;
     }
     if (items > 3) {
       
@@ -3455,7 +3471,11 @@ XS(_wrap_svn_txdelta_target_push) {
       
     }
     {
-      ST(argvi) = svn_swig_pl_from_stream (result);
+      SV* tmp;
+      PUTBACK;
+      tmp = svn_swig_pl_from_stream (result);
+      SPAGAIN;
+      ST(argvi) = tmp;
       argvi++;
     }
     
@@ -3488,6 +3508,7 @@ XS(_wrap_svn_txdelta_send_string) {
     
     {
       _global_pool = arg4 = svn_swig_pl_make_pool (ST(items-1));
+      SPAGAIN;
     }
     if ((items < 3) || (items > 4)) {
       SWIG_croak("Usage: svn_txdelta_send_string(string,handler,handler_baton,pool);");
@@ -3567,6 +3588,7 @@ XS(_wrap_svn_txdelta_send_stream) {
     
     {
       _global_pool = arg5 = svn_swig_pl_make_pool (ST(items-1));
+      SPAGAIN;
     }
     arg4 = temp4;
     if ((items < 3) || (items > 4)) {
@@ -3574,6 +3596,7 @@ XS(_wrap_svn_txdelta_send_stream) {
     }
     {
       svn_swig_pl_make_stream (&arg1, ST(0));
+      SPAGAIN;
     }
     {
       int res = SWIG_ConvertFunctionPtr(ST(1), (void**)(&arg2), SWIGTYPE_p_f_p_svn_txdelta_window_t_p_void__p_svn_error_t);
@@ -3611,7 +3634,7 @@ XS(_wrap_svn_txdelta_send_stream) {
       }
     }
     {
-      /*@SWIG:/home/evgeny/release/svnrm/1.9.4/prefix/share/swig/2.0.12/perl5/perltypemaps.swg,59,%append_output@*/ if (argvi >= items) EXTEND(sp,1); /*@SWIG:/home/evgeny/release/svnrm/1.9.4/prefix/share/swig/2.0.12/perl5/perltypemaps.swg,56,%set_output@*/ ST(argvi) = sv_2mortal(newSVpv(svn_md5_digest_to_cstring(arg4,
+      /*@SWIG:/tmp/svnrm/prefix/share/swig/2.0.12/perl5/perltypemaps.swg,59,%append_output@*/ if (argvi >= items) EXTEND(sp,1); /*@SWIG:/tmp/svnrm/prefix/share/swig/2.0.12/perl5/perltypemaps.swg,56,%set_output@*/ ST(argvi) = sv_2mortal(newSVpv(svn_md5_digest_to_cstring(arg4,
             _global_pool),
           0)); argvi++ /*@SWIG@*/
       
@@ -3652,6 +3675,7 @@ XS(_wrap_svn_txdelta_send_txstream) {
     
     {
       _global_pool = arg4 = svn_swig_pl_make_pool (ST(items-1));
+      SPAGAIN;
     }
     if ((items < 3) || (items > 4)) {
       SWIG_croak("Usage: svn_txdelta_send_txstream(txstream,handler,handler_baton,pool);");
@@ -3730,6 +3754,7 @@ XS(_wrap_svn_txdelta_send_contents) {
     
     {
       _global_pool = arg5 = svn_swig_pl_make_pool (ST(items-1));
+      SPAGAIN;
     }
     if ((items < 4) || (items > 5)) {
       SWIG_croak("Usage: svn_txdelta_send_contents(contents,len,handler,handler_baton,pool);");
@@ -3816,6 +3841,7 @@ XS(_wrap_svn_txdelta_apply) {
     
     {
       _global_pool = arg5 = svn_swig_pl_make_pool (ST(items-1));
+      SPAGAIN;
     }
     {
       arg3 = (unsigned char *)apr_palloc(_global_pool, APR_MD5_DIGESTSIZE);
@@ -3827,9 +3853,11 @@ XS(_wrap_svn_txdelta_apply) {
     }
     {
       svn_swig_pl_make_stream (&arg1, ST(0));
+      SPAGAIN;
     }
     {
       svn_swig_pl_make_stream (&arg2, ST(1));
+      SPAGAIN;
     }
     res4 = SWIG_AsCharPtrAndSize(ST(2), &buf4, NULL, &alloc4);
     if (!SWIG_IsOK(res4)) {
@@ -3847,7 +3875,11 @@ XS(_wrap_svn_txdelta_apply) {
     }
     ST(argvi) = sv_newmortal();
     {
-      if (argvi >= items) EXTEND(sp,1);  ST(argvi) = svn_swig_pl_from_md5(arg3); argvi++  ;
+      SV *tmp;
+      PUTBACK;
+      tmp = svn_swig_pl_from_md5(arg3);
+      SPAGAIN;
+      if (argvi >= items) EXTEND(sp,1);  ST(argvi) = tmp; argvi++  ;
     }
     {
       if (argvi >= items) EXTEND(sp,1);  ST(argvi) = SWIG_NewPointerObj(*arg6, SWIGTYPE_p_f_p_svn_txdelta_window_t_p_void__p_svn_error_t, 0); argvi++  ;
@@ -3896,6 +3928,7 @@ XS(_wrap_svn_txdelta_to_svndiff3) {
     
     {
       _global_pool = arg6 = svn_swig_pl_make_pool (ST(items-1));
+      SPAGAIN;
     }
     arg1 = &temp1;
     arg2 = &temp2;
@@ -3904,6 +3937,7 @@ XS(_wrap_svn_txdelta_to_svndiff3) {
     }
     {
       svn_swig_pl_make_stream (&arg3, ST(0));
+      SPAGAIN;
     }
     ecode4 = SWIG_AsVal_int SWIG_PERL_CALL_ARGS_2(ST(1), &val4);
     if (!SWIG_IsOK(ecode4)) {
@@ -3967,6 +4001,7 @@ XS(_wrap_svn_txdelta_to_svndiff2) {
     
     {
       _global_pool = arg5 = svn_swig_pl_make_pool (ST(items-1));
+      SPAGAIN;
     }
     arg1 = &temp1;
     arg2 = &temp2;
@@ -3975,6 +4010,7 @@ XS(_wrap_svn_txdelta_to_svndiff2) {
     }
     {
       svn_swig_pl_make_stream (&arg3, ST(0));
+      SPAGAIN;
     }
     ecode4 = SWIG_AsVal_int SWIG_PERL_CALL_ARGS_2(ST(1), &val4);
     if (!SWIG_IsOK(ecode4)) {
@@ -4028,6 +4064,7 @@ XS(_wrap_svn_txdelta_to_svndiff) {
     
     {
       _global_pool = arg2 = svn_swig_pl_make_pool (ST(items-1));
+      SPAGAIN;
     }
     arg3 = &temp3;
     arg4 = &temp4;
@@ -4036,6 +4073,7 @@ XS(_wrap_svn_txdelta_to_svndiff) {
     }
     {
       svn_swig_pl_make_stream (&arg1, ST(0));
+      SPAGAIN;
     }
     if (items > 1) {
       
@@ -4084,6 +4122,7 @@ XS(_wrap_svn_txdelta_parse_svndiff) {
     
     {
       _global_pool = arg4 = svn_swig_pl_make_pool (ST(items-1));
+      SPAGAIN;
     }
     if ((items < 3) || (items > 4)) {
       SWIG_croak("Usage: svn_txdelta_parse_svndiff(handler,handler_baton,error_on_early_close,pool);");
@@ -4113,7 +4152,11 @@ XS(_wrap_svn_txdelta_parse_svndiff) {
       
     }
     {
-      ST(argvi) = svn_swig_pl_from_stream (result);
+      SV* tmp;
+      PUTBACK;
+      tmp = svn_swig_pl_from_stream (result);
+      SPAGAIN;
+      ST(argvi) = tmp;
       argvi++;
     }
     
@@ -4147,6 +4190,7 @@ XS(_wrap_svn_txdelta_read_svndiff_window) {
     
     {
       _global_pool = arg4 = svn_swig_pl_make_pool (ST(items-1));
+      SPAGAIN;
     }
     arg1 = &temp1;
     if ((items < 2) || (items > 3)) {
@@ -4154,6 +4198,7 @@ XS(_wrap_svn_txdelta_read_svndiff_window) {
     }
     {
       svn_swig_pl_make_stream (&arg2, ST(0));
+      SPAGAIN;
     }
     ecode3 = SWIG_AsVal_int SWIG_PERL_CALL_ARGS_2(ST(1), &val3);
     if (!SWIG_IsOK(ecode3)) {
@@ -4217,6 +4262,7 @@ XS(_wrap_svn_txdelta_skip_svndiff_window) {
     
     {
       _global_pool = arg3 = svn_swig_pl_make_pool (ST(items-1));
+      SPAGAIN;
     }
     if ((items < 2) || (items > 3)) {
       SWIG_croak("Usage: svn_txdelta_skip_svndiff_window(file,svndiff_version,pool);");
@@ -5356,6 +5402,7 @@ XS(_wrap_svn_delta_default_editor) {
     
     {
       _global_pool = arg1 = svn_swig_pl_make_pool (ST(items-1));
+      SPAGAIN;
     }
     if ((items < 0) || (items > 1)) {
       SWIG_croak("Usage: svn_delta_default_editor(pool);");
@@ -5456,6 +5503,7 @@ XS(_wrap_svn_delta_get_cancellation_editor) {
     
     {
       _global_pool = arg7 = svn_swig_pl_make_pool (ST(items-1));
+      SPAGAIN;
     }
     arg5 = &temp5;
     arg6 = &temp6;
@@ -5548,6 +5596,7 @@ XS(_wrap_svn_delta_depth_filter_editor) {
     
     {
       _global_pool = arg7 = svn_swig_pl_make_pool (ST(items-1));
+      SPAGAIN;
     }
     arg1 = &temp1;
     arg2 = &temp2;
@@ -5644,6 +5693,7 @@ XS(_wrap_svn_delta_path_driver2) {
     
     {
       _global_pool = arg7 = svn_swig_pl_make_pool (ST(items-1));
+      SPAGAIN;
     }
     if ((items < 5) || (items > 6)) {
       SWIG_croak("Usage: svn_delta_path_driver2(editor,edit_baton,paths,sort_paths,callback_func,callback_baton,scratch_pool);");
@@ -5731,6 +5781,7 @@ XS(_wrap_svn_delta_path_driver) {
     
     {
       _global_pool = arg7 = svn_swig_pl_make_pool (ST(items-1));
+      SPAGAIN;
     }
     if ((items < 5) || (items > 6)) {
       SWIG_croak("Usage: svn_delta_path_driver(editor,edit_baton,revision,paths,callback_func,callback_baton,scratch_pool);");
@@ -5815,6 +5866,7 @@ XS(_wrap_svn_compat_wrap_file_rev_handler) {
     
     {
       _global_pool = arg5 = svn_swig_pl_make_pool (ST(items-1));
+      SPAGAIN;
     }
     arg1 = &temp1;
     arg2 = &temp2;
@@ -5894,6 +5946,7 @@ XS(_wrap_svn_delta_editor_invoke_set_target_revision) {
     
     {
       _global_pool = arg4 = svn_swig_pl_make_pool (ST(items-1));
+      SPAGAIN;
     }
     if ((items < 3) || (items > 4)) {
       SWIG_croak("Usage: svn_delta_editor_invoke_set_target_revision(_obj,edit_baton,target_revision,scratch_pool);");
@@ -5972,6 +6025,7 @@ XS(_wrap_svn_delta_editor_invoke_open_root) {
     
     {
       _global_pool = arg4 = svn_swig_pl_make_pool (ST(items-1));
+      SPAGAIN;
     }
     arg5 = &temp5;
     if ((items < 3) || (items > 4)) {
@@ -6058,6 +6112,7 @@ XS(_wrap_svn_delta_editor_invoke_delete_entry) {
     
     {
       _global_pool = arg5 = svn_swig_pl_make_pool (ST(items-1));
+      SPAGAIN;
     }
     if ((items < 4) || (items > 5)) {
       SWIG_croak("Usage: svn_delta_editor_invoke_delete_entry(_obj,path,revision,parent_baton,scratch_pool);");
@@ -6151,6 +6206,7 @@ XS(_wrap_svn_delta_editor_invoke_add_directory) {
     
     {
       _global_pool = arg6 = svn_swig_pl_make_pool (ST(items-1));
+      SPAGAIN;
     }
     arg7 = &temp7;
     if ((items < 5) || (items > 6)) {
@@ -6253,6 +6309,7 @@ XS(_wrap_svn_delta_editor_invoke_open_directory) {
     
     {
       _global_pool = arg5 = svn_swig_pl_make_pool (ST(items-1));
+      SPAGAIN;
     }
     arg6 = &temp6;
     if ((items < 4) || (items > 5)) {
@@ -6345,6 +6402,7 @@ XS(_wrap_svn_delta_editor_invoke_change_dir_prop) {
     
     {
       _global_pool = arg5 = svn_swig_pl_make_pool (ST(items-1));
+      SPAGAIN;
     }
     if ((items < 4) || (items > 5)) {
       SWIG_croak("Usage: svn_delta_editor_invoke_change_dir_prop(_obj,dir_baton,name,value,scratch_pool);");
@@ -6429,6 +6487,7 @@ XS(_wrap_svn_delta_editor_invoke_close_directory) {
     
     {
       _global_pool = arg3 = svn_swig_pl_make_pool (ST(items-1));
+      SPAGAIN;
     }
     if ((items < 2) || (items > 3)) {
       SWIG_croak("Usage: svn_delta_editor_invoke_close_directory(_obj,dir_baton,scratch_pool);");
@@ -6499,6 +6558,7 @@ XS(_wrap_svn_delta_editor_invoke_absent_directory) {
     
     {
       _global_pool = arg4 = svn_swig_pl_make_pool (ST(items-1));
+      SPAGAIN;
     }
     if ((items < 3) || (items > 4)) {
       SWIG_croak("Usage: svn_delta_editor_invoke_absent_directory(_obj,path,parent_baton,scratch_pool);");
@@ -6585,6 +6645,7 @@ XS(_wrap_svn_delta_editor_invoke_add_file) {
     
     {
       _global_pool = arg6 = svn_swig_pl_make_pool (ST(items-1));
+      SPAGAIN;
     }
     arg7 = &temp7;
     if ((items < 5) || (items > 6)) {
@@ -6687,6 +6748,7 @@ XS(_wrap_svn_delta_editor_invoke_open_file) {
     
     {
       _global_pool = arg5 = svn_swig_pl_make_pool (ST(items-1));
+      SPAGAIN;
     }
     arg6 = &temp6;
     if ((items < 4) || (items > 5)) {
@@ -6781,6 +6843,7 @@ XS(_wrap_svn_delta_editor_invoke_apply_textdelta) {
     
     {
       _global_pool = arg4 = svn_swig_pl_make_pool (ST(items-1));
+      SPAGAIN;
     }
     arg5 = &temp5;
     arg6 = &temp6;
@@ -6872,6 +6935,7 @@ XS(_wrap_svn_delta_editor_invoke_change_file_prop) {
     
     {
       _global_pool = arg5 = svn_swig_pl_make_pool (ST(items-1));
+      SPAGAIN;
     }
     if ((items < 4) || (items > 5)) {
       SWIG_croak("Usage: svn_delta_editor_invoke_change_file_prop(_obj,file_baton,name,value,scratch_pool);");
@@ -6960,6 +7024,7 @@ XS(_wrap_svn_delta_editor_invoke_close_file) {
     
     {
       _global_pool = arg4 = svn_swig_pl_make_pool (ST(items-1));
+      SPAGAIN;
     }
     if ((items < 3) || (items > 4)) {
       SWIG_croak("Usage: svn_delta_editor_invoke_close_file(_obj,file_baton,text_checksum,scratch_pool);");
@@ -7037,6 +7102,7 @@ XS(_wrap_svn_delta_editor_invoke_absent_file) {
     
     {
       _global_pool = arg4 = svn_swig_pl_make_pool (ST(items-1));
+      SPAGAIN;
     }
     if ((items < 3) || (items > 4)) {
       SWIG_croak("Usage: svn_delta_editor_invoke_absent_file(_obj,path,parent_baton,scratch_pool);");
@@ -7110,6 +7176,7 @@ XS(_wrap_svn_delta_editor_invoke_close_edit) {
     
     {
       _global_pool = arg3 = svn_swig_pl_make_pool (ST(items-1));
+      SPAGAIN;
     }
     if ((items < 2) || (items > 3)) {
       SWIG_croak("Usage: svn_delta_editor_invoke_close_edit(_obj,edit_baton,scratch_pool);");
@@ -7176,6 +7243,7 @@ XS(_wrap_svn_delta_editor_invoke_abort_edit) {
     
     {
       _global_pool = arg3 = svn_swig_pl_make_pool (ST(items-1));
+      SPAGAIN;
     }
     if ((items < 2) || (items > 3)) {
       SWIG_croak("Usage: svn_delta_editor_invoke_abort_edit(_obj,edit_baton,scratch_pool);");
@@ -7307,6 +7375,7 @@ XS(_wrap_svn_txdelta_invoke_next_window_fn) {
     
     {
       _global_pool = arg4 = svn_swig_pl_make_pool (ST(items-1));
+      SPAGAIN;
     }
     arg2 = &temp2;
     if ((items < 2) || (items > 3)) {
@@ -7426,6 +7495,7 @@ XS(_wrap_svn_delta_invoke_path_driver_cb_func) {
     
     {
       _global_pool = arg6 = svn_swig_pl_make_pool (ST(items-1));
+      SPAGAIN;
     }
     arg2 = &temp2;
     if ((items < 4) || (items > 5)) {
@@ -7530,6 +7600,7 @@ XS(_wrap_svn_file_invoke_rev_handler) {
     
     {
       _global_pool = arg10 = svn_swig_pl_make_pool (ST(items-1));
+      SPAGAIN;
     }
     arg7 = &temp7;
     arg8 = &temp8;
@@ -7659,6 +7730,7 @@ XS(_wrap_svn_file_invoke_rev_handler_old) {
     
     {
       _global_pool = arg9 = svn_swig_pl_make_pool (ST(items-1));
+      SPAGAIN;
     }
     arg6 = &temp6;
     arg7 = &temp7;
@@ -8592,32 +8664,32 @@ XS(SWIG_init) {
     SvREADONLY_on(sv);
   }
   
-  /*@SWIG:/home/evgeny/release/svnrm/1.9.4/prefix/share/swig/2.0.12/perl5/perltypemaps.swg,65,%set_constant@*/ do {
+  /*@SWIG:/tmp/svnrm/prefix/share/swig/2.0.12/perl5/perltypemaps.swg,65,%set_constant@*/ do {
     SV *sv = get_sv((char*) SWIG_prefix "SVN_DELTA_COMPRESSION_LEVEL_NONE", TRUE | 0x2 | GV_ADDMULTI);
     sv_setsv(sv, SWIG_From_int  SWIG_PERL_CALL_ARGS_1((int)(0)));
     SvREADONLY_on(sv);
   } while(0) /*@SWIG@*/;
-  /*@SWIG:/home/evgeny/release/svnrm/1.9.4/prefix/share/swig/2.0.12/perl5/perltypemaps.swg,65,%set_constant@*/ do {
+  /*@SWIG:/tmp/svnrm/prefix/share/swig/2.0.12/perl5/perltypemaps.swg,65,%set_constant@*/ do {
     SV *sv = get_sv((char*) SWIG_prefix "SVN_DELTA_COMPRESSION_LEVEL_MAX", TRUE | 0x2 | GV_ADDMULTI);
     sv_setsv(sv, SWIG_From_int  SWIG_PERL_CALL_ARGS_1((int)(9)));
     SvREADONLY_on(sv);
   } while(0) /*@SWIG@*/;
-  /*@SWIG:/home/evgeny/release/svnrm/1.9.4/prefix/share/swig/2.0.12/perl5/perltypemaps.swg,65,%set_constant@*/ do {
+  /*@SWIG:/tmp/svnrm/prefix/share/swig/2.0.12/perl5/perltypemaps.swg,65,%set_constant@*/ do {
     SV *sv = get_sv((char*) SWIG_prefix "SVN_DELTA_COMPRESSION_LEVEL_DEFAULT", TRUE | 0x2 | GV_ADDMULTI);
     sv_setsv(sv, SWIG_From_int  SWIG_PERL_CALL_ARGS_1((int)(5)));
     SvREADONLY_on(sv);
   } while(0) /*@SWIG@*/;
-  /*@SWIG:/home/evgeny/release/svnrm/1.9.4/prefix/share/swig/2.0.12/perl5/perltypemaps.swg,65,%set_constant@*/ do {
+  /*@SWIG:/tmp/svnrm/prefix/share/swig/2.0.12/perl5/perltypemaps.swg,65,%set_constant@*/ do {
     SV *sv = get_sv((char*) SWIG_prefix "svn_txdelta_source", TRUE | 0x2 | GV_ADDMULTI);
     sv_setsv(sv, SWIG_From_int  SWIG_PERL_CALL_ARGS_1((int)(svn_txdelta_source)));
     SvREADONLY_on(sv);
   } while(0) /*@SWIG@*/;
-  /*@SWIG:/home/evgeny/release/svnrm/1.9.4/prefix/share/swig/2.0.12/perl5/perltypemaps.swg,65,%set_constant@*/ do {
+  /*@SWIG:/tmp/svnrm/prefix/share/swig/2.0.12/perl5/perltypemaps.swg,65,%set_constant@*/ do {
     SV *sv = get_sv((char*) SWIG_prefix "svn_txdelta_target", TRUE | 0x2 | GV_ADDMULTI);
     sv_setsv(sv, SWIG_From_int  SWIG_PERL_CALL_ARGS_1((int)(svn_txdelta_target)));
     SvREADONLY_on(sv);
   } while(0) /*@SWIG@*/;
-  /*@SWIG:/home/evgeny/release/svnrm/1.9.4/prefix/share/swig/2.0.12/perl5/perltypemaps.swg,65,%set_constant@*/ do {
+  /*@SWIG:/tmp/svnrm/prefix/share/swig/2.0.12/perl5/perltypemaps.swg,65,%set_constant@*/ do {
     SV *sv = get_sv((char*) SWIG_prefix "svn_txdelta_new", TRUE | 0x2 | GV_ADDMULTI);
     sv_setsv(sv, SWIG_From_int  SWIG_PERL_CALL_ARGS_1((int)(svn_txdelta_new)));
     SvREADONLY_on(sv);

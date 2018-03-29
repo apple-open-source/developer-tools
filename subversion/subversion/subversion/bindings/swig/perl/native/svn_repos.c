@@ -3018,6 +3018,7 @@ XS(_wrap_svn_repos_notify_create) {
     
     {
       _global_pool = arg2 = svn_swig_pl_make_pool (ST(items-1));
+      SPAGAIN;
     }
     if ((items < 1) || (items > 2)) {
       SWIG_croak("Usage: svn_repos_notify_create(action,result_pool);");
@@ -3062,6 +3063,7 @@ XS(_wrap_svn_repos_find_root_path) {
     
     {
       _global_pool = arg2 = svn_swig_pl_make_pool (ST(items-1));
+      SPAGAIN;
     }
     if ((items < 1) || (items > 2)) {
       SWIG_croak("Usage: svn_repos_find_root_path(path,pool);");
@@ -3110,9 +3112,11 @@ XS(_wrap_svn_repos_open3) {
     
     {
       _global_pool = arg4 = svn_swig_pl_make_pool (ST(items-1));
+      SPAGAIN;
     }
     {
       _global_pool = arg5 = svn_swig_pl_make_pool (ST(items-1));
+      SPAGAIN;
     }
     arg1 = &temp1;
     if ((items < 2) || (items > 4)) {
@@ -3192,6 +3196,7 @@ XS(_wrap_svn_repos_open2) {
     
     {
       _global_pool = arg4 = svn_swig_pl_make_pool (ST(items-1));
+      SPAGAIN;
     }
     arg1 = &temp1;
     if ((items < 2) || (items > 3)) {
@@ -3265,6 +3270,7 @@ XS(_wrap_svn_repos_open) {
     
     {
       _global_pool = arg3 = svn_swig_pl_make_pool (ST(items-1));
+      SPAGAIN;
     }
     arg1 = &temp1;
     if ((items < 1) || (items > 2)) {
@@ -3342,6 +3348,7 @@ XS(_wrap_svn_repos_create) {
     
     {
       _global_pool = arg7 = svn_swig_pl_make_pool (ST(items-1));
+      SPAGAIN;
     }
     arg1 = &temp1;
     if ((items < 5) || (items > 6)) {
@@ -3439,6 +3446,7 @@ XS(_wrap_svn_repos_upgrade2) {
     
     {
       _global_pool = arg5 = svn_swig_pl_make_pool (ST(items-1));
+      SPAGAIN;
     }
     if ((items < 4) || (items > 5)) {
       SWIG_croak("Usage: svn_repos_upgrade2(path,nonblocking,notify_func,notify_baton,pool);");
@@ -3525,6 +3533,7 @@ XS(_wrap_svn_repos_upgrade) {
     
     {
       _global_pool = arg5 = svn_swig_pl_make_pool (ST(items-1));
+      SPAGAIN;
     }
     if ((items < 4) || (items > 5)) {
       SWIG_croak("Usage: svn_repos_upgrade(path,nonblocking,start_callback,start_callback_baton,pool);");
@@ -3605,6 +3614,7 @@ XS(_wrap_svn_repos_delete) {
     
     {
       _global_pool = arg2 = svn_swig_pl_make_pool (ST(items-1));
+      SPAGAIN;
     }
     if ((items < 1) || (items > 2)) {
       SWIG_croak("Usage: svn_repos_delete(path,pool);");
@@ -3670,6 +3680,7 @@ XS(_wrap_svn_repos_has_capability) {
     
     {
       _global_pool = arg4 = svn_swig_pl_make_pool (ST(items-1));
+      SPAGAIN;
     }
     arg2 = &temp2;
     if ((items < 2) || (items > 3)) {
@@ -3747,9 +3758,11 @@ XS(_wrap_svn_repos_capabilities) {
     
     {
       _global_pool = arg3 = svn_swig_pl_make_pool (ST(items-1));
+      SPAGAIN;
     }
     {
       _global_pool = arg4 = svn_swig_pl_make_pool (ST(items-1));
+      SPAGAIN;
     }
     arg1 = &temp1;
     if ((items < 1) || (items > 3)) {
@@ -3916,6 +3929,7 @@ XS(_wrap_svn_repos_fs_type) {
     
     {
       _global_pool = arg2 = svn_swig_pl_make_pool (ST(items-1));
+      SPAGAIN;
     }
     if ((items < 1) || (items > 2)) {
       SWIG_croak("Usage: svn_repos_fs_type(repos,result_pool);");
@@ -3975,6 +3989,7 @@ XS(_wrap_svn_repos_hotcopy3) {
     
     {
       _global_pool = arg9 = svn_swig_pl_make_pool (ST(items-1));
+      SPAGAIN;
     }
     if ((items < 7) || (items > 8)) {
       SWIG_croak("Usage: svn_repos_hotcopy3(src_path,dst_path,clean_logs,incremental,notify_func,notify_baton,cancel_func,cancel_baton,scratch_pool);");
@@ -4085,6 +4100,7 @@ XS(_wrap_svn_repos_hotcopy2) {
     
     {
       _global_pool = arg7 = svn_swig_pl_make_pool (ST(items-1));
+      SPAGAIN;
     }
     if ((items < 5) || (items > 6)) {
       SWIG_croak("Usage: svn_repos_hotcopy2(src_path,dst_path,clean_logs,incremental,cancel_func,cancel_baton,pool);");
@@ -4176,6 +4192,7 @@ XS(_wrap_svn_repos_hotcopy) {
     
     {
       _global_pool = arg4 = svn_swig_pl_make_pool (ST(items-1));
+      SPAGAIN;
     }
     if ((items < 3) || (items > 4)) {
       SWIG_croak("Usage: svn_repos_hotcopy(src_path,dst_path,clean_logs,pool);");
@@ -4253,6 +4270,7 @@ XS(_wrap_svn_repos_fs_pack2) {
     
     {
       _global_pool = arg6 = svn_swig_pl_make_pool (ST(items-1));
+      SPAGAIN;
     }
     if ((items < 4) || (items > 5)) {
       SWIG_croak("Usage: svn_repos_fs_pack2(repos,notify_func,notify_baton,cancel_func,cancel_baton,pool);");
@@ -4334,6 +4352,7 @@ XS(_wrap_svn_repos_fs_pack) {
     
     {
       _global_pool = arg6 = svn_swig_pl_make_pool (ST(items-1));
+      SPAGAIN;
     }
     if ((items < 4) || (items > 5)) {
       SWIG_croak("Usage: svn_repos_fs_pack(repos,notify_func,notify_baton,cancel_func,cancel_baton,pool);");
@@ -4419,6 +4438,7 @@ XS(_wrap_svn_repos_recover4) {
     
     {
       _global_pool = arg7 = svn_swig_pl_make_pool (ST(items-1));
+      SPAGAIN;
     }
     if ((items < 5) || (items > 6)) {
       SWIG_croak("Usage: svn_repos_recover4(path,nonblocking,notify_func,notify_baton,cancel_func,cancel_baton,pool);");
@@ -4511,6 +4531,7 @@ XS(_wrap_svn_repos_recover3) {
     
     {
       _global_pool = arg7 = svn_swig_pl_make_pool (ST(items-1));
+      SPAGAIN;
     }
     if ((items < 5) || (items > 6)) {
       SWIG_croak("Usage: svn_repos_recover3(path,nonblocking,start_callback,start_callback_baton,cancel_func,cancel_baton,pool);");
@@ -4601,6 +4622,7 @@ XS(_wrap_svn_repos_recover2) {
     
     {
       _global_pool = arg5 = svn_swig_pl_make_pool (ST(items-1));
+      SPAGAIN;
     }
     if ((items < 4) || (items > 5)) {
       SWIG_croak("Usage: svn_repos_recover2(path,nonblocking,start_callback,start_callback_baton,pool);");
@@ -4681,6 +4703,7 @@ XS(_wrap_svn_repos_recover) {
     
     {
       _global_pool = arg2 = svn_swig_pl_make_pool (ST(items-1));
+      SPAGAIN;
     }
     if ((items < 1) || (items > 2)) {
       SWIG_croak("Usage: svn_repos_recover(path,pool);");
@@ -4740,6 +4763,7 @@ XS(_wrap_svn_repos_freeze) {
     
     {
       _global_pool = arg4 = svn_swig_pl_make_pool (ST(items-1));
+      SPAGAIN;
     }
     if ((items < 3) || (items > 4)) {
       SWIG_croak("Usage: svn_repos_freeze(paths,freeze_func,freeze_baton,pool);");
@@ -4817,6 +4841,7 @@ XS(_wrap_svn_repos_db_logfiles) {
     
     {
       _global_pool = arg4 = svn_swig_pl_make_pool (ST(items-1));
+      SPAGAIN;
     }
     arg1 = &temp1;
     if ((items < 2) || (items > 3)) {
@@ -4888,6 +4913,7 @@ XS(_wrap_svn_repos_path) {
     
     {
       _global_pool = arg2 = svn_swig_pl_make_pool (ST(items-1));
+      SPAGAIN;
     }
     if ((items < 1) || (items > 2)) {
       SWIG_croak("Usage: svn_repos_path(repos,pool);");
@@ -4931,6 +4957,7 @@ XS(_wrap_svn_repos_db_env) {
     
     {
       _global_pool = arg2 = svn_swig_pl_make_pool (ST(items-1));
+      SPAGAIN;
     }
     if ((items < 1) || (items > 2)) {
       SWIG_croak("Usage: svn_repos_db_env(repos,pool);");
@@ -4974,6 +5001,7 @@ XS(_wrap_svn_repos_conf_dir) {
     
     {
       _global_pool = arg2 = svn_swig_pl_make_pool (ST(items-1));
+      SPAGAIN;
     }
     if ((items < 1) || (items > 2)) {
       SWIG_croak("Usage: svn_repos_conf_dir(repos,pool);");
@@ -5017,6 +5045,7 @@ XS(_wrap_svn_repos_svnserve_conf) {
     
     {
       _global_pool = arg2 = svn_swig_pl_make_pool (ST(items-1));
+      SPAGAIN;
     }
     if ((items < 1) || (items > 2)) {
       SWIG_croak("Usage: svn_repos_svnserve_conf(repos,pool);");
@@ -5060,6 +5089,7 @@ XS(_wrap_svn_repos_lock_dir) {
     
     {
       _global_pool = arg2 = svn_swig_pl_make_pool (ST(items-1));
+      SPAGAIN;
     }
     if ((items < 1) || (items > 2)) {
       SWIG_croak("Usage: svn_repos_lock_dir(repos,pool);");
@@ -5103,6 +5133,7 @@ XS(_wrap_svn_repos_db_lockfile) {
     
     {
       _global_pool = arg2 = svn_swig_pl_make_pool (ST(items-1));
+      SPAGAIN;
     }
     if ((items < 1) || (items > 2)) {
       SWIG_croak("Usage: svn_repos_db_lockfile(repos,pool);");
@@ -5146,6 +5177,7 @@ XS(_wrap_svn_repos_db_logs_lockfile) {
     
     {
       _global_pool = arg2 = svn_swig_pl_make_pool (ST(items-1));
+      SPAGAIN;
     }
     if ((items < 1) || (items > 2)) {
       SWIG_croak("Usage: svn_repos_db_logs_lockfile(repos,pool);");
@@ -5189,6 +5221,7 @@ XS(_wrap_svn_repos_hook_dir) {
     
     {
       _global_pool = arg2 = svn_swig_pl_make_pool (ST(items-1));
+      SPAGAIN;
     }
     if ((items < 1) || (items > 2)) {
       SWIG_croak("Usage: svn_repos_hook_dir(repos,pool);");
@@ -5232,6 +5265,7 @@ XS(_wrap_svn_repos_start_commit_hook) {
     
     {
       _global_pool = arg2 = svn_swig_pl_make_pool (ST(items-1));
+      SPAGAIN;
     }
     if ((items < 1) || (items > 2)) {
       SWIG_croak("Usage: svn_repos_start_commit_hook(repos,pool);");
@@ -5275,6 +5309,7 @@ XS(_wrap_svn_repos_pre_commit_hook) {
     
     {
       _global_pool = arg2 = svn_swig_pl_make_pool (ST(items-1));
+      SPAGAIN;
     }
     if ((items < 1) || (items > 2)) {
       SWIG_croak("Usage: svn_repos_pre_commit_hook(repos,pool);");
@@ -5318,6 +5353,7 @@ XS(_wrap_svn_repos_post_commit_hook) {
     
     {
       _global_pool = arg2 = svn_swig_pl_make_pool (ST(items-1));
+      SPAGAIN;
     }
     if ((items < 1) || (items > 2)) {
       SWIG_croak("Usage: svn_repos_post_commit_hook(repos,pool);");
@@ -5361,6 +5397,7 @@ XS(_wrap_svn_repos_pre_revprop_change_hook) {
     
     {
       _global_pool = arg2 = svn_swig_pl_make_pool (ST(items-1));
+      SPAGAIN;
     }
     if ((items < 1) || (items > 2)) {
       SWIG_croak("Usage: svn_repos_pre_revprop_change_hook(repos,pool);");
@@ -5404,6 +5441,7 @@ XS(_wrap_svn_repos_post_revprop_change_hook) {
     
     {
       _global_pool = arg2 = svn_swig_pl_make_pool (ST(items-1));
+      SPAGAIN;
     }
     if ((items < 1) || (items > 2)) {
       SWIG_croak("Usage: svn_repos_post_revprop_change_hook(repos,pool);");
@@ -5447,6 +5485,7 @@ XS(_wrap_svn_repos_pre_lock_hook) {
     
     {
       _global_pool = arg2 = svn_swig_pl_make_pool (ST(items-1));
+      SPAGAIN;
     }
     if ((items < 1) || (items > 2)) {
       SWIG_croak("Usage: svn_repos_pre_lock_hook(repos,pool);");
@@ -5490,6 +5529,7 @@ XS(_wrap_svn_repos_post_lock_hook) {
     
     {
       _global_pool = arg2 = svn_swig_pl_make_pool (ST(items-1));
+      SPAGAIN;
     }
     if ((items < 1) || (items > 2)) {
       SWIG_croak("Usage: svn_repos_post_lock_hook(repos,pool);");
@@ -5533,6 +5573,7 @@ XS(_wrap_svn_repos_pre_unlock_hook) {
     
     {
       _global_pool = arg2 = svn_swig_pl_make_pool (ST(items-1));
+      SPAGAIN;
     }
     if ((items < 1) || (items > 2)) {
       SWIG_croak("Usage: svn_repos_pre_unlock_hook(repos,pool);");
@@ -5576,6 +5617,7 @@ XS(_wrap_svn_repos_post_unlock_hook) {
     
     {
       _global_pool = arg2 = svn_swig_pl_make_pool (ST(items-1));
+      SPAGAIN;
     }
     if ((items < 1) || (items > 2)) {
       SWIG_croak("Usage: svn_repos_post_unlock_hook(repos,pool);");
@@ -5623,6 +5665,7 @@ XS(_wrap_svn_repos_hooks_setenv) {
     
     {
       _global_pool = arg3 = svn_swig_pl_make_pool (ST(items-1));
+      SPAGAIN;
     }
     if ((items < 2) || (items > 3)) {
       SWIG_croak("Usage: svn_repos_hooks_setenv(repos,hooks_env_path,scratch_pool);");
@@ -5724,6 +5767,7 @@ XS(_wrap_svn_repos_begin_report3) {
     
     {
       _global_pool = arg16 = svn_swig_pl_make_pool (ST(items-1));
+      SPAGAIN;
     }
     arg1 = &temp1;
     if ((items < 12) || (items > 13)) {
@@ -5896,6 +5940,7 @@ XS(_wrap_svn_repos_begin_report2) {
     
     {
       _global_pool = arg15 = svn_swig_pl_make_pool (ST(items-1));
+      SPAGAIN;
     }
     arg1 = &temp1;
     if ((items < 11) || (items > 12)) {
@@ -6062,6 +6107,7 @@ XS(_wrap_svn_repos_begin_report) {
     
     {
       _global_pool = arg15 = svn_swig_pl_make_pool (ST(items-1));
+      SPAGAIN;
     }
     arg1 = &temp1;
     if ((items < 11) || (items > 12)) {
@@ -6210,6 +6256,7 @@ XS(_wrap_svn_repos_set_path3) {
     
     {
       _global_pool = arg7 = svn_swig_pl_make_pool (ST(items-1));
+      SPAGAIN;
     }
     if ((items < 6) || (items > 7)) {
       SWIG_croak("Usage: svn_repos_set_path3(report_baton,path,revision,depth,start_empty,lock_token,pool);");
@@ -6315,6 +6362,7 @@ XS(_wrap_svn_repos_set_path2) {
     
     {
       _global_pool = arg6 = svn_swig_pl_make_pool (ST(items-1));
+      SPAGAIN;
     }
     if ((items < 5) || (items > 6)) {
       SWIG_croak("Usage: svn_repos_set_path2(report_baton,path,revision,start_empty,lock_token,pool);");
@@ -6409,6 +6457,7 @@ XS(_wrap_svn_repos_set_path) {
     
     {
       _global_pool = arg5 = svn_swig_pl_make_pool (ST(items-1));
+      SPAGAIN;
     }
     if ((items < 4) || (items > 5)) {
       SWIG_croak("Usage: svn_repos_set_path(report_baton,path,revision,start_empty,pool);");
@@ -6507,6 +6556,7 @@ XS(_wrap_svn_repos_link_path3) {
     
     {
       _global_pool = arg8 = svn_swig_pl_make_pool (ST(items-1));
+      SPAGAIN;
     }
     if ((items < 7) || (items > 8)) {
       SWIG_croak("Usage: svn_repos_link_path3(report_baton,path,link_path,revision,depth,start_empty,lock_token,pool);");
@@ -6623,6 +6673,7 @@ XS(_wrap_svn_repos_link_path2) {
     
     {
       _global_pool = arg7 = svn_swig_pl_make_pool (ST(items-1));
+      SPAGAIN;
     }
     if ((items < 6) || (items > 7)) {
       SWIG_croak("Usage: svn_repos_link_path2(report_baton,path,link_path,revision,start_empty,lock_token,pool);");
@@ -6728,6 +6779,7 @@ XS(_wrap_svn_repos_link_path) {
     
     {
       _global_pool = arg6 = svn_swig_pl_make_pool (ST(items-1));
+      SPAGAIN;
     }
     if ((items < 5) || (items > 6)) {
       SWIG_croak("Usage: svn_repos_link_path(report_baton,path,link_path,revision,start_empty,pool);");
@@ -6816,6 +6868,7 @@ XS(_wrap_svn_repos_delete_path) {
     
     {
       _global_pool = arg3 = svn_swig_pl_make_pool (ST(items-1));
+      SPAGAIN;
     }
     if ((items < 2) || (items > 3)) {
       SWIG_croak("Usage: svn_repos_delete_path(report_baton,path,pool);");
@@ -6879,6 +6932,7 @@ XS(_wrap_svn_repos_finish_report) {
     
     {
       _global_pool = arg2 = svn_swig_pl_make_pool (ST(items-1));
+      SPAGAIN;
     }
     if ((items < 1) || (items > 2)) {
       SWIG_croak("Usage: svn_repos_finish_report(report_baton,pool);");
@@ -6935,6 +6989,7 @@ XS(_wrap_svn_repos_abort_report) {
     
     {
       _global_pool = arg2 = svn_swig_pl_make_pool (ST(items-1));
+      SPAGAIN;
     }
     if ((items < 1) || (items > 2)) {
       SWIG_croak("Usage: svn_repos_abort_report(report_baton,pool);");
@@ -7023,6 +7078,7 @@ XS(_wrap_svn_repos_dir_delta2) {
     
     {
       _global_pool = arg14 = svn_swig_pl_make_pool (ST(items-1));
+      SPAGAIN;
     }
     if ((items < 11) || (items > 12)) {
       SWIG_croak("Usage: svn_repos_dir_delta2(src_root,src_parent_dir,src_entry,tgt_root,tgt_path,editor,edit_baton,authz_read_func,authz_read_baton,text_deltas,depth,entry_props,ignore_ancestry,pool);");
@@ -7180,6 +7236,7 @@ XS(_wrap_svn_repos_dir_delta) {
     
     {
       _global_pool = arg14 = svn_swig_pl_make_pool (ST(items-1));
+      SPAGAIN;
     }
     if ((items < 11) || (items > 12)) {
       SWIG_croak("Usage: svn_repos_dir_delta(src_root,src_parent_dir,src_entry,tgt_root,tgt_path,editor,edit_baton,authz_read_func,authz_read_baton,text_deltas,recurse,entry_props,ignore_ancestry,pool);");
@@ -7320,6 +7377,7 @@ XS(_wrap_svn_repos_replay2) {
     
     {
       _global_pool = arg9 = svn_swig_pl_make_pool (ST(items-1));
+      SPAGAIN;
     }
     if ((items < 6) || (items > 7)) {
       SWIG_croak("Usage: svn_repos_replay2(root,base_dir,low_water_mark,send_deltas,editor,edit_baton,authz_read_func,authz_read_baton,pool);");
@@ -7413,6 +7471,7 @@ XS(_wrap_svn_repos_replay) {
     
     {
       _global_pool = arg4 = svn_swig_pl_make_pool (ST(items-1));
+      SPAGAIN;
     }
     if ((items < 2) || (items > 3)) {
       SWIG_croak("Usage: svn_repos_replay(root,editor,edit_baton,pool);");
@@ -7495,6 +7554,7 @@ XS(_wrap_svn_repos_get_commit_editor5) {
     
     {
       _global_pool = arg12 = svn_swig_pl_make_pool (ST(items-1));
+      SPAGAIN;
     }
     arg1 = &temp1;
     arg2 = &temp2;
@@ -7522,8 +7582,10 @@ XS(_wrap_svn_repos_get_commit_editor5) {
     }
     arg6 = (char *)(buf6);
     {
-      if (_global_pool == NULL)
-      _global_pool = svn_swig_pl_make_pool((SV *)NULL);
+      if (_global_pool == NULL) {
+        _global_pool = svn_swig_pl_make_pool((SV *)NULL);
+        SPAGAIN;
+      }
       arg7 = svn_swig_pl_hash_to_prophash(ST(4), _global_pool);  
     }
     {
@@ -7640,6 +7702,7 @@ XS(_wrap_svn_repos_get_commit_editor4) {
     
     {
       _global_pool = arg13 = svn_swig_pl_make_pool (ST(items-1));
+      SPAGAIN;
     }
     arg1 = &temp1;
     arg2 = &temp2;
@@ -7792,6 +7855,7 @@ XS(_wrap_svn_repos_get_commit_editor3) {
     
     {
       _global_pool = arg13 = svn_swig_pl_make_pool (ST(items-1));
+      SPAGAIN;
     }
     arg1 = &temp1;
     arg2 = &temp2;
@@ -7941,6 +8005,7 @@ XS(_wrap_svn_repos_get_commit_editor2) {
     
     {
       _global_pool = arg11 = svn_swig_pl_make_pool (ST(items-1));
+      SPAGAIN;
     }
     arg1 = &temp1;
     arg2 = &temp2;
@@ -8073,6 +8138,7 @@ XS(_wrap_svn_repos_get_commit_editor) {
     
     {
       _global_pool = arg10 = svn_swig_pl_make_pool (ST(items-1));
+      SPAGAIN;
     }
     arg1 = &temp1;
     arg2 = &temp2;
@@ -8182,6 +8248,7 @@ XS(_wrap_svn_repos_dated_revision) {
     
     {
       _global_pool = arg4 = svn_swig_pl_make_pool (ST(items-1));
+      SPAGAIN;
     }
     arg1 = &temp1;
     if ((items < 2) || (items > 3)) {
@@ -8267,6 +8334,7 @@ XS(_wrap_svn_repos_get_committed_info) {
     
     {
       _global_pool = arg6 = svn_swig_pl_make_pool (ST(items-1));
+      SPAGAIN;
     }
     arg1 = &temp1;
     arg2 = &temp2;
@@ -8367,6 +8435,7 @@ XS(_wrap_svn_repos_stat) {
     
     {
       _global_pool = arg4 = svn_swig_pl_make_pool (ST(items-1));
+      SPAGAIN;
     }
     arg1 = &temp1;
     if ((items < 2) || (items > 3)) {
@@ -8451,6 +8520,7 @@ XS(_wrap_svn_repos_deleted_rev) {
     
     {
       _global_pool = arg6 = svn_swig_pl_make_pool (ST(items-1));
+      SPAGAIN;
     }
     arg5 = &temp5;
     if ((items < 4) || (items > 5)) {
@@ -8556,6 +8626,7 @@ XS(_wrap_svn_repos_history2) {
     
     {
       _global_pool = arg10 = svn_swig_pl_make_pool (ST(items-1));
+      SPAGAIN;
     }
     if ((items < 7) || (items > 8)) {
       SWIG_croak("Usage: svn_repos_history2(fs,path,history_func,history_baton,authz_read_func,authz_read_baton,start,end,cross_copies,pool);");
@@ -8670,6 +8741,7 @@ XS(_wrap_svn_repos_history) {
     
     {
       _global_pool = arg8 = svn_swig_pl_make_pool (ST(items-1));
+      SPAGAIN;
     }
     if ((items < 6) || (items > 7)) {
       SWIG_croak("Usage: svn_repos_history(fs,path,history_func,history_baton,start,end,cross_copies,pool);");
@@ -8774,6 +8846,7 @@ XS(_wrap_svn_repos_trace_node_locations) {
     
     {
       _global_pool = arg8 = svn_swig_pl_make_pool (ST(items-1));
+      SPAGAIN;
     }
     arg2 = &temp2;
     if ((items < 5) || (items > 6)) {
@@ -8892,6 +8965,7 @@ XS(_wrap_svn_repos_node_location_segments) {
     
     {
       _global_pool = arg10 = svn_swig_pl_make_pool (ST(items-1));
+      SPAGAIN;
     }
     if ((items < 8) || (items > 9)) {
       SWIG_croak("Usage: svn_repos_node_location_segments(repos,path,peg_revision,start_rev,end_rev,receiver,receiver_baton,authz_read_func,authz_read_baton,pool);");
@@ -9025,6 +9099,7 @@ XS(_wrap_svn_repos_get_logs4) {
     
     {
       _global_pool = arg14 = svn_swig_pl_make_pool (ST(items-1));
+      SPAGAIN;
     }
     if ((items < 11) || (items > 12)) {
       SWIG_croak("Usage: svn_repos_get_logs4(repos,paths,start,end,limit,discover_changed_paths,strict_node_history,include_merged_revisions,revprops,authz_read_func,authz_read_baton,receiver,receiver_baton,pool);");
@@ -9170,6 +9245,7 @@ XS(_wrap_svn_repos_get_logs3) {
     
     {
       _global_pool = arg12 = svn_swig_pl_make_pool (ST(items-1));
+      SPAGAIN;
     }
     if ((items < 9) || (items > 10)) {
       SWIG_croak("Usage: svn_repos_get_logs3(repos,paths,start,end,limit,discover_changed_paths,strict_node_history,authz_read_func,authz_read_baton,receiver,receiver_baton,pool);");
@@ -9299,6 +9375,7 @@ XS(_wrap_svn_repos_get_logs2) {
     
     {
       _global_pool = arg11 = svn_swig_pl_make_pool (ST(items-1));
+      SPAGAIN;
     }
     if ((items < 8) || (items > 9)) {
       SWIG_croak("Usage: svn_repos_get_logs2(repos,paths,start,end,discover_changed_paths,strict_node_history,authz_read_func,authz_read_baton,receiver,receiver_baton,pool);");
@@ -9419,6 +9496,7 @@ XS(_wrap_svn_repos_get_logs) {
     
     {
       _global_pool = arg9 = svn_swig_pl_make_pool (ST(items-1));
+      SPAGAIN;
     }
     if ((items < 7) || (items > 8)) {
       SWIG_croak("Usage: svn_repos_get_logs(repos,paths,start,end,discover_changed_paths,strict_node_history,receiver,receiver_baton,pool);");
@@ -9529,6 +9607,7 @@ XS(_wrap_svn_repos_fs_get_mergeinfo) {
     
     {
       _global_pool = arg9 = svn_swig_pl_make_pool (ST(items-1));
+      SPAGAIN;
     }
     arg1 = &temp1;
     if ((items < 6) || (items > 7)) {
@@ -9653,6 +9732,7 @@ XS(_wrap_svn_repos_get_file_revs2) {
     
     {
       _global_pool = arg10 = svn_swig_pl_make_pool (ST(items-1));
+      SPAGAIN;
     }
     if ((items < 8) || (items > 9)) {
       SWIG_croak("Usage: svn_repos_get_file_revs2(repos,path,start,end,include_merged_revisions,authz_read_func,authz_read_baton,handler,handler_baton,pool);");
@@ -9777,6 +9857,7 @@ XS(_wrap_svn_repos_get_file_revs) {
     
     {
       _global_pool = arg9 = svn_swig_pl_make_pool (ST(items-1));
+      SPAGAIN;
     }
     if ((items < 7) || (items > 8)) {
       SWIG_croak("Usage: svn_repos_get_file_revs(repos,path,start,end,authz_read_func,authz_read_baton,handler,handler_baton,pool);");
@@ -9887,6 +9968,7 @@ XS(_wrap_svn_repos_fs_commit_txn) {
     
     {
       _global_pool = arg5 = svn_swig_pl_make_pool (ST(items-1));
+      SPAGAIN;
     }
     arg1 = &temp1;
     arg3 = &temp3;
@@ -9977,6 +10059,7 @@ XS(_wrap_svn_repos_fs_begin_txn_for_commit2) {
     
     {
       _global_pool = arg5 = svn_swig_pl_make_pool (ST(items-1));
+      SPAGAIN;
     }
     arg1 = &temp1;
     if ((items < 3) || (items > 4)) {
@@ -9993,8 +10076,10 @@ XS(_wrap_svn_repos_fs_begin_txn_for_commit2) {
     } 
     arg3 = (svn_revnum_t)(val3);
     {
-      if (_global_pool == NULL)
-      _global_pool = svn_swig_pl_make_pool((SV *)NULL);
+      if (_global_pool == NULL) {
+        _global_pool = svn_swig_pl_make_pool((SV *)NULL);
+        SPAGAIN;
+      }
       arg4 = svn_swig_pl_hash_to_prophash(ST(2), _global_pool);  
     }
     if (items > 3) {
@@ -10068,6 +10153,7 @@ XS(_wrap_svn_repos_fs_begin_txn_for_commit) {
     
     {
       _global_pool = arg6 = svn_swig_pl_make_pool (ST(items-1));
+      SPAGAIN;
     }
     arg1 = &temp1;
     if ((items < 4) || (items > 5)) {
@@ -10162,6 +10248,7 @@ XS(_wrap_svn_repos_fs_begin_txn_for_update) {
     
     {
       _global_pool = arg5 = svn_swig_pl_make_pool (ST(items-1));
+      SPAGAIN;
     }
     arg1 = &temp1;
     if ((items < 3) || (items > 4)) {
@@ -10260,9 +10347,11 @@ XS(_wrap_svn_repos_fs_lock_many) {
     
     {
       _global_pool = arg9 = svn_swig_pl_make_pool (ST(items-1));
+      SPAGAIN;
     }
     {
       _global_pool = arg10 = svn_swig_pl_make_pool (ST(items-1));
+      SPAGAIN;
     }
     if ((items < 8) || (items > 10)) {
       SWIG_croak("Usage: svn_repos_fs_lock_many(repos,lock_targets,comment,is_dav_comment,expiration_date,steal_lock,lock_callback,lock_baton,result_pool,scratch_pool);");
@@ -10401,6 +10490,7 @@ XS(_wrap_svn_repos_fs_lock) {
     
     {
       _global_pool = arg10 = svn_swig_pl_make_pool (ST(items-1));
+      SPAGAIN;
     }
     arg1 = &temp1;
     if ((items < 8) || (items > 9)) {
@@ -10524,9 +10614,11 @@ XS(_wrap_svn_repos_fs_unlock_many) {
     
     {
       _global_pool = arg6 = svn_swig_pl_make_pool (ST(items-1));
+      SPAGAIN;
     }
     {
       _global_pool = arg7 = svn_swig_pl_make_pool (ST(items-1));
+      SPAGAIN;
     }
     if ((items < 5) || (items > 7)) {
       SWIG_croak("Usage: svn_repos_fs_unlock_many(repos,unlock_targets,break_lock,lock_callback,lock_baton,result_pool,scratch_pool);");
@@ -10629,6 +10721,7 @@ XS(_wrap_svn_repos_fs_unlock) {
     
     {
       _global_pool = arg5 = svn_swig_pl_make_pool (ST(items-1));
+      SPAGAIN;
     }
     if ((items < 4) || (items > 5)) {
       SWIG_croak("Usage: svn_repos_fs_unlock(repos,path,token,break_lock,pool);");
@@ -10719,6 +10812,7 @@ XS(_wrap_svn_repos_fs_get_locks2) {
     
     {
       _global_pool = arg7 = svn_swig_pl_make_pool (ST(items-1));
+      SPAGAIN;
     }
     arg1 = &temp1;
     if ((items < 4) || (items > 5)) {
@@ -10814,6 +10908,7 @@ XS(_wrap_svn_repos_fs_get_locks) {
     
     {
       _global_pool = arg6 = svn_swig_pl_make_pool (ST(items-1));
+      SPAGAIN;
     }
     arg1 = &temp1;
     if ((items < 3) || (items > 4)) {
@@ -10919,6 +11014,7 @@ XS(_wrap_svn_repos_fs_change_rev_prop4) {
     
     {
       _global_pool = arg11 = svn_swig_pl_make_pool (ST(items-1));
+      SPAGAIN;
     }
     if ((items < 9) || (items > 10)) {
       SWIG_croak("Usage: svn_repos_fs_change_rev_prop4(repos,rev,author,name,old_value_p,new_value,use_pre_revprop_change_hook,use_post_revprop_change_hook,authz_read_func,authz_read_baton,pool);");
@@ -11068,6 +11164,7 @@ XS(_wrap_svn_repos_fs_change_rev_prop3) {
     
     {
       _global_pool = arg10 = svn_swig_pl_make_pool (ST(items-1));
+      SPAGAIN;
     }
     if ((items < 8) || (items > 9)) {
       SWIG_croak("Usage: svn_repos_fs_change_rev_prop3(repos,rev,author,name,new_value,use_pre_revprop_change_hook,use_post_revprop_change_hook,authz_read_func,authz_read_baton,pool);");
@@ -11196,6 +11293,7 @@ XS(_wrap_svn_repos_fs_change_rev_prop2) {
     
     {
       _global_pool = arg8 = svn_swig_pl_make_pool (ST(items-1));
+      SPAGAIN;
     }
     if ((items < 6) || (items > 7)) {
       SWIG_croak("Usage: svn_repos_fs_change_rev_prop2(repos,rev,author,name,new_value,authz_read_func,authz_read_baton,pool);");
@@ -11308,6 +11406,7 @@ XS(_wrap_svn_repos_fs_change_rev_prop) {
     
     {
       _global_pool = arg6 = svn_swig_pl_make_pool (ST(items-1));
+      SPAGAIN;
     }
     if ((items < 5) || (items > 6)) {
       SWIG_croak("Usage: svn_repos_fs_change_rev_prop(repos,rev,author,name,new_value,pool);");
@@ -11409,6 +11508,7 @@ XS(_wrap_svn_repos_fs_revision_prop) {
     
     {
       _global_pool = arg7 = svn_swig_pl_make_pool (ST(items-1));
+      SPAGAIN;
     }
     arg1 = &temp1;
     if ((items < 4) || (items > 5)) {
@@ -11507,6 +11607,7 @@ XS(_wrap_svn_repos_fs_revision_proplist) {
     
     {
       _global_pool = arg6 = svn_swig_pl_make_pool (ST(items-1));
+      SPAGAIN;
     }
     arg1 = &temp1;
     if ((items < 3) || (items > 4)) {
@@ -11597,6 +11698,7 @@ XS(_wrap_svn_repos_fs_change_node_prop) {
     
     {
       _global_pool = arg5 = svn_swig_pl_make_pool (ST(items-1));
+      SPAGAIN;
     }
     if ((items < 4) || (items > 5)) {
       SWIG_croak("Usage: svn_repos_fs_change_node_prop(root,path,name,value,pool);");
@@ -11693,9 +11795,11 @@ XS(_wrap_svn_repos_fs_get_inherited_props) {
     
     {
       _global_pool = arg7 = svn_swig_pl_make_pool (ST(items-1));
+      SPAGAIN;
     }
     {
       _global_pool = arg8 = svn_swig_pl_make_pool (ST(items-1));
+      SPAGAIN;
     }
     arg1 = &temp1;
     if ((items < 4) || (items > 6)) {
@@ -11800,6 +11904,7 @@ XS(_wrap_svn_repos_fs_change_txn_prop) {
     
     {
       _global_pool = arg4 = svn_swig_pl_make_pool (ST(items-1));
+      SPAGAIN;
     }
     if ((items < 3) || (items > 4)) {
       SWIG_croak("Usage: svn_repos_fs_change_txn_prop(txn,name,value,pool);");
@@ -11879,6 +11984,7 @@ XS(_wrap_svn_repos_fs_change_txn_props) {
     
     {
       _global_pool = arg3 = svn_swig_pl_make_pool (ST(items-1));
+      SPAGAIN;
     }
     if ((items < 2) || (items > 3)) {
       SWIG_croak("Usage: svn_repos_fs_change_txn_props(txn,props,pool);");
@@ -12619,9 +12725,11 @@ XS(_wrap_svn_repos_node_editor) {
     
     {
       _global_pool = arg6 = svn_swig_pl_make_pool (ST(items-1));
+      SPAGAIN;
     }
     {
       _global_pool = arg7 = svn_swig_pl_make_pool (ST(items-1));
+      SPAGAIN;
     }
     arg1 = &temp1;
     arg2 = &temp2;
@@ -12748,9 +12856,11 @@ XS(_wrap_svn_repos_info_format) {
     
     {
       _global_pool = arg4 = svn_swig_pl_make_pool (ST(items-1));
+      SPAGAIN;
     }
     {
       _global_pool = arg5 = svn_swig_pl_make_pool (ST(items-1));
+      SPAGAIN;
     }
     arg1 = &temp1;
     arg2 = &temp2;
@@ -12856,6 +12966,7 @@ XS(_wrap_svn_repos_verify_fs3) {
     
     {
       _global_pool = arg12 = svn_swig_pl_make_pool (ST(items-1));
+      SPAGAIN;
     }
     if ((items < 11) || (items > 12)) {
       SWIG_croak("Usage: svn_repos_verify_fs3(repos,start_rev,end_rev,check_normalization,metadata_only,notify_func,notify_baton,verify_callback,verify_baton,cancel,cancel_baton,scratch_pool);");
@@ -12996,6 +13107,7 @@ XS(_wrap_svn_repos_verify_fs2) {
     
     {
       _global_pool = arg8 = svn_swig_pl_make_pool (ST(items-1));
+      SPAGAIN;
     }
     if ((items < 7) || (items > 8)) {
       SWIG_croak("Usage: svn_repos_verify_fs2(repos,start_rev,end_rev,notify_func,notify_baton,cancel,cancel_baton,scratch_pool);");
@@ -13105,6 +13217,7 @@ XS(_wrap_svn_repos_verify_fs) {
     
     {
       _global_pool = arg7 = svn_swig_pl_make_pool (ST(items-1));
+      SPAGAIN;
     }
     if ((items < 5) || (items > 6)) {
       SWIG_croak("Usage: svn_repos_verify_fs(repos,feedback_stream,start_rev,end_rev,cancel_func,cancel_baton,pool);");
@@ -13116,6 +13229,7 @@ XS(_wrap_svn_repos_verify_fs) {
     arg1 = (svn_repos_t *)(argp1);
     {
       svn_swig_pl_make_stream (&arg2, ST(1));
+      SPAGAIN;
     }
     ecode3 = SWIG_AsVal_long SWIG_PERL_CALL_ARGS_2(ST(2), &val3);
     if (!SWIG_IsOK(ecode3)) {
@@ -13204,6 +13318,7 @@ XS(_wrap_svn_repos_dump_fs3) {
     
     {
       _global_pool = arg11 = svn_swig_pl_make_pool (ST(items-1));
+      SPAGAIN;
     }
     if ((items < 9) || (items > 10)) {
       SWIG_croak("Usage: svn_repos_dump_fs3(repos,dumpstream,start_rev,end_rev,incremental,use_deltas,notify_func,notify_baton,cancel_func,cancel_baton,scratch_pool);");
@@ -13215,6 +13330,7 @@ XS(_wrap_svn_repos_dump_fs3) {
     arg1 = (svn_repos_t *)(argp1);
     {
       svn_swig_pl_make_stream (&arg2, ST(1));
+      SPAGAIN;
     }
     ecode3 = SWIG_AsVal_long SWIG_PERL_CALL_ARGS_2(ST(2), &val3);
     if (!SWIG_IsOK(ecode3)) {
@@ -13329,6 +13445,7 @@ XS(_wrap_svn_repos_dump_fs2) {
     
     {
       _global_pool = arg10 = svn_swig_pl_make_pool (ST(items-1));
+      SPAGAIN;
     }
     if ((items < 8) || (items > 9)) {
       SWIG_croak("Usage: svn_repos_dump_fs2(repos,dumpstream,feedback_stream,start_rev,end_rev,incremental,use_deltas,cancel_func,cancel_baton,pool);");
@@ -13340,9 +13457,11 @@ XS(_wrap_svn_repos_dump_fs2) {
     arg1 = (svn_repos_t *)(argp1);
     {
       svn_swig_pl_make_stream (&arg2, ST(1));
+      SPAGAIN;
     }
     {
       svn_swig_pl_make_stream (&arg3, ST(2));
+      SPAGAIN;
     }
     ecode4 = SWIG_AsVal_long SWIG_PERL_CALL_ARGS_2(ST(3), &val4);
     if (!SWIG_IsOK(ecode4)) {
@@ -13442,6 +13561,7 @@ XS(_wrap_svn_repos_dump_fs) {
     
     {
       _global_pool = arg9 = svn_swig_pl_make_pool (ST(items-1));
+      SPAGAIN;
     }
     if ((items < 7) || (items > 8)) {
       SWIG_croak("Usage: svn_repos_dump_fs(repos,dumpstream,feedback_stream,start_rev,end_rev,incremental,cancel_func,cancel_baton,pool);");
@@ -13453,9 +13573,11 @@ XS(_wrap_svn_repos_dump_fs) {
     arg1 = (svn_repos_t *)(argp1);
     {
       svn_swig_pl_make_stream (&arg2, ST(1));
+      SPAGAIN;
     }
     {
       svn_swig_pl_make_stream (&arg3, ST(2));
+      SPAGAIN;
     }
     ecode4 = SWIG_AsVal_long SWIG_PERL_CALL_ARGS_2(ST(3), &val4);
     if (!SWIG_IsOK(ecode4)) {
@@ -13566,6 +13688,7 @@ XS(_wrap_svn_repos_load_fs5) {
     
     {
       _global_pool = arg15 = svn_swig_pl_make_pool (ST(items-1));
+      SPAGAIN;
     }
     if ((items < 13) || (items > 14)) {
       SWIG_croak("Usage: svn_repos_load_fs5(repos,dumpstream,start_rev,end_rev,uuid_action,parent_dir,use_pre_commit_hook,use_post_commit_hook,validate_props,ignore_dates,notify_func,notify_baton,cancel_func,cancel_baton,pool);");
@@ -13577,6 +13700,7 @@ XS(_wrap_svn_repos_load_fs5) {
     arg1 = (svn_repos_t *)(argp1);
     {
       svn_swig_pl_make_stream (&arg2, ST(1));
+      SPAGAIN;
     }
     ecode3 = SWIG_AsVal_long SWIG_PERL_CALL_ARGS_2(ST(2), &val3);
     if (!SWIG_IsOK(ecode3)) {
@@ -13731,6 +13855,7 @@ XS(_wrap_svn_repos_load_fs4) {
     
     {
       _global_pool = arg14 = svn_swig_pl_make_pool (ST(items-1));
+      SPAGAIN;
     }
     if ((items < 12) || (items > 13)) {
       SWIG_croak("Usage: svn_repos_load_fs4(repos,dumpstream,start_rev,end_rev,uuid_action,parent_dir,use_pre_commit_hook,use_post_commit_hook,validate_props,notify_func,notify_baton,cancel_func,cancel_baton,pool);");
@@ -13742,6 +13867,7 @@ XS(_wrap_svn_repos_load_fs4) {
     arg1 = (svn_repos_t *)(argp1);
     {
       svn_swig_pl_make_stream (&arg2, ST(1));
+      SPAGAIN;
     }
     ecode3 = SWIG_AsVal_long SWIG_PERL_CALL_ARGS_2(ST(2), &val3);
     if (!SWIG_IsOK(ecode3)) {
@@ -13883,6 +14009,7 @@ XS(_wrap_svn_repos_load_fs3) {
     
     {
       _global_pool = arg12 = svn_swig_pl_make_pool (ST(items-1));
+      SPAGAIN;
     }
     if ((items < 10) || (items > 11)) {
       SWIG_croak("Usage: svn_repos_load_fs3(repos,dumpstream,uuid_action,parent_dir,use_pre_commit_hook,use_post_commit_hook,validate_props,notify_func,notify_baton,cancel_func,cancel_baton,pool);");
@@ -13894,6 +14021,7 @@ XS(_wrap_svn_repos_load_fs3) {
     arg1 = (svn_repos_t *)(argp1);
     {
       svn_swig_pl_make_stream (&arg2, ST(1));
+      SPAGAIN;
     }
     ecode3 = SWIG_AsVal_int SWIG_PERL_CALL_ARGS_2(ST(2), &val3);
     if (!SWIG_IsOK(ecode3)) {
@@ -14016,6 +14144,7 @@ XS(_wrap_svn_repos_load_fs2) {
     
     {
       _global_pool = arg10 = svn_swig_pl_make_pool (ST(items-1));
+      SPAGAIN;
     }
     if ((items < 8) || (items > 9)) {
       SWIG_croak("Usage: svn_repos_load_fs2(repos,dumpstream,feedback_stream,uuid_action,parent_dir,use_pre_commit_hook,use_post_commit_hook,cancel_func,cancel_baton,pool);");
@@ -14027,9 +14156,11 @@ XS(_wrap_svn_repos_load_fs2) {
     arg1 = (svn_repos_t *)(argp1);
     {
       svn_swig_pl_make_stream (&arg2, ST(1));
+      SPAGAIN;
     }
     {
       svn_swig_pl_make_stream (&arg3, ST(2));
+      SPAGAIN;
     }
     ecode4 = SWIG_AsVal_int SWIG_PERL_CALL_ARGS_2(ST(3), &val4);
     if (!SWIG_IsOK(ecode4)) {
@@ -14127,6 +14258,7 @@ XS(_wrap_svn_repos_load_fs) {
     
     {
       _global_pool = arg8 = svn_swig_pl_make_pool (ST(items-1));
+      SPAGAIN;
     }
     if ((items < 6) || (items > 7)) {
       SWIG_croak("Usage: svn_repos_load_fs(repos,dumpstream,feedback_stream,uuid_action,parent_dir,cancel_func,cancel_baton,pool);");
@@ -14138,9 +14270,11 @@ XS(_wrap_svn_repos_load_fs) {
     arg1 = (svn_repos_t *)(argp1);
     {
       svn_swig_pl_make_stream (&arg2, ST(1));
+      SPAGAIN;
     }
     {
       svn_swig_pl_make_stream (&arg3, ST(2));
+      SPAGAIN;
     }
     ecode4 = SWIG_AsVal_int SWIG_PERL_CALL_ARGS_2(ST(3), &val4);
     if (!SWIG_IsOK(ecode4)) {
@@ -14989,12 +15123,14 @@ XS(_wrap_svn_repos_parse_dumpstream3) {
     
     {
       _global_pool = arg7 = svn_swig_pl_make_pool (ST(items-1));
+      SPAGAIN;
     }
     if ((items < 5) || (items > 6)) {
       SWIG_croak("Usage: svn_repos_parse_dumpstream3(stream,parse_fns,parse_baton,deltas_are_text,cancel_func,cancel_baton,pool);");
     }
     {
       svn_swig_pl_make_stream (&arg1, ST(0));
+      SPAGAIN;
     }
     res2 = SWIG_ConvertPtr(ST(1), &argp2,SWIGTYPE_p_svn_repos_parse_fns3_t, 0 |  0 );
     if (!SWIG_IsOK(res2)) {
@@ -15104,6 +15240,7 @@ XS(_wrap_svn_repos_get_fs_build_parser5) {
     
     {
       _global_pool = arg15 = svn_swig_pl_make_pool (ST(items-1));
+      SPAGAIN;
     }
     arg1 = &temp1;
     arg2 = &temp2;
@@ -15277,6 +15414,7 @@ XS(_wrap_svn_repos_get_fs_build_parser4) {
     
     {
       _global_pool = arg12 = svn_swig_pl_make_pool (ST(items-1));
+      SPAGAIN;
     }
     arg1 = &temp1;
     arg2 = &temp2;
@@ -16688,12 +16826,14 @@ XS(_wrap_svn_repos_parse_dumpstream2) {
     
     {
       _global_pool = arg6 = svn_swig_pl_make_pool (ST(items-1));
+      SPAGAIN;
     }
     if ((items < 4) || (items > 5)) {
       SWIG_croak("Usage: svn_repos_parse_dumpstream2(stream,parse_fns,parse_baton,cancel_func,cancel_baton,pool);");
     }
     {
       svn_swig_pl_make_stream (&arg1, ST(0));
+      SPAGAIN;
     }
     res2 = SWIG_ConvertPtr(ST(1), &argp2,SWIGTYPE_p_svn_repos_parse_fns2_t, 0 |  0 );
     if (!SWIG_IsOK(res2)) {
@@ -16766,12 +16906,14 @@ XS(_wrap_svn_repos_parse_dumpstream) {
     
     {
       _global_pool = arg6 = svn_swig_pl_make_pool (ST(items-1));
+      SPAGAIN;
     }
     if ((items < 4) || (items > 5)) {
       SWIG_croak("Usage: svn_repos_parse_dumpstream(stream,parse_fns,parse_baton,cancel_func,cancel_baton,pool);");
     }
     {
       svn_swig_pl_make_stream (&arg1, ST(0));
+      SPAGAIN;
     }
     res2 = SWIG_ConvertPtr(ST(1), &argp2,SWIGTYPE_p_svn_repos_parse_fns_t, 0 |  0 );
     if (!SWIG_IsOK(res2)) {
@@ -16859,6 +17001,7 @@ XS(_wrap_svn_repos_get_fs_build_parser3) {
     
     {
       _global_pool = arg10 = svn_swig_pl_make_pool (ST(items-1));
+      SPAGAIN;
     }
     arg1 = &temp1;
     arg2 = &temp2;
@@ -16992,6 +17135,7 @@ XS(_wrap_svn_repos_get_fs_build_parser2) {
     
     {
       _global_pool = arg8 = svn_swig_pl_make_pool (ST(items-1));
+      SPAGAIN;
     }
     arg1 = &temp1;
     arg2 = &temp2;
@@ -17015,6 +17159,7 @@ XS(_wrap_svn_repos_get_fs_build_parser2) {
     arg5 = (enum svn_repos_load_uuid)(val5);
     {
       svn_swig_pl_make_stream (&arg6, ST(3));
+      SPAGAIN;
     }
     res7 = SWIG_AsCharPtrAndSize(ST(4), &buf7, NULL, &alloc7);
     if (!SWIG_IsOK(res7)) {
@@ -17109,6 +17254,7 @@ XS(_wrap_svn_repos_get_fs_build_parser) {
     
     {
       _global_pool = arg8 = svn_swig_pl_make_pool (ST(items-1));
+      SPAGAIN;
     }
     arg1 = &temp1;
     arg2 = &temp2;
@@ -17132,6 +17278,7 @@ XS(_wrap_svn_repos_get_fs_build_parser) {
     arg5 = (enum svn_repos_load_uuid)(val5);
     {
       svn_swig_pl_make_stream (&arg6, ST(3));
+      SPAGAIN;
     }
     res7 = SWIG_AsCharPtrAndSize(ST(4), &buf7, NULL, &alloc7);
     if (!SWIG_IsOK(res7)) {
@@ -17215,6 +17362,7 @@ XS(_wrap_svn_repos_authz_read2) {
     
     {
       _global_pool = arg5 = svn_swig_pl_make_pool (ST(items-1));
+      SPAGAIN;
     }
     arg1 = &temp1;
     if ((items < 3) || (items > 4)) {
@@ -17299,6 +17447,7 @@ XS(_wrap_svn_repos_authz_read) {
     
     {
       _global_pool = arg4 = svn_swig_pl_make_pool (ST(items-1));
+      SPAGAIN;
     }
     arg1 = &temp1;
     if ((items < 2) || (items > 3)) {
@@ -17371,6 +17520,7 @@ XS(_wrap_svn_repos_authz_parse) {
     
     {
       _global_pool = arg4 = svn_swig_pl_make_pool (ST(items-1));
+      SPAGAIN;
     }
     arg1 = &temp1;
     if ((items < 2) || (items > 3)) {
@@ -17378,9 +17528,11 @@ XS(_wrap_svn_repos_authz_parse) {
     }
     {
       svn_swig_pl_make_stream (&arg2, ST(0));
+      SPAGAIN;
     }
     {
       svn_swig_pl_make_stream (&arg3, ST(1));
+      SPAGAIN;
     }
     if (items > 2) {
       
@@ -17456,6 +17608,7 @@ XS(_wrap_svn_repos_authz_check_access) {
     
     {
       _global_pool = arg7 = svn_swig_pl_make_pool (ST(items-1));
+      SPAGAIN;
     }
     arg6 = &temp6;
     if ((items < 5) || (items > 6)) {
@@ -17559,6 +17712,7 @@ XS(_wrap_svn_repos_check_revision_access) {
     
     {
       _global_pool = arg6 = svn_swig_pl_make_pool (ST(items-1));
+      SPAGAIN;
     }
     if ((items < 4) || (items > 5)) {
       SWIG_croak("Usage: svn_repos_check_revision_access(access_level,repos,revision,authz_read_func,authz_read_baton,pool);");
@@ -17645,6 +17799,7 @@ XS(_wrap_svn_repos_parse_fns3_invoke_magic_header_record) {
     
     {
       _global_pool = arg4 = svn_swig_pl_make_pool (ST(items-1));
+      SPAGAIN;
     }
     if ((items < 3) || (items > 4)) {
       SWIG_croak("Usage: svn_repos_parse_fns3_invoke_magic_header_record(_obj,version,parse_baton,pool);");
@@ -17722,6 +17877,7 @@ XS(_wrap_svn_repos_parse_fns3_invoke_uuid_record) {
     
     {
       _global_pool = arg4 = svn_swig_pl_make_pool (ST(items-1));
+      SPAGAIN;
     }
     if ((items < 3) || (items > 4)) {
       SWIG_croak("Usage: svn_repos_parse_fns3_invoke_uuid_record(_obj,uuid,parse_baton,pool);");
@@ -17800,6 +17956,7 @@ XS(_wrap_svn_repos_parse_fns3_invoke_new_revision_record) {
     
     {
       _global_pool = arg5 = svn_swig_pl_make_pool (ST(items-1));
+      SPAGAIN;
     }
     arg2 = &temp2;
     if ((items < 3) || (items > 4)) {
@@ -17884,6 +18041,7 @@ XS(_wrap_svn_repos_parse_fns3_invoke_new_node_record) {
     
     {
       _global_pool = arg5 = svn_swig_pl_make_pool (ST(items-1));
+      SPAGAIN;
     }
     arg2 = &temp2;
     if ((items < 3) || (items > 4)) {
@@ -18280,7 +18438,11 @@ XS(_wrap_svn_repos_parse_fns3_invoke_set_fulltext) {
       }
     }
     {
-      if (argvi >= items) EXTEND(sp,1);  ST(argvi) = svn_swig_pl_from_stream(*arg2); argvi++  ;
+      SV *tmp;
+      PUTBACK;
+      tmp = svn_swig_pl_from_stream(*arg2);
+      SPAGAIN;
+      if (argvi >= items) EXTEND(sp,1);  ST(argvi) = tmp; argvi++  ;
     }
     
     
@@ -18499,6 +18661,7 @@ XS(_wrap_svn_repos_parse_fns2_invoke_new_revision_record) {
     
     {
       _global_pool = arg5 = svn_swig_pl_make_pool (ST(items-1));
+      SPAGAIN;
     }
     arg2 = &temp2;
     if ((items < 3) || (items > 4)) {
@@ -18582,6 +18745,7 @@ XS(_wrap_svn_repos_parse_fns2_invoke_uuid_record) {
     
     {
       _global_pool = arg4 = svn_swig_pl_make_pool (ST(items-1));
+      SPAGAIN;
     }
     if ((items < 3) || (items > 4)) {
       SWIG_croak("Usage: svn_repos_parse_fns2_invoke_uuid_record(_obj,uuid,parse_baton,pool);");
@@ -18660,6 +18824,7 @@ XS(_wrap_svn_repos_parse_fns2_invoke_new_node_record) {
     
     {
       _global_pool = arg5 = svn_swig_pl_make_pool (ST(items-1));
+      SPAGAIN;
     }
     arg2 = &temp2;
     if ((items < 3) || (items > 4)) {
@@ -19056,7 +19221,11 @@ XS(_wrap_svn_repos_parse_fns2_invoke_set_fulltext) {
       }
     }
     {
-      if (argvi >= items) EXTEND(sp,1);  ST(argvi) = svn_swig_pl_from_stream(*arg2); argvi++  ;
+      SV *tmp;
+      PUTBACK;
+      tmp = svn_swig_pl_from_stream(*arg2);
+      SPAGAIN;
+      if (argvi >= items) EXTEND(sp,1);  ST(argvi) = tmp; argvi++  ;
     }
     
     
@@ -19278,6 +19447,7 @@ XS(_wrap_svn_repos_invoke_authz_func) {
     
     {
       _global_pool = arg6 = svn_swig_pl_make_pool (ST(items-1));
+      SPAGAIN;
     }
     arg2 = &temp2;
     if ((items < 4) || (items > 5)) {
@@ -19379,6 +19549,7 @@ XS(_wrap_svn_repos_invoke_authz_callback) {
     
     {
       _global_pool = arg7 = svn_swig_pl_make_pool (ST(items-1));
+      SPAGAIN;
     }
     arg3 = &temp3;
     if ((items < 5) || (items > 6)) {
@@ -19476,6 +19647,7 @@ XS(_wrap_svn_repos_invoke_notify_func) {
     
     {
       _global_pool = arg4 = svn_swig_pl_make_pool (ST(items-1));
+      SPAGAIN;
     }
     if ((items < 3) || (items > 4)) {
       SWIG_croak("Usage: svn_repos_invoke_notify_func(_obj,baton,notify,scratch_pool);");
@@ -19533,6 +19705,7 @@ XS(_wrap_svn_repos_invoke_freeze_func) {
     
     {
       _global_pool = arg3 = svn_swig_pl_make_pool (ST(items-1));
+      SPAGAIN;
     }
     if ((items < 2) || (items > 3)) {
       SWIG_croak("Usage: svn_repos_invoke_freeze_func(_obj,baton,pool);");
@@ -19605,6 +19778,7 @@ XS(_wrap_svn_repos_invoke_history_func) {
     
     {
       _global_pool = arg5 = svn_swig_pl_make_pool (ST(items-1));
+      SPAGAIN;
     }
     if ((items < 4) || (items > 5)) {
       SWIG_croak("Usage: svn_repos_invoke_history_func(_obj,baton,path,revision,pool);");
@@ -19701,6 +19875,7 @@ XS(_wrap_svn_repos_invoke_file_rev_handler) {
     
     {
       _global_pool = arg9 = svn_swig_pl_make_pool (ST(items-1));
+      SPAGAIN;
     }
     arg6 = &temp6;
     arg7 = &temp7;
@@ -19812,6 +19987,7 @@ XS(_wrap_svn_repos_invoke_verify_callback) {
     
     {
       _global_pool = arg5 = svn_swig_pl_make_pool (ST(items-1));
+      SPAGAIN;
     }
     if ((items < 4) || (items > 5)) {
       SWIG_croak("Usage: svn_repos_invoke_verify_callback(_obj,baton,revision,verify_err,scratch_pool);");
@@ -21042,347 +21218,347 @@ XS(SWIG_init) {
     SvREADONLY_on(sv);
   }
   
-  /*@SWIG:/home/evgeny/release/svnrm/1.9.4/prefix/share/swig/2.0.12/perl5/perltypemaps.swg,65,%set_constant@*/ do {
+  /*@SWIG:/tmp/svnrm/prefix/share/swig/2.0.12/perl5/perltypemaps.swg,65,%set_constant@*/ do {
     SV *sv = get_sv((char*) SWIG_prefix "svn_node_action_change", TRUE | 0x2 | GV_ADDMULTI);
     sv_setsv(sv, SWIG_From_int  SWIG_PERL_CALL_ARGS_1((int)(svn_node_action_change)));
     SvREADONLY_on(sv);
   } while(0) /*@SWIG@*/;
-  /*@SWIG:/home/evgeny/release/svnrm/1.9.4/prefix/share/swig/2.0.12/perl5/perltypemaps.swg,65,%set_constant@*/ do {
+  /*@SWIG:/tmp/svnrm/prefix/share/swig/2.0.12/perl5/perltypemaps.swg,65,%set_constant@*/ do {
     SV *sv = get_sv((char*) SWIG_prefix "svn_node_action_add", TRUE | 0x2 | GV_ADDMULTI);
     sv_setsv(sv, SWIG_From_int  SWIG_PERL_CALL_ARGS_1((int)(svn_node_action_add)));
     SvREADONLY_on(sv);
   } while(0) /*@SWIG@*/;
-  /*@SWIG:/home/evgeny/release/svnrm/1.9.4/prefix/share/swig/2.0.12/perl5/perltypemaps.swg,65,%set_constant@*/ do {
+  /*@SWIG:/tmp/svnrm/prefix/share/swig/2.0.12/perl5/perltypemaps.swg,65,%set_constant@*/ do {
     SV *sv = get_sv((char*) SWIG_prefix "svn_node_action_delete", TRUE | 0x2 | GV_ADDMULTI);
     sv_setsv(sv, SWIG_From_int  SWIG_PERL_CALL_ARGS_1((int)(svn_node_action_delete)));
     SvREADONLY_on(sv);
   } while(0) /*@SWIG@*/;
-  /*@SWIG:/home/evgeny/release/svnrm/1.9.4/prefix/share/swig/2.0.12/perl5/perltypemaps.swg,65,%set_constant@*/ do {
+  /*@SWIG:/tmp/svnrm/prefix/share/swig/2.0.12/perl5/perltypemaps.swg,65,%set_constant@*/ do {
     SV *sv = get_sv((char*) SWIG_prefix "svn_node_action_replace", TRUE | 0x2 | GV_ADDMULTI);
     sv_setsv(sv, SWIG_From_int  SWIG_PERL_CALL_ARGS_1((int)(svn_node_action_replace)));
     SvREADONLY_on(sv);
   } while(0) /*@SWIG@*/;
-  /*@SWIG:/home/evgeny/release/svnrm/1.9.4/prefix/share/swig/2.0.12/perl5/perltypemaps.swg,65,%set_constant@*/ do {
+  /*@SWIG:/tmp/svnrm/prefix/share/swig/2.0.12/perl5/perltypemaps.swg,65,%set_constant@*/ do {
     SV *sv = get_sv((char*) SWIG_prefix "svn_authz_none", TRUE | 0x2 | GV_ADDMULTI);
     sv_setsv(sv, SWIG_From_int  SWIG_PERL_CALL_ARGS_1((int)(svn_authz_none)));
     SvREADONLY_on(sv);
   } while(0) /*@SWIG@*/;
-  /*@SWIG:/home/evgeny/release/svnrm/1.9.4/prefix/share/swig/2.0.12/perl5/perltypemaps.swg,65,%set_constant@*/ do {
+  /*@SWIG:/tmp/svnrm/prefix/share/swig/2.0.12/perl5/perltypemaps.swg,65,%set_constant@*/ do {
     SV *sv = get_sv((char*) SWIG_prefix "svn_authz_read", TRUE | 0x2 | GV_ADDMULTI);
     sv_setsv(sv, SWIG_From_int  SWIG_PERL_CALL_ARGS_1((int)(svn_authz_read)));
     SvREADONLY_on(sv);
   } while(0) /*@SWIG@*/;
-  /*@SWIG:/home/evgeny/release/svnrm/1.9.4/prefix/share/swig/2.0.12/perl5/perltypemaps.swg,65,%set_constant@*/ do {
+  /*@SWIG:/tmp/svnrm/prefix/share/swig/2.0.12/perl5/perltypemaps.swg,65,%set_constant@*/ do {
     SV *sv = get_sv((char*) SWIG_prefix "svn_authz_write", TRUE | 0x2 | GV_ADDMULTI);
     sv_setsv(sv, SWIG_From_int  SWIG_PERL_CALL_ARGS_1((int)(svn_authz_write)));
     SvREADONLY_on(sv);
   } while(0) /*@SWIG@*/;
-  /*@SWIG:/home/evgeny/release/svnrm/1.9.4/prefix/share/swig/2.0.12/perl5/perltypemaps.swg,65,%set_constant@*/ do {
+  /*@SWIG:/tmp/svnrm/prefix/share/swig/2.0.12/perl5/perltypemaps.swg,65,%set_constant@*/ do {
     SV *sv = get_sv((char*) SWIG_prefix "svn_authz_recursive", TRUE | 0x2 | GV_ADDMULTI);
     sv_setsv(sv, SWIG_From_int  SWIG_PERL_CALL_ARGS_1((int)(svn_authz_recursive)));
     SvREADONLY_on(sv);
   } while(0) /*@SWIG@*/;
-  /*@SWIG:/home/evgeny/release/svnrm/1.9.4/prefix/share/swig/2.0.12/perl5/perltypemaps.swg,65,%set_constant@*/ do {
+  /*@SWIG:/tmp/svnrm/prefix/share/swig/2.0.12/perl5/perltypemaps.swg,65,%set_constant@*/ do {
     SV *sv = get_sv((char*) SWIG_prefix "svn_repos_notify_warning", TRUE | 0x2 | GV_ADDMULTI);
     sv_setsv(sv, SWIG_From_int  SWIG_PERL_CALL_ARGS_1((int)(svn_repos_notify_warning)));
     SvREADONLY_on(sv);
   } while(0) /*@SWIG@*/;
-  /*@SWIG:/home/evgeny/release/svnrm/1.9.4/prefix/share/swig/2.0.12/perl5/perltypemaps.swg,65,%set_constant@*/ do {
+  /*@SWIG:/tmp/svnrm/prefix/share/swig/2.0.12/perl5/perltypemaps.swg,65,%set_constant@*/ do {
     SV *sv = get_sv((char*) SWIG_prefix "svn_repos_notify_dump_rev_end", TRUE | 0x2 | GV_ADDMULTI);
     sv_setsv(sv, SWIG_From_int  SWIG_PERL_CALL_ARGS_1((int)(svn_repos_notify_dump_rev_end)));
     SvREADONLY_on(sv);
   } while(0) /*@SWIG@*/;
-  /*@SWIG:/home/evgeny/release/svnrm/1.9.4/prefix/share/swig/2.0.12/perl5/perltypemaps.swg,65,%set_constant@*/ do {
+  /*@SWIG:/tmp/svnrm/prefix/share/swig/2.0.12/perl5/perltypemaps.swg,65,%set_constant@*/ do {
     SV *sv = get_sv((char*) SWIG_prefix "svn_repos_notify_verify_rev_end", TRUE | 0x2 | GV_ADDMULTI);
     sv_setsv(sv, SWIG_From_int  SWIG_PERL_CALL_ARGS_1((int)(svn_repos_notify_verify_rev_end)));
     SvREADONLY_on(sv);
   } while(0) /*@SWIG@*/;
-  /*@SWIG:/home/evgeny/release/svnrm/1.9.4/prefix/share/swig/2.0.12/perl5/perltypemaps.swg,65,%set_constant@*/ do {
+  /*@SWIG:/tmp/svnrm/prefix/share/swig/2.0.12/perl5/perltypemaps.swg,65,%set_constant@*/ do {
     SV *sv = get_sv((char*) SWIG_prefix "svn_repos_notify_dump_end", TRUE | 0x2 | GV_ADDMULTI);
     sv_setsv(sv, SWIG_From_int  SWIG_PERL_CALL_ARGS_1((int)(svn_repos_notify_dump_end)));
     SvREADONLY_on(sv);
   } while(0) /*@SWIG@*/;
-  /*@SWIG:/home/evgeny/release/svnrm/1.9.4/prefix/share/swig/2.0.12/perl5/perltypemaps.swg,65,%set_constant@*/ do {
+  /*@SWIG:/tmp/svnrm/prefix/share/swig/2.0.12/perl5/perltypemaps.swg,65,%set_constant@*/ do {
     SV *sv = get_sv((char*) SWIG_prefix "svn_repos_notify_verify_end", TRUE | 0x2 | GV_ADDMULTI);
     sv_setsv(sv, SWIG_From_int  SWIG_PERL_CALL_ARGS_1((int)(svn_repos_notify_verify_end)));
     SvREADONLY_on(sv);
   } while(0) /*@SWIG@*/;
-  /*@SWIG:/home/evgeny/release/svnrm/1.9.4/prefix/share/swig/2.0.12/perl5/perltypemaps.swg,65,%set_constant@*/ do {
+  /*@SWIG:/tmp/svnrm/prefix/share/swig/2.0.12/perl5/perltypemaps.swg,65,%set_constant@*/ do {
     SV *sv = get_sv((char*) SWIG_prefix "svn_repos_notify_pack_shard_start", TRUE | 0x2 | GV_ADDMULTI);
     sv_setsv(sv, SWIG_From_int  SWIG_PERL_CALL_ARGS_1((int)(svn_repos_notify_pack_shard_start)));
     SvREADONLY_on(sv);
   } while(0) /*@SWIG@*/;
-  /*@SWIG:/home/evgeny/release/svnrm/1.9.4/prefix/share/swig/2.0.12/perl5/perltypemaps.swg,65,%set_constant@*/ do {
+  /*@SWIG:/tmp/svnrm/prefix/share/swig/2.0.12/perl5/perltypemaps.swg,65,%set_constant@*/ do {
     SV *sv = get_sv((char*) SWIG_prefix "svn_repos_notify_pack_shard_end", TRUE | 0x2 | GV_ADDMULTI);
     sv_setsv(sv, SWIG_From_int  SWIG_PERL_CALL_ARGS_1((int)(svn_repos_notify_pack_shard_end)));
     SvREADONLY_on(sv);
   } while(0) /*@SWIG@*/;
-  /*@SWIG:/home/evgeny/release/svnrm/1.9.4/prefix/share/swig/2.0.12/perl5/perltypemaps.swg,65,%set_constant@*/ do {
+  /*@SWIG:/tmp/svnrm/prefix/share/swig/2.0.12/perl5/perltypemaps.swg,65,%set_constant@*/ do {
     SV *sv = get_sv((char*) SWIG_prefix "svn_repos_notify_pack_shard_start_revprop", TRUE | 0x2 | GV_ADDMULTI);
     sv_setsv(sv, SWIG_From_int  SWIG_PERL_CALL_ARGS_1((int)(svn_repos_notify_pack_shard_start_revprop)));
     SvREADONLY_on(sv);
   } while(0) /*@SWIG@*/;
-  /*@SWIG:/home/evgeny/release/svnrm/1.9.4/prefix/share/swig/2.0.12/perl5/perltypemaps.swg,65,%set_constant@*/ do {
+  /*@SWIG:/tmp/svnrm/prefix/share/swig/2.0.12/perl5/perltypemaps.swg,65,%set_constant@*/ do {
     SV *sv = get_sv((char*) SWIG_prefix "svn_repos_notify_pack_shard_end_revprop", TRUE | 0x2 | GV_ADDMULTI);
     sv_setsv(sv, SWIG_From_int  SWIG_PERL_CALL_ARGS_1((int)(svn_repos_notify_pack_shard_end_revprop)));
     SvREADONLY_on(sv);
   } while(0) /*@SWIG@*/;
-  /*@SWIG:/home/evgeny/release/svnrm/1.9.4/prefix/share/swig/2.0.12/perl5/perltypemaps.swg,65,%set_constant@*/ do {
+  /*@SWIG:/tmp/svnrm/prefix/share/swig/2.0.12/perl5/perltypemaps.swg,65,%set_constant@*/ do {
     SV *sv = get_sv((char*) SWIG_prefix "svn_repos_notify_load_txn_start", TRUE | 0x2 | GV_ADDMULTI);
     sv_setsv(sv, SWIG_From_int  SWIG_PERL_CALL_ARGS_1((int)(svn_repos_notify_load_txn_start)));
     SvREADONLY_on(sv);
   } while(0) /*@SWIG@*/;
-  /*@SWIG:/home/evgeny/release/svnrm/1.9.4/prefix/share/swig/2.0.12/perl5/perltypemaps.swg,65,%set_constant@*/ do {
+  /*@SWIG:/tmp/svnrm/prefix/share/swig/2.0.12/perl5/perltypemaps.swg,65,%set_constant@*/ do {
     SV *sv = get_sv((char*) SWIG_prefix "svn_repos_notify_load_txn_committed", TRUE | 0x2 | GV_ADDMULTI);
     sv_setsv(sv, SWIG_From_int  SWIG_PERL_CALL_ARGS_1((int)(svn_repos_notify_load_txn_committed)));
     SvREADONLY_on(sv);
   } while(0) /*@SWIG@*/;
-  /*@SWIG:/home/evgeny/release/svnrm/1.9.4/prefix/share/swig/2.0.12/perl5/perltypemaps.swg,65,%set_constant@*/ do {
+  /*@SWIG:/tmp/svnrm/prefix/share/swig/2.0.12/perl5/perltypemaps.swg,65,%set_constant@*/ do {
     SV *sv = get_sv((char*) SWIG_prefix "svn_repos_notify_load_node_start", TRUE | 0x2 | GV_ADDMULTI);
     sv_setsv(sv, SWIG_From_int  SWIG_PERL_CALL_ARGS_1((int)(svn_repos_notify_load_node_start)));
     SvREADONLY_on(sv);
   } while(0) /*@SWIG@*/;
-  /*@SWIG:/home/evgeny/release/svnrm/1.9.4/prefix/share/swig/2.0.12/perl5/perltypemaps.swg,65,%set_constant@*/ do {
+  /*@SWIG:/tmp/svnrm/prefix/share/swig/2.0.12/perl5/perltypemaps.swg,65,%set_constant@*/ do {
     SV *sv = get_sv((char*) SWIG_prefix "svn_repos_notify_load_node_done", TRUE | 0x2 | GV_ADDMULTI);
     sv_setsv(sv, SWIG_From_int  SWIG_PERL_CALL_ARGS_1((int)(svn_repos_notify_load_node_done)));
     SvREADONLY_on(sv);
   } while(0) /*@SWIG@*/;
-  /*@SWIG:/home/evgeny/release/svnrm/1.9.4/prefix/share/swig/2.0.12/perl5/perltypemaps.swg,65,%set_constant@*/ do {
+  /*@SWIG:/tmp/svnrm/prefix/share/swig/2.0.12/perl5/perltypemaps.swg,65,%set_constant@*/ do {
     SV *sv = get_sv((char*) SWIG_prefix "svn_repos_notify_load_copied_node", TRUE | 0x2 | GV_ADDMULTI);
     sv_setsv(sv, SWIG_From_int  SWIG_PERL_CALL_ARGS_1((int)(svn_repos_notify_load_copied_node)));
     SvREADONLY_on(sv);
   } while(0) /*@SWIG@*/;
-  /*@SWIG:/home/evgeny/release/svnrm/1.9.4/prefix/share/swig/2.0.12/perl5/perltypemaps.swg,65,%set_constant@*/ do {
+  /*@SWIG:/tmp/svnrm/prefix/share/swig/2.0.12/perl5/perltypemaps.swg,65,%set_constant@*/ do {
     SV *sv = get_sv((char*) SWIG_prefix "svn_repos_notify_load_normalized_mergeinfo", TRUE | 0x2 | GV_ADDMULTI);
     sv_setsv(sv, SWIG_From_int  SWIG_PERL_CALL_ARGS_1((int)(svn_repos_notify_load_normalized_mergeinfo)));
     SvREADONLY_on(sv);
   } while(0) /*@SWIG@*/;
-  /*@SWIG:/home/evgeny/release/svnrm/1.9.4/prefix/share/swig/2.0.12/perl5/perltypemaps.swg,65,%set_constant@*/ do {
+  /*@SWIG:/tmp/svnrm/prefix/share/swig/2.0.12/perl5/perltypemaps.swg,65,%set_constant@*/ do {
     SV *sv = get_sv((char*) SWIG_prefix "svn_repos_notify_mutex_acquired", TRUE | 0x2 | GV_ADDMULTI);
     sv_setsv(sv, SWIG_From_int  SWIG_PERL_CALL_ARGS_1((int)(svn_repos_notify_mutex_acquired)));
     SvREADONLY_on(sv);
   } while(0) /*@SWIG@*/;
-  /*@SWIG:/home/evgeny/release/svnrm/1.9.4/prefix/share/swig/2.0.12/perl5/perltypemaps.swg,65,%set_constant@*/ do {
+  /*@SWIG:/tmp/svnrm/prefix/share/swig/2.0.12/perl5/perltypemaps.swg,65,%set_constant@*/ do {
     SV *sv = get_sv((char*) SWIG_prefix "svn_repos_notify_recover_start", TRUE | 0x2 | GV_ADDMULTI);
     sv_setsv(sv, SWIG_From_int  SWIG_PERL_CALL_ARGS_1((int)(svn_repos_notify_recover_start)));
     SvREADONLY_on(sv);
   } while(0) /*@SWIG@*/;
-  /*@SWIG:/home/evgeny/release/svnrm/1.9.4/prefix/share/swig/2.0.12/perl5/perltypemaps.swg,65,%set_constant@*/ do {
+  /*@SWIG:/tmp/svnrm/prefix/share/swig/2.0.12/perl5/perltypemaps.swg,65,%set_constant@*/ do {
     SV *sv = get_sv((char*) SWIG_prefix "svn_repos_notify_upgrade_start", TRUE | 0x2 | GV_ADDMULTI);
     sv_setsv(sv, SWIG_From_int  SWIG_PERL_CALL_ARGS_1((int)(svn_repos_notify_upgrade_start)));
     SvREADONLY_on(sv);
   } while(0) /*@SWIG@*/;
-  /*@SWIG:/home/evgeny/release/svnrm/1.9.4/prefix/share/swig/2.0.12/perl5/perltypemaps.swg,65,%set_constant@*/ do {
+  /*@SWIG:/tmp/svnrm/prefix/share/swig/2.0.12/perl5/perltypemaps.swg,65,%set_constant@*/ do {
     SV *sv = get_sv((char*) SWIG_prefix "svn_repos_notify_load_skipped_rev", TRUE | 0x2 | GV_ADDMULTI);
     sv_setsv(sv, SWIG_From_int  SWIG_PERL_CALL_ARGS_1((int)(svn_repos_notify_load_skipped_rev)));
     SvREADONLY_on(sv);
   } while(0) /*@SWIG@*/;
-  /*@SWIG:/home/evgeny/release/svnrm/1.9.4/prefix/share/swig/2.0.12/perl5/perltypemaps.swg,65,%set_constant@*/ do {
+  /*@SWIG:/tmp/svnrm/prefix/share/swig/2.0.12/perl5/perltypemaps.swg,65,%set_constant@*/ do {
     SV *sv = get_sv((char*) SWIG_prefix "svn_repos_notify_verify_rev_structure", TRUE | 0x2 | GV_ADDMULTI);
     sv_setsv(sv, SWIG_From_int  SWIG_PERL_CALL_ARGS_1((int)(svn_repos_notify_verify_rev_structure)));
     SvREADONLY_on(sv);
   } while(0) /*@SWIG@*/;
-  /*@SWIG:/home/evgeny/release/svnrm/1.9.4/prefix/share/swig/2.0.12/perl5/perltypemaps.swg,65,%set_constant@*/ do {
+  /*@SWIG:/tmp/svnrm/prefix/share/swig/2.0.12/perl5/perltypemaps.swg,65,%set_constant@*/ do {
     SV *sv = get_sv((char*) SWIG_prefix "svn_repos_notify_pack_revprops", TRUE | 0x2 | GV_ADDMULTI);
     sv_setsv(sv, SWIG_From_int  SWIG_PERL_CALL_ARGS_1((int)(svn_repos_notify_pack_revprops)));
     SvREADONLY_on(sv);
   } while(0) /*@SWIG@*/;
-  /*@SWIG:/home/evgeny/release/svnrm/1.9.4/prefix/share/swig/2.0.12/perl5/perltypemaps.swg,65,%set_constant@*/ do {
+  /*@SWIG:/tmp/svnrm/prefix/share/swig/2.0.12/perl5/perltypemaps.swg,65,%set_constant@*/ do {
     SV *sv = get_sv((char*) SWIG_prefix "svn_repos_notify_cleanup_revprops", TRUE | 0x2 | GV_ADDMULTI);
     sv_setsv(sv, SWIG_From_int  SWIG_PERL_CALL_ARGS_1((int)(svn_repos_notify_cleanup_revprops)));
     SvREADONLY_on(sv);
   } while(0) /*@SWIG@*/;
-  /*@SWIG:/home/evgeny/release/svnrm/1.9.4/prefix/share/swig/2.0.12/perl5/perltypemaps.swg,65,%set_constant@*/ do {
+  /*@SWIG:/tmp/svnrm/prefix/share/swig/2.0.12/perl5/perltypemaps.swg,65,%set_constant@*/ do {
     SV *sv = get_sv((char*) SWIG_prefix "svn_repos_notify_format_bumped", TRUE | 0x2 | GV_ADDMULTI);
     sv_setsv(sv, SWIG_From_int  SWIG_PERL_CALL_ARGS_1((int)(svn_repos_notify_format_bumped)));
     SvREADONLY_on(sv);
   } while(0) /*@SWIG@*/;
-  /*@SWIG:/home/evgeny/release/svnrm/1.9.4/prefix/share/swig/2.0.12/perl5/perltypemaps.swg,65,%set_constant@*/ do {
+  /*@SWIG:/tmp/svnrm/prefix/share/swig/2.0.12/perl5/perltypemaps.swg,65,%set_constant@*/ do {
     SV *sv = get_sv((char*) SWIG_prefix "svn_repos_notify_hotcopy_rev_range", TRUE | 0x2 | GV_ADDMULTI);
     sv_setsv(sv, SWIG_From_int  SWIG_PERL_CALL_ARGS_1((int)(svn_repos_notify_hotcopy_rev_range)));
     SvREADONLY_on(sv);
   } while(0) /*@SWIG@*/;
-  /*@SWIG:/home/evgeny/release/svnrm/1.9.4/prefix/share/swig/2.0.12/perl5/perltypemaps.swg,65,%set_constant@*/ do {
+  /*@SWIG:/tmp/svnrm/prefix/share/swig/2.0.12/perl5/perltypemaps.swg,65,%set_constant@*/ do {
     SV *sv = get_sv((char*) SWIG_prefix "svn_repos_notify_warning_found_old_reference", TRUE | 0x2 | GV_ADDMULTI);
     sv_setsv(sv, SWIG_From_int  SWIG_PERL_CALL_ARGS_1((int)(svn_repos_notify_warning_found_old_reference)));
     SvREADONLY_on(sv);
   } while(0) /*@SWIG@*/;
-  /*@SWIG:/home/evgeny/release/svnrm/1.9.4/prefix/share/swig/2.0.12/perl5/perltypemaps.swg,65,%set_constant@*/ do {
+  /*@SWIG:/tmp/svnrm/prefix/share/swig/2.0.12/perl5/perltypemaps.swg,65,%set_constant@*/ do {
     SV *sv = get_sv((char*) SWIG_prefix "svn_repos_notify_warning_found_old_mergeinfo", TRUE | 0x2 | GV_ADDMULTI);
     sv_setsv(sv, SWIG_From_int  SWIG_PERL_CALL_ARGS_1((int)(svn_repos_notify_warning_found_old_mergeinfo)));
     SvREADONLY_on(sv);
   } while(0) /*@SWIG@*/;
-  /*@SWIG:/home/evgeny/release/svnrm/1.9.4/prefix/share/swig/2.0.12/perl5/perltypemaps.swg,65,%set_constant@*/ do {
+  /*@SWIG:/tmp/svnrm/prefix/share/swig/2.0.12/perl5/perltypemaps.swg,65,%set_constant@*/ do {
     SV *sv = get_sv((char*) SWIG_prefix "svn_repos_notify_warning_invalid_fspath", TRUE | 0x2 | GV_ADDMULTI);
     sv_setsv(sv, SWIG_From_int  SWIG_PERL_CALL_ARGS_1((int)(svn_repos_notify_warning_invalid_fspath)));
     SvREADONLY_on(sv);
   } while(0) /*@SWIG@*/;
-  /*@SWIG:/home/evgeny/release/svnrm/1.9.4/prefix/share/swig/2.0.12/perl5/perltypemaps.swg,65,%set_constant@*/ do {
+  /*@SWIG:/tmp/svnrm/prefix/share/swig/2.0.12/perl5/perltypemaps.swg,65,%set_constant@*/ do {
     SV *sv = get_sv((char*) SWIG_prefix "svn_repos_notify_warning_name_collision", TRUE | 0x2 | GV_ADDMULTI);
     sv_setsv(sv, SWIG_From_int  SWIG_PERL_CALL_ARGS_1((int)(svn_repos_notify_warning_name_collision)));
     SvREADONLY_on(sv);
   } while(0) /*@SWIG@*/;
-  /*@SWIG:/home/evgeny/release/svnrm/1.9.4/prefix/share/swig/2.0.12/perl5/perltypemaps.swg,65,%set_constant@*/ do {
+  /*@SWIG:/tmp/svnrm/prefix/share/swig/2.0.12/perl5/perltypemaps.swg,65,%set_constant@*/ do {
     SV *sv = get_sv((char*) SWIG_prefix "svn_repos_notify_warning_mergeinfo_collision", TRUE | 0x2 | GV_ADDMULTI);
     sv_setsv(sv, SWIG_From_int  SWIG_PERL_CALL_ARGS_1((int)(svn_repos_notify_warning_mergeinfo_collision)));
     SvREADONLY_on(sv);
   } while(0) /*@SWIG@*/;
-  /*@SWIG:/home/evgeny/release/svnrm/1.9.4/prefix/share/swig/2.0.12/perl5/perltypemaps.swg,65,%set_constant@*/ do {
+  /*@SWIG:/tmp/svnrm/prefix/share/swig/2.0.12/perl5/perltypemaps.swg,65,%set_constant@*/ do {
     SV *sv = get_sv((char*) SWIG_prefix "svn_repos_notify_warning_invalid_mergeinfo", TRUE | 0x2 | GV_ADDMULTI);
     sv_setsv(sv, SWIG_From_int  SWIG_PERL_CALL_ARGS_1((int)(svn_repos_notify_warning_invalid_mergeinfo)));
     SvREADONLY_on(sv);
   } while(0) /*@SWIG@*/;
-  /*@SWIG:/home/evgeny/release/svnrm/1.9.4/prefix/share/swig/2.0.12/perl5/perltypemaps.swg,65,%set_constant@*/ do {
+  /*@SWIG:/tmp/svnrm/prefix/share/swig/2.0.12/perl5/perltypemaps.swg,65,%set_constant@*/ do {
     SV *sv = get_sv((char*) SWIG_prefix "SVN_REPOS_CAPABILITY_MERGEINFO", TRUE | 0x2 | GV_ADDMULTI);
     sv_setsv(sv, SWIG_FromCharPtr("mergeinfo"));
     SvREADONLY_on(sv);
   } while(0) /*@SWIG@*/;
-  /*@SWIG:/home/evgeny/release/svnrm/1.9.4/prefix/share/swig/2.0.12/perl5/perltypemaps.swg,65,%set_constant@*/ do {
+  /*@SWIG:/tmp/svnrm/prefix/share/swig/2.0.12/perl5/perltypemaps.swg,65,%set_constant@*/ do {
     SV *sv = get_sv((char*) SWIG_prefix "SVN_REPOS_DUMPFILE_MAGIC_HEADER", TRUE | 0x2 | GV_ADDMULTI);
     sv_setsv(sv, SWIG_FromCharPtr("SVN-fs-dump-format-version"));
     SvREADONLY_on(sv);
   } while(0) /*@SWIG@*/;
-  /*@SWIG:/home/evgeny/release/svnrm/1.9.4/prefix/share/swig/2.0.12/perl5/perltypemaps.swg,65,%set_constant@*/ do {
+  /*@SWIG:/tmp/svnrm/prefix/share/swig/2.0.12/perl5/perltypemaps.swg,65,%set_constant@*/ do {
     SV *sv = get_sv((char*) SWIG_prefix "SVN_REPOS_DUMPFILE_FORMAT_VERSION", TRUE | 0x2 | GV_ADDMULTI);
     sv_setsv(sv, SWIG_From_int  SWIG_PERL_CALL_ARGS_1((int)(3)));
     SvREADONLY_on(sv);
   } while(0) /*@SWIG@*/;
-  /*@SWIG:/home/evgeny/release/svnrm/1.9.4/prefix/share/swig/2.0.12/perl5/perltypemaps.swg,65,%set_constant@*/ do {
+  /*@SWIG:/tmp/svnrm/prefix/share/swig/2.0.12/perl5/perltypemaps.swg,65,%set_constant@*/ do {
     SV *sv = get_sv((char*) SWIG_prefix "SVN_REPOS_DUMPFILE_FORMAT_VERSION_DELTAS", TRUE | 0x2 | GV_ADDMULTI);
     sv_setsv(sv, SWIG_From_int  SWIG_PERL_CALL_ARGS_1((int)(3)));
     SvREADONLY_on(sv);
   } while(0) /*@SWIG@*/;
-  /*@SWIG:/home/evgeny/release/svnrm/1.9.4/prefix/share/swig/2.0.12/perl5/perltypemaps.swg,65,%set_constant@*/ do {
+  /*@SWIG:/tmp/svnrm/prefix/share/swig/2.0.12/perl5/perltypemaps.swg,65,%set_constant@*/ do {
     SV *sv = get_sv((char*) SWIG_prefix "SVN_REPOS_DUMPFILE_UUID", TRUE | 0x2 | GV_ADDMULTI);
     sv_setsv(sv, SWIG_FromCharPtr("UUID"));
     SvREADONLY_on(sv);
   } while(0) /*@SWIG@*/;
-  /*@SWIG:/home/evgeny/release/svnrm/1.9.4/prefix/share/swig/2.0.12/perl5/perltypemaps.swg,65,%set_constant@*/ do {
+  /*@SWIG:/tmp/svnrm/prefix/share/swig/2.0.12/perl5/perltypemaps.swg,65,%set_constant@*/ do {
     SV *sv = get_sv((char*) SWIG_prefix "SVN_REPOS_DUMPFILE_CONTENT_LENGTH", TRUE | 0x2 | GV_ADDMULTI);
     sv_setsv(sv, SWIG_FromCharPtr("Content-length"));
     SvREADONLY_on(sv);
   } while(0) /*@SWIG@*/;
-  /*@SWIG:/home/evgeny/release/svnrm/1.9.4/prefix/share/swig/2.0.12/perl5/perltypemaps.swg,65,%set_constant@*/ do {
+  /*@SWIG:/tmp/svnrm/prefix/share/swig/2.0.12/perl5/perltypemaps.swg,65,%set_constant@*/ do {
     SV *sv = get_sv((char*) SWIG_prefix "SVN_REPOS_DUMPFILE_REVISION_NUMBER", TRUE | 0x2 | GV_ADDMULTI);
     sv_setsv(sv, SWIG_FromCharPtr("Revision-number"));
     SvREADONLY_on(sv);
   } while(0) /*@SWIG@*/;
-  /*@SWIG:/home/evgeny/release/svnrm/1.9.4/prefix/share/swig/2.0.12/perl5/perltypemaps.swg,65,%set_constant@*/ do {
+  /*@SWIG:/tmp/svnrm/prefix/share/swig/2.0.12/perl5/perltypemaps.swg,65,%set_constant@*/ do {
     SV *sv = get_sv((char*) SWIG_prefix "SVN_REPOS_DUMPFILE_NODE_PATH", TRUE | 0x2 | GV_ADDMULTI);
     sv_setsv(sv, SWIG_FromCharPtr("Node-path"));
     SvREADONLY_on(sv);
   } while(0) /*@SWIG@*/;
-  /*@SWIG:/home/evgeny/release/svnrm/1.9.4/prefix/share/swig/2.0.12/perl5/perltypemaps.swg,65,%set_constant@*/ do {
+  /*@SWIG:/tmp/svnrm/prefix/share/swig/2.0.12/perl5/perltypemaps.swg,65,%set_constant@*/ do {
     SV *sv = get_sv((char*) SWIG_prefix "SVN_REPOS_DUMPFILE_NODE_KIND", TRUE | 0x2 | GV_ADDMULTI);
     sv_setsv(sv, SWIG_FromCharPtr("Node-kind"));
     SvREADONLY_on(sv);
   } while(0) /*@SWIG@*/;
-  /*@SWIG:/home/evgeny/release/svnrm/1.9.4/prefix/share/swig/2.0.12/perl5/perltypemaps.swg,65,%set_constant@*/ do {
+  /*@SWIG:/tmp/svnrm/prefix/share/swig/2.0.12/perl5/perltypemaps.swg,65,%set_constant@*/ do {
     SV *sv = get_sv((char*) SWIG_prefix "SVN_REPOS_DUMPFILE_NODE_ACTION", TRUE | 0x2 | GV_ADDMULTI);
     sv_setsv(sv, SWIG_FromCharPtr("Node-action"));
     SvREADONLY_on(sv);
   } while(0) /*@SWIG@*/;
-  /*@SWIG:/home/evgeny/release/svnrm/1.9.4/prefix/share/swig/2.0.12/perl5/perltypemaps.swg,65,%set_constant@*/ do {
+  /*@SWIG:/tmp/svnrm/prefix/share/swig/2.0.12/perl5/perltypemaps.swg,65,%set_constant@*/ do {
     SV *sv = get_sv((char*) SWIG_prefix "SVN_REPOS_DUMPFILE_NODE_COPYFROM_PATH", TRUE | 0x2 | GV_ADDMULTI);
     sv_setsv(sv, SWIG_FromCharPtr("Node-copyfrom-path"));
     SvREADONLY_on(sv);
   } while(0) /*@SWIG@*/;
-  /*@SWIG:/home/evgeny/release/svnrm/1.9.4/prefix/share/swig/2.0.12/perl5/perltypemaps.swg,65,%set_constant@*/ do {
+  /*@SWIG:/tmp/svnrm/prefix/share/swig/2.0.12/perl5/perltypemaps.swg,65,%set_constant@*/ do {
     SV *sv = get_sv((char*) SWIG_prefix "SVN_REPOS_DUMPFILE_NODE_COPYFROM_REV", TRUE | 0x2 | GV_ADDMULTI);
     sv_setsv(sv, SWIG_FromCharPtr("Node-copyfrom-rev"));
     SvREADONLY_on(sv);
   } while(0) /*@SWIG@*/;
-  /*@SWIG:/home/evgeny/release/svnrm/1.9.4/prefix/share/swig/2.0.12/perl5/perltypemaps.swg,65,%set_constant@*/ do {
+  /*@SWIG:/tmp/svnrm/prefix/share/swig/2.0.12/perl5/perltypemaps.swg,65,%set_constant@*/ do {
     SV *sv = get_sv((char*) SWIG_prefix "SVN_REPOS_DUMPFILE_TEXT_COPY_SOURCE_MD5", TRUE | 0x2 | GV_ADDMULTI);
     sv_setsv(sv, SWIG_FromCharPtr("Text-copy-source-md5"));
     SvREADONLY_on(sv);
   } while(0) /*@SWIG@*/;
-  /*@SWIG:/home/evgeny/release/svnrm/1.9.4/prefix/share/swig/2.0.12/perl5/perltypemaps.swg,65,%set_constant@*/ do {
+  /*@SWIG:/tmp/svnrm/prefix/share/swig/2.0.12/perl5/perltypemaps.swg,65,%set_constant@*/ do {
     SV *sv = get_sv((char*) SWIG_prefix "SVN_REPOS_DUMPFILE_TEXT_COPY_SOURCE_SHA1", TRUE | 0x2 | GV_ADDMULTI);
     sv_setsv(sv, SWIG_FromCharPtr("Text-copy-source-sha1"));
     SvREADONLY_on(sv);
   } while(0) /*@SWIG@*/;
-  /*@SWIG:/home/evgeny/release/svnrm/1.9.4/prefix/share/swig/2.0.12/perl5/perltypemaps.swg,65,%set_constant@*/ do {
+  /*@SWIG:/tmp/svnrm/prefix/share/swig/2.0.12/perl5/perltypemaps.swg,65,%set_constant@*/ do {
     SV *sv = get_sv((char*) SWIG_prefix "SVN_REPOS_DUMPFILE_TEXT_COPY_SOURCE_CHECKSUM", TRUE | 0x2 | GV_ADDMULTI);
     sv_setsv(sv, SWIG_FromCharPtr("Text-copy-source-md5"));
     SvREADONLY_on(sv);
   } while(0) /*@SWIG@*/;
-  /*@SWIG:/home/evgeny/release/svnrm/1.9.4/prefix/share/swig/2.0.12/perl5/perltypemaps.swg,65,%set_constant@*/ do {
+  /*@SWIG:/tmp/svnrm/prefix/share/swig/2.0.12/perl5/perltypemaps.swg,65,%set_constant@*/ do {
     SV *sv = get_sv((char*) SWIG_prefix "SVN_REPOS_DUMPFILE_TEXT_CONTENT_MD5", TRUE | 0x2 | GV_ADDMULTI);
     sv_setsv(sv, SWIG_FromCharPtr("Text-content-md5"));
     SvREADONLY_on(sv);
   } while(0) /*@SWIG@*/;
-  /*@SWIG:/home/evgeny/release/svnrm/1.9.4/prefix/share/swig/2.0.12/perl5/perltypemaps.swg,65,%set_constant@*/ do {
+  /*@SWIG:/tmp/svnrm/prefix/share/swig/2.0.12/perl5/perltypemaps.swg,65,%set_constant@*/ do {
     SV *sv = get_sv((char*) SWIG_prefix "SVN_REPOS_DUMPFILE_TEXT_CONTENT_SHA1", TRUE | 0x2 | GV_ADDMULTI);
     sv_setsv(sv, SWIG_FromCharPtr("Text-content-sha1"));
     SvREADONLY_on(sv);
   } while(0) /*@SWIG@*/;
-  /*@SWIG:/home/evgeny/release/svnrm/1.9.4/prefix/share/swig/2.0.12/perl5/perltypemaps.swg,65,%set_constant@*/ do {
+  /*@SWIG:/tmp/svnrm/prefix/share/swig/2.0.12/perl5/perltypemaps.swg,65,%set_constant@*/ do {
     SV *sv = get_sv((char*) SWIG_prefix "SVN_REPOS_DUMPFILE_TEXT_CONTENT_CHECKSUM", TRUE | 0x2 | GV_ADDMULTI);
     sv_setsv(sv, SWIG_FromCharPtr("Text-content-md5"));
     SvREADONLY_on(sv);
   } while(0) /*@SWIG@*/;
-  /*@SWIG:/home/evgeny/release/svnrm/1.9.4/prefix/share/swig/2.0.12/perl5/perltypemaps.swg,65,%set_constant@*/ do {
+  /*@SWIG:/tmp/svnrm/prefix/share/swig/2.0.12/perl5/perltypemaps.swg,65,%set_constant@*/ do {
     SV *sv = get_sv((char*) SWIG_prefix "SVN_REPOS_DUMPFILE_PROP_CONTENT_LENGTH", TRUE | 0x2 | GV_ADDMULTI);
     sv_setsv(sv, SWIG_FromCharPtr("Prop-content-length"));
     SvREADONLY_on(sv);
   } while(0) /*@SWIG@*/;
-  /*@SWIG:/home/evgeny/release/svnrm/1.9.4/prefix/share/swig/2.0.12/perl5/perltypemaps.swg,65,%set_constant@*/ do {
+  /*@SWIG:/tmp/svnrm/prefix/share/swig/2.0.12/perl5/perltypemaps.swg,65,%set_constant@*/ do {
     SV *sv = get_sv((char*) SWIG_prefix "SVN_REPOS_DUMPFILE_TEXT_CONTENT_LENGTH", TRUE | 0x2 | GV_ADDMULTI);
     sv_setsv(sv, SWIG_FromCharPtr("Text-content-length"));
     SvREADONLY_on(sv);
   } while(0) /*@SWIG@*/;
-  /*@SWIG:/home/evgeny/release/svnrm/1.9.4/prefix/share/swig/2.0.12/perl5/perltypemaps.swg,65,%set_constant@*/ do {
+  /*@SWIG:/tmp/svnrm/prefix/share/swig/2.0.12/perl5/perltypemaps.swg,65,%set_constant@*/ do {
     SV *sv = get_sv((char*) SWIG_prefix "SVN_REPOS_DUMPFILE_PROP_DELTA", TRUE | 0x2 | GV_ADDMULTI);
     sv_setsv(sv, SWIG_FromCharPtr("Prop-delta"));
     SvREADONLY_on(sv);
   } while(0) /*@SWIG@*/;
-  /*@SWIG:/home/evgeny/release/svnrm/1.9.4/prefix/share/swig/2.0.12/perl5/perltypemaps.swg,65,%set_constant@*/ do {
+  /*@SWIG:/tmp/svnrm/prefix/share/swig/2.0.12/perl5/perltypemaps.swg,65,%set_constant@*/ do {
     SV *sv = get_sv((char*) SWIG_prefix "SVN_REPOS_DUMPFILE_TEXT_DELTA", TRUE | 0x2 | GV_ADDMULTI);
     sv_setsv(sv, SWIG_FromCharPtr("Text-delta"));
     SvREADONLY_on(sv);
   } while(0) /*@SWIG@*/;
-  /*@SWIG:/home/evgeny/release/svnrm/1.9.4/prefix/share/swig/2.0.12/perl5/perltypemaps.swg,65,%set_constant@*/ do {
+  /*@SWIG:/tmp/svnrm/prefix/share/swig/2.0.12/perl5/perltypemaps.swg,65,%set_constant@*/ do {
     SV *sv = get_sv((char*) SWIG_prefix "SVN_REPOS_DUMPFILE_TEXT_DELTA_BASE_MD5", TRUE | 0x2 | GV_ADDMULTI);
     sv_setsv(sv, SWIG_FromCharPtr("Text-delta-base-md5"));
     SvREADONLY_on(sv);
   } while(0) /*@SWIG@*/;
-  /*@SWIG:/home/evgeny/release/svnrm/1.9.4/prefix/share/swig/2.0.12/perl5/perltypemaps.swg,65,%set_constant@*/ do {
+  /*@SWIG:/tmp/svnrm/prefix/share/swig/2.0.12/perl5/perltypemaps.swg,65,%set_constant@*/ do {
     SV *sv = get_sv((char*) SWIG_prefix "SVN_REPOS_DUMPFILE_TEXT_DELTA_BASE_SHA1", TRUE | 0x2 | GV_ADDMULTI);
     sv_setsv(sv, SWIG_FromCharPtr("Text-delta-base-sha1"));
     SvREADONLY_on(sv);
   } while(0) /*@SWIG@*/;
-  /*@SWIG:/home/evgeny/release/svnrm/1.9.4/prefix/share/swig/2.0.12/perl5/perltypemaps.swg,65,%set_constant@*/ do {
+  /*@SWIG:/tmp/svnrm/prefix/share/swig/2.0.12/perl5/perltypemaps.swg,65,%set_constant@*/ do {
     SV *sv = get_sv((char*) SWIG_prefix "SVN_REPOS_DUMPFILE_TEXT_DELTA_BASE_CHECKSUM", TRUE | 0x2 | GV_ADDMULTI);
     sv_setsv(sv, SWIG_FromCharPtr("Text-delta-base-md5"));
     SvREADONLY_on(sv);
   } while(0) /*@SWIG@*/;
-  /*@SWIG:/home/evgeny/release/svnrm/1.9.4/prefix/share/swig/2.0.12/perl5/perltypemaps.swg,65,%set_constant@*/ do {
+  /*@SWIG:/tmp/svnrm/prefix/share/swig/2.0.12/perl5/perltypemaps.swg,65,%set_constant@*/ do {
     SV *sv = get_sv((char*) SWIG_prefix "svn_repos_load_uuid_default", TRUE | 0x2 | GV_ADDMULTI);
     sv_setsv(sv, SWIG_From_int  SWIG_PERL_CALL_ARGS_1((int)(svn_repos_load_uuid_default)));
     SvREADONLY_on(sv);
   } while(0) /*@SWIG@*/;
-  /*@SWIG:/home/evgeny/release/svnrm/1.9.4/prefix/share/swig/2.0.12/perl5/perltypemaps.swg,65,%set_constant@*/ do {
+  /*@SWIG:/tmp/svnrm/prefix/share/swig/2.0.12/perl5/perltypemaps.swg,65,%set_constant@*/ do {
     SV *sv = get_sv((char*) SWIG_prefix "svn_repos_load_uuid_ignore", TRUE | 0x2 | GV_ADDMULTI);
     sv_setsv(sv, SWIG_From_int  SWIG_PERL_CALL_ARGS_1((int)(svn_repos_load_uuid_ignore)));
     SvREADONLY_on(sv);
   } while(0) /*@SWIG@*/;
-  /*@SWIG:/home/evgeny/release/svnrm/1.9.4/prefix/share/swig/2.0.12/perl5/perltypemaps.swg,65,%set_constant@*/ do {
+  /*@SWIG:/tmp/svnrm/prefix/share/swig/2.0.12/perl5/perltypemaps.swg,65,%set_constant@*/ do {
     SV *sv = get_sv((char*) SWIG_prefix "svn_repos_load_uuid_force", TRUE | 0x2 | GV_ADDMULTI);
     sv_setsv(sv, SWIG_From_int  SWIG_PERL_CALL_ARGS_1((int)(svn_repos_load_uuid_force)));
     SvREADONLY_on(sv);
   } while(0) /*@SWIG@*/;
-  /*@SWIG:/home/evgeny/release/svnrm/1.9.4/prefix/share/swig/2.0.12/perl5/perltypemaps.swg,65,%set_constant@*/ do {
+  /*@SWIG:/tmp/svnrm/prefix/share/swig/2.0.12/perl5/perltypemaps.swg,65,%set_constant@*/ do {
     SV *sv = get_sv((char*) SWIG_prefix "svn_repos_revision_access_none", TRUE | 0x2 | GV_ADDMULTI);
     sv_setsv(sv, SWIG_From_int  SWIG_PERL_CALL_ARGS_1((int)(svn_repos_revision_access_none)));
     SvREADONLY_on(sv);
   } while(0) /*@SWIG@*/;
-  /*@SWIG:/home/evgeny/release/svnrm/1.9.4/prefix/share/swig/2.0.12/perl5/perltypemaps.swg,65,%set_constant@*/ do {
+  /*@SWIG:/tmp/svnrm/prefix/share/swig/2.0.12/perl5/perltypemaps.swg,65,%set_constant@*/ do {
     SV *sv = get_sv((char*) SWIG_prefix "svn_repos_revision_access_partial", TRUE | 0x2 | GV_ADDMULTI);
     sv_setsv(sv, SWIG_From_int  SWIG_PERL_CALL_ARGS_1((int)(svn_repos_revision_access_partial)));
     SvREADONLY_on(sv);
   } while(0) /*@SWIG@*/;
-  /*@SWIG:/home/evgeny/release/svnrm/1.9.4/prefix/share/swig/2.0.12/perl5/perltypemaps.swg,65,%set_constant@*/ do {
+  /*@SWIG:/tmp/svnrm/prefix/share/swig/2.0.12/perl5/perltypemaps.swg,65,%set_constant@*/ do {
     SV *sv = get_sv((char*) SWIG_prefix "svn_repos_revision_access_full", TRUE | 0x2 | GV_ADDMULTI);
     sv_setsv(sv, SWIG_From_int  SWIG_PERL_CALL_ARGS_1((int)(svn_repos_revision_access_full)));
     SvREADONLY_on(sv);

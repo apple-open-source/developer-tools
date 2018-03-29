@@ -1,5 +1,5 @@
 ifndef SVN_INSTALL_DIR
-export SVN_INSTALL_DIR = $(DEVELOPER_DIR)/usr
+export SVN_INSTALL_DIR = $(DEVELOPER_INSTALL_DIR)/usr
 endif
 
 Install_Prefix = $(SVN_INSTALL_DIR)
@@ -11,7 +11,6 @@ Extra_Configure_Flags = --enable-shared --disable-static \
                         --without-apxs \
                         --with-apr=$(APR_TOOLCHAIN_DIR) \
                         --with-apr-util=$(APR_TOOLCHAIN_DIR) \
-                        --with-neon=/usr/local \
                         --with-swig=$(shell test -e /usr/bin/swig && echo /usr || echo /usr/local) \
                         --with-ruby-sitedir=$(RBLIBDIR)/ruby \
                         --without-sasl \
@@ -72,7 +71,6 @@ PERLVERSIONS := $(VERSIONERDIR)/perl/versions
 PERLSUBDEFAULT := $(shell sed -n '/^DEFAULT = /s///p' $(PERLVERSIONS))
 PERLDEFAULT := $(shell grep '^$(PERLSUBDEFAULT)' $(PERLVERSIONS))
 PERLUNORDEREDVERS := $(shell grep -v '^DEFAULT' $(PERLVERSIONS))
-PERLUNORDEREDVERS := $(sort $(PERLUNORDEREDVERS) 5.16) # add 5.16 if needed (use sort for uniquing)
 # do default version last
 PERLORDEREDVERS := $(filter-out $(PERLDEFAULT),$(PERLUNORDEREDVERS)) $(PERLDEFAULT)
 PERLTOPDIR := $(BuildDirectory)/subversion/bindings/swig/perl
@@ -87,15 +85,15 @@ perl-bindings:
 	cd $(BuildDirectory) && \
 	for vers in $(PERLORDEREDVERS); do \
 	    export VERSIONER_PERL_VERSION=$${vers} && \
-	    installarchlib=`perl -MConfig -e 'print $$Config::Config{installarchlib}' | sed "s,^/System,$(DEVELOPER_DIR),"` && \
-	    installprivlib=`perl -MConfig -e 'print $$Config::Config{installprivlib}' | sed "s,^/System,$(DEVELOPER_DIR),"` && \
+	    installarchlib=`perl -MConfig -e 'print $$Config::Config{installarchlib}' | sed "s,^/System,$(DEVELOPER_INSTALL_DIR),"` && \
+	    installprivlib=`perl -MConfig -e 'print $$Config::Config{installprivlib}' | sed "s,^/System,$(DEVELOPER_INSTALL_DIR),"` && \
 	    installbin=$${installprivlib}/bin && \
-	    PLARGS="INSTALLDIRS=perl INSTALLARCHLIB='$${installarchlib}' INSTALLPRIVLIB='$${installprivlib}' INSTALLBIN='$${installbin}' INSTALLSCRIPT='$${installbin}' INSTALLMAN3DIR='$(DEVELOPER_DIR)/usr/share/man/man3'" && \
+	    PLARGS="INSTALLDIRS=perl INSTALLARCHLIB='$${installarchlib}' INSTALLPRIVLIB='$${installprivlib}' INSTALLBIN='$${installbin}' INSTALLSCRIPT='$${installbin}' INSTALLMAN3DIR='$(DEVELOPER_INSTALL_DIR)/usr/share/man/man3'" && \
 	    MAKEARGS="$(Extra_Make_Flags) DESTDIR='$(DSTROOT)'" && \
 	    export RPATHVERS="$${installarchlib}/lib" && \
 	    ditto $(PERLTOPDIRORIG) $(PERLTOPDIR) && \
-	    make swig-pl PLARGS="$${PLARGS}" MAKEARGS="$${MAKEARGS}" ARCHFLAGS="$(RC_CFLAGS)" && \
-	    make install-swig-pl PLARGS="$${PLARGS}" MAKEARGS="$${MAKEARGS}" DESTDIR="$(DSTROOT)" && \
+	    make -j1 swig-pl PLARGS="$${PLARGS}" MAKEARGS="$${MAKEARGS}" ARCHFLAGS="$(RC_CFLAGS)" && \
+	    make -j1 install-swig-pl PLARGS="$${PLARGS}" MAKEARGS="$${MAKEARGS}" DESTDIR="$(DSTROOT)" && \
 	    sh $(SRCROOT)/rpath_extras.sh && \
 	    for module in Client Core Delta Fs Ra Repos Wc; do\
 		    $(CP) $(DSTROOT)$${installarchlib}/auto/SVN/_$${module}/_$${module}.bundle $(SYMROOT) && \
@@ -117,4 +115,4 @@ post-install:
 		$(CODESIGN) $${library} || exit 1; \
 	done
 	find $(DSTROOT) -name \*.la -delete
-	find $(DSTROOT)$(DEVELOPER_DIR)/Library/Perl -name .packlist -delete
+	find $(DSTROOT)$(DEVELOPER_INSTALL_DIR)/Library/Perl -name .packlist -delete

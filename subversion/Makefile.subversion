@@ -1,5 +1,5 @@
 ifndef SVN_INSTALL_DIR
-export SVN_INSTALL_DIR = $(DEVELOPER_DIR)/usr
+export SVN_INSTALL_DIR = $(DEVELOPER_INSTALL_DIR)/usr
 endif
 
 Install_Prefix = $(SVN_INSTALL_DIR)
@@ -11,7 +11,6 @@ Extra_Configure_Flags = --enable-shared --disable-static \
                         --without-apxs \
                         --with-apr=$(APR_TOOLCHAIN_DIR) \
                         --with-apr-util=$(APR_TOOLCHAIN_DIR) \
-                        --with-neon=$(DEVELOPER_DIR)/usr/local \
                         --with-serf=$(DEVELOPER_DIR)/usr \
                         --with-swig=$(shell test -e /usr/bin/swig && echo /usr || echo /usr/local) \
                         --with-ruby-sitedir=$(RBLIBDIR)/ruby \
@@ -44,3 +43,4 @@ post-install:
 		$(CODESIGN) $${library} || exit 1; \
 	done
 	find $(DSTROOT) -name \*.la -delete
+	rm -rf $(DSTROOT)$(SVN_INSTALL_DIR)/share/pkgconfig

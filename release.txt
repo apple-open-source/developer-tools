@@ -1,16 +1,16 @@
-# Developer Tools 9.2 Crater9C40b
+# Developer Tools 9.3 Edge9E145
 bison	14	Other
 bootstrap_cmds	96.20.2	Other
-cctools	900	Other
+cctools	906	Other
 CoreOSMakefiles	78	Other
 developer_cmds	66	Other
 gcc_select	134	Other
-Git	98	Other
+Git	101	Other
 gm4	16	Other
 gnumake	131	Other
 gperf	13	Other
 headerdoc	8.9.28	Other
-ld64	305	Other
+ld64	351.8	Other
 pb_makefiles	1005	Other
-subversion	74	Other
-tapi	900.0.15	Other
+subversion	78	Other
+tapi	902.0.9	Other

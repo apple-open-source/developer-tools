@@ -4868,6 +4868,7 @@ XS(_wrap_svn_ra_initialize) {
     
     {
       _global_pool = arg1 = svn_swig_pl_make_pool (ST(items-1));
+      SPAGAIN;
     }
     if ((items < 0) || (items > 1)) {
       SWIG_croak("Usage: svn_ra_initialize(pool);");
@@ -4918,6 +4919,7 @@ XS(_wrap_svn_ra_create_callbacks) {
     
     {
       _global_pool = arg2 = svn_swig_pl_make_pool (ST(items-1));
+      SPAGAIN;
     }
     arg1 = &temp1;
     if ((items < 0) || (items > 1)) {
@@ -4990,6 +4992,7 @@ XS(_wrap_svn_ra_open4) {
     
     {
       _global_pool = arg8 = svn_swig_pl_make_pool (ST(items-1));
+      SPAGAIN;
     }
     arg1 = &temp1;
     arg2 = &temp2;
@@ -5108,6 +5111,7 @@ XS(_wrap_svn_ra_open3) {
     
     {
       _global_pool = arg7 = svn_swig_pl_make_pool (ST(items-1));
+      SPAGAIN;
     }
     arg1 = &temp1;
     if ((items < 5) || (items > 6)) {
@@ -5212,6 +5216,7 @@ XS(_wrap_svn_ra_open2) {
     
     {
       _global_pool = arg6 = svn_swig_pl_make_pool (ST(items-1));
+      SPAGAIN;
     }
     arg1 = &temp1;
     if ((items < 4) || (items > 5)) {
@@ -5306,6 +5311,7 @@ XS(_wrap_svn_ra_open) {
     
     {
       _global_pool = arg6 = svn_swig_pl_make_pool (ST(items-1));
+      SPAGAIN;
     }
     arg1 = &temp1;
     if ((items < 3) || (items > 4)) {
@@ -5383,6 +5389,7 @@ XS(_wrap_svn_ra_reparent) {
     
     {
       _global_pool = arg3 = svn_swig_pl_make_pool (ST(items-1));
+      SPAGAIN;
     }
     if ((items < 2) || (items > 3)) {
       SWIG_croak("Usage: svn_ra_reparent(ra_session,url,pool);");
@@ -5450,6 +5457,7 @@ XS(_wrap_svn_ra_get_session_url) {
     
     {
       _global_pool = arg3 = svn_swig_pl_make_pool (ST(items-1));
+      SPAGAIN;
     }
     arg2 = &temp2;
     if ((items < 1) || (items > 2)) {
@@ -5524,6 +5532,7 @@ XS(_wrap_svn_ra_get_path_relative_to_session) {
     
     {
       _global_pool = arg4 = svn_swig_pl_make_pool (ST(items-1));
+      SPAGAIN;
     }
     arg2 = &temp2;
     if ((items < 2) || (items > 3)) {
@@ -5605,6 +5614,7 @@ XS(_wrap_svn_ra_get_path_relative_to_root) {
     
     {
       _global_pool = arg4 = svn_swig_pl_make_pool (ST(items-1));
+      SPAGAIN;
     }
     arg2 = &temp2;
     if ((items < 2) || (items > 3)) {
@@ -5683,6 +5693,7 @@ XS(_wrap_svn_ra_get_latest_revnum) {
     
     {
       _global_pool = arg3 = svn_swig_pl_make_pool (ST(items-1));
+      SPAGAIN;
     }
     arg2 = &temp2;
     if ((items < 1) || (items > 2)) {
@@ -5756,6 +5767,7 @@ XS(_wrap_svn_ra_get_dated_revision) {
     
     {
       _global_pool = arg4 = svn_swig_pl_make_pool (ST(items-1));
+      SPAGAIN;
     }
     arg2 = &temp2;
     if ((items < 2) || (items > 3)) {
@@ -5843,6 +5855,7 @@ XS(_wrap_svn_ra_change_rev_prop2) {
     
     {
       _global_pool = arg6 = svn_swig_pl_make_pool (ST(items-1));
+      SPAGAIN;
     }
     if ((items < 5) || (items > 6)) {
       SWIG_croak("Usage: svn_ra_change_rev_prop2(session,rev,name,old_value_p,value,pool);");
@@ -5950,6 +5963,7 @@ XS(_wrap_svn_ra_change_rev_prop) {
     
     {
       _global_pool = arg5 = svn_swig_pl_make_pool (ST(items-1));
+      SPAGAIN;
     }
     if ((items < 4) || (items > 5)) {
       SWIG_croak("Usage: svn_ra_change_rev_prop(session,rev,name,value,pool);");
@@ -6038,6 +6052,7 @@ XS(_wrap_svn_ra_rev_proplist) {
     
     {
       _global_pool = arg4 = svn_swig_pl_make_pool (ST(items-1));
+      SPAGAIN;
     }
     arg3 = &temp3;
     if ((items < 2) || (items > 3)) {
@@ -6118,6 +6133,7 @@ XS(_wrap_svn_ra_rev_prop) {
     
     {
       _global_pool = arg5 = svn_swig_pl_make_pool (ST(items-1));
+      SPAGAIN;
     }
     arg4 = &temp4;
     if ((items < 3) || (items > 4)) {
@@ -6211,6 +6227,7 @@ XS(_wrap_svn_ra_get_commit_editor3) {
     
     {
       _global_pool = arg9 = svn_swig_pl_make_pool (ST(items-1));
+      SPAGAIN;
     }
     arg2 = &temp2;
     arg3 = &temp3;
@@ -6223,8 +6240,10 @@ XS(_wrap_svn_ra_get_commit_editor3) {
     }
     arg1 = (svn_ra_session_t *)(argp1);
     {
-      if (_global_pool == NULL)
-      _global_pool = svn_swig_pl_make_pool((SV *)NULL);
+      if (_global_pool == NULL) {
+        _global_pool = svn_swig_pl_make_pool((SV *)NULL);
+        SPAGAIN;
+      }
       arg4 = svn_swig_pl_hash_to_prophash(ST(1), _global_pool);  
     }
     {
@@ -6320,6 +6339,7 @@ XS(_wrap_svn_ra_get_commit_editor2) {
     
     {
       _global_pool = arg9 = svn_swig_pl_make_pool (ST(items-1));
+      SPAGAIN;
     }
     arg2 = &temp2;
     arg3 = &temp3;
@@ -6429,6 +6449,7 @@ XS(_wrap_svn_ra_get_commit_editor) {
     
     {
       _global_pool = arg9 = svn_swig_pl_make_pool (ST(items-1));
+      SPAGAIN;
     }
     arg2 = &temp2;
     arg3 = &temp3;
@@ -6537,6 +6558,7 @@ XS(_wrap_svn_ra_get_file) {
     
     {
       _global_pool = arg7 = svn_swig_pl_make_pool (ST(items-1));
+      SPAGAIN;
     }
     arg5 = &temp5;
     arg6 = &temp6;
@@ -6560,6 +6582,7 @@ XS(_wrap_svn_ra_get_file) {
     arg3 = (svn_revnum_t)(val3);
     {
       svn_swig_pl_make_stream (&arg4, ST(3));
+      SPAGAIN;
     }
     if (items > 4) {
       
@@ -6646,6 +6669,7 @@ XS(_wrap_svn_ra_get_dir2) {
     
     {
       _global_pool = arg8 = svn_swig_pl_make_pool (ST(items-1));
+      SPAGAIN;
     }
     arg2 = &temp2;
     arg3 = &temp3;
@@ -6760,6 +6784,7 @@ XS(_wrap_svn_ra_get_dir) {
     
     {
       _global_pool = arg7 = svn_swig_pl_make_pool (ST(items-1));
+      SPAGAIN;
     }
     arg4 = &temp4;
     arg5 = &temp5;
@@ -6865,6 +6890,7 @@ XS(_wrap_svn_ra_get_mergeinfo) {
     
     {
       _global_pool = arg7 = svn_swig_pl_make_pool (ST(items-1));
+      SPAGAIN;
     }
     arg2 = &temp2;
     if ((items < 5) || (items > 6)) {
@@ -6985,9 +7011,11 @@ XS(_wrap_svn_ra_do_update3) {
     
     {
       _global_pool = arg11 = svn_swig_pl_make_pool (ST(items-1));
+      SPAGAIN;
     }
     {
       _global_pool = arg12 = svn_swig_pl_make_pool (ST(items-1));
+      SPAGAIN;
     }
     arg2 = &temp2;
     arg3 = &temp3;
@@ -7120,6 +7148,7 @@ XS(_wrap_svn_ra_do_update2) {
     
     {
       _global_pool = arg10 = svn_swig_pl_make_pool (ST(items-1));
+      SPAGAIN;
     }
     arg2 = &temp2;
     arg3 = &temp3;
@@ -7237,6 +7266,7 @@ XS(_wrap_svn_ra_do_update) {
     
     {
       _global_pool = arg9 = svn_swig_pl_make_pool (ST(items-1));
+      SPAGAIN;
     }
     arg2 = &temp2;
     arg3 = &temp3;
@@ -7358,9 +7388,11 @@ XS(_wrap_svn_ra_do_switch3) {
     
     {
       _global_pool = arg12 = svn_swig_pl_make_pool (ST(items-1));
+      SPAGAIN;
     }
     {
       _global_pool = arg13 = svn_swig_pl_make_pool (ST(items-1));
+      SPAGAIN;
     }
     arg2 = &temp2;
     arg3 = &temp3;
@@ -7501,6 +7533,7 @@ XS(_wrap_svn_ra_do_switch2) {
     
     {
       _global_pool = arg10 = svn_swig_pl_make_pool (ST(items-1));
+      SPAGAIN;
     }
     arg2 = &temp2;
     arg3 = &temp3;
@@ -7622,6 +7655,7 @@ XS(_wrap_svn_ra_do_switch) {
     
     {
       _global_pool = arg10 = svn_swig_pl_make_pool (ST(items-1));
+      SPAGAIN;
     }
     arg2 = &temp2;
     arg3 = &temp3;
@@ -7739,6 +7773,7 @@ XS(_wrap_svn_ra_do_status2) {
     
     {
       _global_pool = arg9 = svn_swig_pl_make_pool (ST(items-1));
+      SPAGAIN;
     }
     arg2 = &temp2;
     arg3 = &temp3;
@@ -7849,6 +7884,7 @@ XS(_wrap_svn_ra_do_status) {
     
     {
       _global_pool = arg9 = svn_swig_pl_make_pool (ST(items-1));
+      SPAGAIN;
     }
     arg2 = &temp2;
     arg3 = &temp3;
@@ -7969,6 +8005,7 @@ XS(_wrap_svn_ra_do_diff3) {
     
     {
       _global_pool = arg12 = svn_swig_pl_make_pool (ST(items-1));
+      SPAGAIN;
     }
     arg2 = &temp2;
     arg3 = &temp3;
@@ -8110,6 +8147,7 @@ XS(_wrap_svn_ra_do_diff2) {
     
     {
       _global_pool = arg12 = svn_swig_pl_make_pool (ST(items-1));
+      SPAGAIN;
     }
     arg2 = &temp2;
     arg3 = &temp3;
@@ -8248,6 +8286,7 @@ XS(_wrap_svn_ra_do_diff) {
     
     {
       _global_pool = arg11 = svn_swig_pl_make_pool (ST(items-1));
+      SPAGAIN;
     }
     arg2 = &temp2;
     arg3 = &temp3;
@@ -8378,6 +8417,7 @@ XS(_wrap_svn_ra_get_log2) {
     
     {
       _global_pool = arg12 = svn_swig_pl_make_pool (ST(items-1));
+      SPAGAIN;
     }
     if ((items < 10) || (items > 11)) {
       SWIG_croak("Usage: svn_ra_get_log2(session,paths,start,end,limit,discover_changed_paths,strict_node_history,include_merged_revisions,revprops,receiver,receiver_baton,pool);");
@@ -8512,6 +8552,7 @@ XS(_wrap_svn_ra_get_log) {
     
     {
       _global_pool = arg10 = svn_swig_pl_make_pool (ST(items-1));
+      SPAGAIN;
     }
     if ((items < 8) || (items > 9)) {
       SWIG_croak("Usage: svn_ra_get_log(session,paths,start,end,limit,discover_changed_paths,strict_node_history,receiver,receiver_baton,pool);");
@@ -8625,6 +8666,7 @@ XS(_wrap_svn_ra_check_path) {
     
     {
       _global_pool = arg5 = svn_swig_pl_make_pool (ST(items-1));
+      SPAGAIN;
     }
     arg4 = &temp4;
     if ((items < 3) || (items > 4)) {
@@ -8715,6 +8757,7 @@ XS(_wrap_svn_ra_stat) {
     
     {
       _global_pool = arg5 = svn_swig_pl_make_pool (ST(items-1));
+      SPAGAIN;
     }
     arg4 = &temp4;
     if ((items < 3) || (items > 4)) {
@@ -8795,6 +8838,7 @@ XS(_wrap_svn_ra_get_uuid2) {
     
     {
       _global_pool = arg3 = svn_swig_pl_make_pool (ST(items-1));
+      SPAGAIN;
     }
     arg2 = &temp2;
     if ((items < 1) || (items > 2)) {
@@ -8865,6 +8909,7 @@ XS(_wrap_svn_ra_get_uuid) {
     
     {
       _global_pool = arg3 = svn_swig_pl_make_pool (ST(items-1));
+      SPAGAIN;
     }
     arg2 = &temp2;
     if ((items < 1) || (items > 2)) {
@@ -8935,6 +8980,7 @@ XS(_wrap_svn_ra_get_repos_root2) {
     
     {
       _global_pool = arg3 = svn_swig_pl_make_pool (ST(items-1));
+      SPAGAIN;
     }
     arg2 = &temp2;
     if ((items < 1) || (items > 2)) {
@@ -9005,6 +9051,7 @@ XS(_wrap_svn_ra_get_repos_root) {
     
     {
       _global_pool = arg3 = svn_swig_pl_make_pool (ST(items-1));
+      SPAGAIN;
     }
     arg2 = &temp2;
     if ((items < 1) || (items > 2)) {
@@ -9085,6 +9132,7 @@ XS(_wrap_svn_ra_get_locations) {
     
     {
       _global_pool = arg6 = svn_swig_pl_make_pool (ST(items-1));
+      SPAGAIN;
     }
     arg2 = &temp2;
     if ((items < 4) || (items > 5)) {
@@ -9192,6 +9240,7 @@ XS(_wrap_svn_ra_get_location_segments) {
     
     {
       _global_pool = arg8 = svn_swig_pl_make_pool (ST(items-1));
+      SPAGAIN;
     }
     if ((items < 7) || (items > 8)) {
       SWIG_croak("Usage: svn_ra_get_location_segments(session,path,peg_revision,start_rev,end_rev,receiver,receiver_baton,pool);");
@@ -9308,6 +9357,7 @@ XS(_wrap_svn_ra_get_file_revs2) {
     
     {
       _global_pool = arg8 = svn_swig_pl_make_pool (ST(items-1));
+      SPAGAIN;
     }
     if ((items < 7) || (items > 8)) {
       SWIG_croak("Usage: svn_ra_get_file_revs2(session,path,start,end,include_merged_revisions,handler,handler_baton,pool);");
@@ -9421,6 +9471,7 @@ XS(_wrap_svn_ra_get_file_revs) {
     
     {
       _global_pool = arg7 = svn_swig_pl_make_pool (ST(items-1));
+      SPAGAIN;
     }
     if ((items < 6) || (items > 7)) {
       SWIG_croak("Usage: svn_ra_get_file_revs(session,path,start,end,handler,handler_baton,pool);");
@@ -9524,6 +9575,7 @@ XS(_wrap_svn_ra_lock) {
     
     {
       _global_pool = arg7 = svn_swig_pl_make_pool (ST(items-1));
+      SPAGAIN;
     }
     if ((items < 5) || (items > 6)) {
       SWIG_croak("Usage: svn_ra_lock(session,path_revs,comment,steal_lock,lock_func,lock_baton,pool);");
@@ -9611,6 +9663,7 @@ XS(_wrap_svn_ra_unlock) {
     
     {
       _global_pool = arg6 = svn_swig_pl_make_pool (ST(items-1));
+      SPAGAIN;
     }
     if ((items < 4) || (items > 5)) {
       SWIG_croak("Usage: svn_ra_unlock(session,path_tokens,break_lock,lock_func,lock_baton,pool);");
@@ -9691,6 +9744,7 @@ XS(_wrap_svn_ra_get_lock) {
     
     {
       _global_pool = arg4 = svn_swig_pl_make_pool (ST(items-1));
+      SPAGAIN;
     }
     arg2 = &temp2;
     if ((items < 2) || (items > 3)) {
@@ -9771,6 +9825,7 @@ XS(_wrap_svn_ra_get_locks2) {
     
     {
       _global_pool = arg5 = svn_swig_pl_make_pool (ST(items-1));
+      SPAGAIN;
     }
     arg2 = &temp2;
     if ((items < 3) || (items > 4)) {
@@ -9855,6 +9910,7 @@ XS(_wrap_svn_ra_get_locks) {
     
     {
       _global_pool = arg4 = svn_swig_pl_make_pool (ST(items-1));
+      SPAGAIN;
     }
     arg2 = &temp2;
     if ((items < 2) || (items > 3)) {
@@ -9942,6 +9998,7 @@ XS(_wrap_svn_ra_replay_range) {
     
     {
       _global_pool = arg9 = svn_swig_pl_make_pool (ST(items-1));
+      SPAGAIN;
     }
     if ((items < 8) || (items > 9)) {
       SWIG_croak("Usage: svn_ra_replay_range(session,start_revision,end_revision,low_water_mark,send_deltas,revstart_func,revfinish_func,replay_baton,pool);");
@@ -10061,6 +10118,7 @@ XS(_wrap_svn_ra_replay) {
     
     {
       _global_pool = arg7 = svn_swig_pl_make_pool (ST(items-1));
+      SPAGAIN;
     }
     if ((items < 5) || (items > 6)) {
       SWIG_croak("Usage: svn_ra_replay(session,revision,low_water_mark,send_deltas,editor,edit_baton,pool);");
@@ -10156,6 +10214,7 @@ XS(_wrap_svn_ra_get_deleted_rev) {
     
     {
       _global_pool = arg6 = svn_swig_pl_make_pool (ST(items-1));
+      SPAGAIN;
     }
     arg5 = &temp5;
     if ((items < 4) || (items > 5)) {
@@ -10254,9 +10313,11 @@ XS(_wrap_svn_ra_get_inherited_props) {
     
     {
       _global_pool = arg5 = svn_swig_pl_make_pool (ST(items-1));
+      SPAGAIN;
     }
     {
       _global_pool = arg6 = svn_swig_pl_make_pool (ST(items-1));
+      SPAGAIN;
     }
     arg2 = &temp2;
     if ((items < 3) || (items > 5)) {
@@ -10353,6 +10414,7 @@ XS(_wrap_svn_ra_has_capability) {
     
     {
       _global_pool = arg4 = svn_swig_pl_make_pool (ST(items-1));
+      SPAGAIN;
     }
     arg2 = &temp2;
     if ((items < 2) || (items > 3)) {
@@ -10425,6 +10487,7 @@ XS(_wrap_svn_ra_print_modules) {
     
     {
       _global_pool = arg2 = svn_swig_pl_make_pool (ST(items-1));
+      SPAGAIN;
     }
     if ((items < 1) || (items > 2)) {
       SWIG_croak("Usage: svn_ra_print_modules(output,pool);");
@@ -10432,6 +10495,7 @@ XS(_wrap_svn_ra_print_modules) {
     {
       apr_size_t len;
       char *buf;
+      apr_pool_t *pool;
       
       if (!SvOK(ST(0))) {
         arg1 = NULL;
@@ -10439,8 +10503,9 @@ XS(_wrap_svn_ra_print_modules) {
         buf = SvPV(ST(0), len);
         /* Another case of ugly pool handling, this should use the current
                    default pool, or make a new one if it doesn't exist yet */
-        arg1 = svn_stringbuf_ncreate(buf,len,
-          svn_swig_pl_make_pool ((SV *)NULL));
+        pool = svn_swig_pl_make_pool ((SV *)NULL);
+        SPAGAIN;
+        arg1 = svn_stringbuf_ncreate(buf,len, pool);
       } else {
         croak("Not a string");
       }
@@ -10495,6 +10560,7 @@ XS(_wrap_svn_ra_print_ra_libraries) {
     
     {
       _global_pool = arg3 = svn_swig_pl_make_pool (ST(items-1));
+      SPAGAIN;
     }
     arg1 = &temp1;
     if ((items < 1) || (items > 2)) {
@@ -12042,6 +12108,7 @@ XS(_wrap_svn_ra_init_ra_libs) {
     
     {
       _global_pool = arg2 = svn_swig_pl_make_pool (ST(items-1));
+      SPAGAIN;
     }
     arg1 = &temp1;
     if ((items < 0) || (items > 1)) {
@@ -12104,6 +12171,7 @@ XS(_wrap_svn_ra_get_ra_library) {
     
     {
       _global_pool = arg4 = svn_swig_pl_make_pool (ST(items-1));
+      SPAGAIN;
     }
     arg1 = &temp1;
     if ((items < 2) || (items > 3)) {
@@ -12193,6 +12261,7 @@ XS(_wrap_svn_ra_reporter3_invoke_set_path) {
     
     {
       _global_pool = arg8 = svn_swig_pl_make_pool (ST(items-1));
+      SPAGAIN;
     }
     if ((items < 7) || (items > 8)) {
       SWIG_croak("Usage: svn_ra_reporter3_invoke_set_path(_obj,report_baton,path,revision,depth,start_empty,lock_token,pool);");
@@ -12298,6 +12367,7 @@ XS(_wrap_svn_ra_reporter3_invoke_delete_path) {
     
     {
       _global_pool = arg4 = svn_swig_pl_make_pool (ST(items-1));
+      SPAGAIN;
     }
     if ((items < 3) || (items > 4)) {
       SWIG_croak("Usage: svn_ra_reporter3_invoke_delete_path(_obj,report_baton,path,pool);");
@@ -12392,6 +12462,7 @@ XS(_wrap_svn_ra_reporter3_invoke_link_path) {
     
     {
       _global_pool = arg9 = svn_swig_pl_make_pool (ST(items-1));
+      SPAGAIN;
     }
     if ((items < 8) || (items > 9)) {
       SWIG_croak("Usage: svn_ra_reporter3_invoke_link_path(_obj,report_baton,path,url,revision,depth,start_empty,lock_token,pool);");
@@ -12500,6 +12571,7 @@ XS(_wrap_svn_ra_reporter3_invoke_finish_report) {
     
     {
       _global_pool = arg3 = svn_swig_pl_make_pool (ST(items-1));
+      SPAGAIN;
     }
     if ((items < 2) || (items > 3)) {
       SWIG_croak("Usage: svn_ra_reporter3_invoke_finish_report(_obj,report_baton,pool);");
@@ -12566,6 +12638,7 @@ XS(_wrap_svn_ra_reporter3_invoke_abort_report) {
     
     {
       _global_pool = arg3 = svn_swig_pl_make_pool (ST(items-1));
+      SPAGAIN;
     }
     if ((items < 2) || (items > 3)) {
       SWIG_croak("Usage: svn_ra_reporter3_invoke_abort_report(_obj,report_baton,pool);");
@@ -12646,6 +12719,7 @@ XS(_wrap_svn_ra_reporter2_invoke_set_path) {
     
     {
       _global_pool = arg7 = svn_swig_pl_make_pool (ST(items-1));
+      SPAGAIN;
     }
     if ((items < 6) || (items > 7)) {
       SWIG_croak("Usage: svn_ra_reporter2_invoke_set_path(_obj,report_baton,path,revision,start_empty,lock_token,pool);");
@@ -12744,6 +12818,7 @@ XS(_wrap_svn_ra_reporter2_invoke_delete_path) {
     
     {
       _global_pool = arg4 = svn_swig_pl_make_pool (ST(items-1));
+      SPAGAIN;
     }
     if ((items < 3) || (items > 4)) {
       SWIG_croak("Usage: svn_ra_reporter2_invoke_delete_path(_obj,report_baton,path,pool);");
@@ -12835,6 +12910,7 @@ XS(_wrap_svn_ra_reporter2_invoke_link_path) {
     
     {
       _global_pool = arg8 = svn_swig_pl_make_pool (ST(items-1));
+      SPAGAIN;
     }
     if ((items < 7) || (items > 8)) {
       SWIG_croak("Usage: svn_ra_reporter2_invoke_link_path(_obj,report_baton,path,url,revision,start_empty,lock_token,pool);");
@@ -12936,6 +13012,7 @@ XS(_wrap_svn_ra_reporter2_invoke_finish_report) {
     
     {
       _global_pool = arg3 = svn_swig_pl_make_pool (ST(items-1));
+      SPAGAIN;
     }
     if ((items < 2) || (items > 3)) {
       SWIG_croak("Usage: svn_ra_reporter2_invoke_finish_report(_obj,report_baton,pool);");
@@ -13002,6 +13079,7 @@ XS(_wrap_svn_ra_reporter2_invoke_abort_report) {
     
     {
       _global_pool = arg3 = svn_swig_pl_make_pool (ST(items-1));
+      SPAGAIN;
     }
     if ((items < 2) || (items > 3)) {
       SWIG_croak("Usage: svn_ra_reporter2_invoke_abort_report(_obj,report_baton,pool);");
@@ -13078,6 +13156,7 @@ XS(_wrap_svn_ra_reporter_invoke_set_path) {
     
     {
       _global_pool = arg6 = svn_swig_pl_make_pool (ST(items-1));
+      SPAGAIN;
     }
     if ((items < 5) || (items > 6)) {
       SWIG_croak("Usage: svn_ra_reporter_invoke_set_path(_obj,report_baton,path,revision,start_empty,pool);");
@@ -13169,6 +13248,7 @@ XS(_wrap_svn_ra_reporter_invoke_delete_path) {
     
     {
       _global_pool = arg4 = svn_swig_pl_make_pool (ST(items-1));
+      SPAGAIN;
     }
     if ((items < 3) || (items > 4)) {
       SWIG_croak("Usage: svn_ra_reporter_invoke_delete_path(_obj,report_baton,path,pool);");
@@ -13256,6 +13336,7 @@ XS(_wrap_svn_ra_reporter_invoke_link_path) {
     
     {
       _global_pool = arg7 = svn_swig_pl_make_pool (ST(items-1));
+      SPAGAIN;
     }
     if ((items < 6) || (items > 7)) {
       SWIG_croak("Usage: svn_ra_reporter_invoke_link_path(_obj,report_baton,path,url,revision,start_empty,pool);");
@@ -13350,6 +13431,7 @@ XS(_wrap_svn_ra_reporter_invoke_finish_report) {
     
     {
       _global_pool = arg3 = svn_swig_pl_make_pool (ST(items-1));
+      SPAGAIN;
     }
     if ((items < 2) || (items > 3)) {
       SWIG_croak("Usage: svn_ra_reporter_invoke_finish_report(_obj,report_baton,pool);");
@@ -13416,6 +13498,7 @@ XS(_wrap_svn_ra_reporter_invoke_abort_report) {
     
     {
       _global_pool = arg3 = svn_swig_pl_make_pool (ST(items-1));
+      SPAGAIN;
     }
     if ((items < 2) || (items > 3)) {
       SWIG_croak("Usage: svn_ra_reporter_invoke_abort_report(_obj,report_baton,pool);");
@@ -13484,6 +13567,7 @@ XS(_wrap_svn_ra_callbacks2_invoke_open_tmp_file) {
     
     {
       _global_pool = arg4 = svn_swig_pl_make_pool (ST(items-1));
+      SPAGAIN;
     }
     arg2 = &temp2;
     if ((items < 2) || (items > 3)) {
@@ -13558,6 +13642,7 @@ XS(_wrap_svn_ra_callbacks_invoke_open_tmp_file) {
     
     {
       _global_pool = arg4 = svn_swig_pl_make_pool (ST(items-1));
+      SPAGAIN;
     }
     arg2 = &temp2;
     if ((items < 2) || (items > 3)) {
@@ -13637,6 +13722,7 @@ XS(_wrap_svn_ra_plugin_invoke_open) {
     
     {
       _global_pool = arg7 = svn_swig_pl_make_pool (ST(items-1));
+      SPAGAIN;
     }
     arg2 = &temp2;
     if ((items < 4) || (items > 5)) {
@@ -13722,6 +13808,7 @@ XS(_wrap_svn_ra_plugin_invoke_get_latest_revnum) {
     
     {
       _global_pool = arg4 = svn_swig_pl_make_pool (ST(items-1));
+      SPAGAIN;
     }
     arg3 = &temp3;
     if ((items < 2) || (items > 3)) {
@@ -13803,6 +13890,7 @@ XS(_wrap_svn_ra_plugin_invoke_get_dated_revision) {
     
     {
       _global_pool = arg5 = svn_swig_pl_make_pool (ST(items-1));
+      SPAGAIN;
     }
     arg3 = &temp3;
     if ((items < 3) || (items > 4)) {
@@ -13894,6 +13982,7 @@ XS(_wrap_svn_ra_plugin_invoke_change_rev_prop) {
     
     {
       _global_pool = arg6 = svn_swig_pl_make_pool (ST(items-1));
+      SPAGAIN;
     }
     if ((items < 5) || (items > 6)) {
       SWIG_croak("Usage: svn_ra_plugin_invoke_change_rev_prop(_obj,session_baton,rev,name,value,pool);");
@@ -13990,6 +14079,7 @@ XS(_wrap_svn_ra_plugin_invoke_rev_proplist) {
     
     {
       _global_pool = arg5 = svn_swig_pl_make_pool (ST(items-1));
+      SPAGAIN;
     }
     arg4 = &temp4;
     if ((items < 3) || (items > 4)) {
@@ -14078,6 +14168,7 @@ XS(_wrap_svn_ra_plugin_invoke_rev_prop) {
     
     {
       _global_pool = arg6 = svn_swig_pl_make_pool (ST(items-1));
+      SPAGAIN;
     }
     arg5 = &temp5;
     if ((items < 4) || (items > 5)) {
@@ -14178,6 +14269,7 @@ XS(_wrap_svn_ra_plugin_invoke_get_commit_editor) {
     
     {
       _global_pool = arg8 = svn_swig_pl_make_pool (ST(items-1));
+      SPAGAIN;
     }
     arg3 = &temp3;
     arg4 = &temp4;
@@ -14281,6 +14373,7 @@ XS(_wrap_svn_ra_plugin_invoke_get_file) {
     
     {
       _global_pool = arg8 = svn_swig_pl_make_pool (ST(items-1));
+      SPAGAIN;
     }
     arg6 = &temp6;
     arg7 = &temp7;
@@ -14308,6 +14401,7 @@ XS(_wrap_svn_ra_plugin_invoke_get_file) {
     arg4 = (svn_revnum_t)(val4);
     {
       svn_swig_pl_make_stream (&arg5, ST(4));
+      SPAGAIN;
     }
     if (items > 5) {
       
@@ -14395,6 +14489,7 @@ XS(_wrap_svn_ra_plugin_invoke_get_dir) {
     
     {
       _global_pool = arg8 = svn_swig_pl_make_pool (ST(items-1));
+      SPAGAIN;
     }
     arg5 = &temp5;
     arg6 = &temp6;
@@ -14512,6 +14607,7 @@ XS(_wrap_svn_ra_plugin_invoke_do_update) {
     
     {
       _global_pool = arg10 = svn_swig_pl_make_pool (ST(items-1));
+      SPAGAIN;
     }
     arg3 = &temp3;
     arg4 = &temp4;
@@ -14634,6 +14730,7 @@ XS(_wrap_svn_ra_plugin_invoke_do_switch) {
     
     {
       _global_pool = arg11 = svn_swig_pl_make_pool (ST(items-1));
+      SPAGAIN;
     }
     arg3 = &temp3;
     arg4 = &temp4;
@@ -14759,6 +14856,7 @@ XS(_wrap_svn_ra_plugin_invoke_do_status) {
     
     {
       _global_pool = arg10 = svn_swig_pl_make_pool (ST(items-1));
+      SPAGAIN;
     }
     arg3 = &temp3;
     arg4 = &temp4;
@@ -14884,6 +14982,7 @@ XS(_wrap_svn_ra_plugin_invoke_do_diff) {
     
     {
       _global_pool = arg12 = svn_swig_pl_make_pool (ST(items-1));
+      SPAGAIN;
     }
     arg3 = &temp3;
     arg4 = &temp4;
@@ -15015,6 +15114,7 @@ XS(_wrap_svn_ra_plugin_invoke_get_log) {
     
     {
       _global_pool = arg10 = svn_swig_pl_make_pool (ST(items-1));
+      SPAGAIN;
     }
     if ((items < 8) || (items > 9)) {
       SWIG_croak("Usage: svn_ra_plugin_invoke_get_log(_obj,session_baton,paths,start,end,discover_changed_paths,strict_node_history,receiver,receiver_baton,pool);");
@@ -15129,6 +15229,7 @@ XS(_wrap_svn_ra_plugin_invoke_check_path) {
     
     {
       _global_pool = arg6 = svn_swig_pl_make_pool (ST(items-1));
+      SPAGAIN;
     }
     arg5 = &temp5;
     if ((items < 4) || (items > 5)) {
@@ -15220,6 +15321,7 @@ XS(_wrap_svn_ra_plugin_invoke_get_uuid) {
     
     {
       _global_pool = arg4 = svn_swig_pl_make_pool (ST(items-1));
+      SPAGAIN;
     }
     arg3 = &temp3;
     if ((items < 2) || (items > 3)) {
@@ -15298,6 +15400,7 @@ XS(_wrap_svn_ra_plugin_invoke_get_repos_root) {
     
     {
       _global_pool = arg4 = svn_swig_pl_make_pool (ST(items-1));
+      SPAGAIN;
     }
     arg3 = &temp3;
     if ((items < 2) || (items > 3)) {
@@ -15386,6 +15489,7 @@ XS(_wrap_svn_ra_plugin_invoke_get_locations) {
     
     {
       _global_pool = arg7 = svn_swig_pl_make_pool (ST(items-1));
+      SPAGAIN;
     }
     arg3 = &temp3;
     if ((items < 5) || (items > 6)) {
@@ -15498,6 +15602,7 @@ XS(_wrap_svn_ra_plugin_invoke_get_file_revs) {
     
     {
       _global_pool = arg8 = svn_swig_pl_make_pool (ST(items-1));
+      SPAGAIN;
     }
     if ((items < 7) || (items > 8)) {
       SWIG_croak("Usage: svn_ra_plugin_invoke_get_file_revs(_obj,session_baton,path,start,end,handler,handler_baton,pool);");
@@ -15640,6 +15745,7 @@ XS(_wrap_svn_ra_invoke_get_wc_prop_func) {
     
     {
       _global_pool = arg6 = svn_swig_pl_make_pool (ST(items-1));
+      SPAGAIN;
     }
     arg5 = &temp5;
     if ((items < 4) || (items > 5)) {
@@ -15739,6 +15845,7 @@ XS(_wrap_svn_ra_invoke_set_wc_prop_func) {
     
     {
       _global_pool = arg6 = svn_swig_pl_make_pool (ST(items-1));
+      SPAGAIN;
     }
     if ((items < 5) || (items > 6)) {
       SWIG_croak("Usage: svn_ra_invoke_set_wc_prop_func(_obj,baton,path,name,value,pool);");
@@ -15839,6 +15946,7 @@ XS(_wrap_svn_ra_invoke_push_wc_prop_func) {
     
     {
       _global_pool = arg6 = svn_swig_pl_make_pool (ST(items-1));
+      SPAGAIN;
     }
     if ((items < 5) || (items > 6)) {
       SWIG_croak("Usage: svn_ra_invoke_push_wc_prop_func(_obj,baton,path,name,value,pool);");
@@ -15937,6 +16045,7 @@ XS(_wrap_svn_ra_invoke_invalidate_wc_props_func) {
     
     {
       _global_pool = arg5 = svn_swig_pl_make_pool (ST(items-1));
+      SPAGAIN;
     }
     if ((items < 4) || (items > 5)) {
       SWIG_croak("Usage: svn_ra_invoke_invalidate_wc_props_func(_obj,baton,path,name,pool);");
@@ -16021,6 +16130,7 @@ XS(_wrap_svn_ra_invoke_get_wc_contents_func) {
     
     {
       _global_pool = arg5 = svn_swig_pl_make_pool (ST(items-1));
+      SPAGAIN;
     }
     arg3 = &temp3;
     if ((items < 3) || (items > 4)) {
@@ -16067,7 +16177,11 @@ XS(_wrap_svn_ra_invoke_get_wc_contents_func) {
       }
     }
     {
-      if (argvi >= items) EXTEND(sp,1);  ST(argvi) = svn_swig_pl_from_stream(*arg3); argvi++  ;
+      SV *tmp;
+      PUTBACK;
+      tmp = svn_swig_pl_from_stream(*arg3);
+      SPAGAIN;
+      if (argvi >= items) EXTEND(sp,1);  ST(argvi) = tmp; argvi++  ;
     }
     
     
@@ -16168,6 +16282,7 @@ XS(_wrap_svn_ra_invoke_get_client_string_func) {
     
     {
       _global_pool = arg4 = svn_swig_pl_make_pool (ST(items-1));
+      SPAGAIN;
     }
     arg3 = &temp3;
     if ((items < 2) || (items > 3)) {
@@ -16260,6 +16375,7 @@ XS(_wrap_svn_ra_invoke_file_rev_handler) {
     
     {
       _global_pool = arg9 = svn_swig_pl_make_pool (ST(items-1));
+      SPAGAIN;
     }
     arg6 = &temp6;
     arg7 = &temp7;
@@ -16378,6 +16494,7 @@ XS(_wrap_svn_ra_invoke_lock_callback) {
     
     {
       _global_pool = arg7 = svn_swig_pl_make_pool (ST(items-1));
+      SPAGAIN;
     }
     if ((items < 6) || (items > 7)) {
       SWIG_croak("Usage: svn_ra_invoke_lock_callback(_obj,baton,path,do_lock,lock,ra_err,pool);");
@@ -16476,6 +16593,7 @@ XS(_wrap_svn_ra_invoke_progress_notify_func) {
     
     {
       _global_pool = arg5 = svn_swig_pl_make_pool (ST(items-1));
+      SPAGAIN;
     }
     if ((items < 4) || (items > 5)) {
       SWIG_croak("Usage: svn_ra_invoke_progress_notify_func(_obj,progress,total,baton,pool);");
@@ -16550,6 +16668,7 @@ XS(_wrap_svn_ra_invoke_replay_revstart_callback) {
     
     {
       _global_pool = arg7 = svn_swig_pl_make_pool (ST(items-1));
+      SPAGAIN;
     }
     arg4 = &temp4;
     arg5 = &temp5;
@@ -16649,6 +16768,7 @@ XS(_wrap_svn_ra_invoke_replay_revfinish_callback) {
     
     {
       _global_pool = arg7 = svn_swig_pl_make_pool (ST(items-1));
+      SPAGAIN;
     }
     if ((items < 5) || (items > 6)) {
       SWIG_croak("Usage: svn_ra_invoke_replay_revfinish_callback(_obj,revision,replay_baton,editor,edit_baton,rev_props,pool);");
@@ -16854,6 +16974,7 @@ XS(_wrap_svn_ra_invoke_open_tunnel_func) {
     
     {
       _global_pool = arg13 = svn_swig_pl_make_pool (ST(items-1));
+      SPAGAIN;
     }
     arg2 = &temp2;
     arg3 = &temp3;
@@ -16922,10 +17043,18 @@ XS(_wrap_svn_ra_invoke_open_tunnel_func) {
       }
     }
     {
-      if (argvi >= items) EXTEND(sp,1);  ST(argvi) = svn_swig_pl_from_stream(*arg2); argvi++  ;
+      SV *tmp;
+      PUTBACK;
+      tmp = svn_swig_pl_from_stream(*arg2);
+      SPAGAIN;
+      if (argvi >= items) EXTEND(sp,1);  ST(argvi) = tmp; argvi++  ;
     }
     {
-      if (argvi >= items) EXTEND(sp,1);  ST(argvi) = svn_swig_pl_from_stream(*arg3); argvi++  ;
+      SV *tmp;
+      PUTBACK;
+      tmp = svn_swig_pl_from_stream(*arg3);
+      SPAGAIN;
+      if (argvi >= items) EXTEND(sp,1);  ST(argvi) = tmp; argvi++  ;
     }
     {
       /* FIXME: Missing argout typemap: svn_ra_invoke_open_tunnel_func arg 4 (svn_ra_close_tunnel_func_t *) */
@@ -16989,6 +17118,7 @@ XS(_wrap_svn_ra_invoke_init_func) {
     
     {
       _global_pool = arg3 = svn_swig_pl_make_pool (ST(items-1));
+      SPAGAIN;
     }
     if ((items < 2) || (items > 4)) {
       SWIG_croak("Usage: svn_ra_invoke_init_func(_obj,abi_version,pool,hash);");
@@ -17009,8 +17139,10 @@ XS(_wrap_svn_ra_invoke_init_func) {
     }
     if (items > 3) {
       {
-        if (_global_pool == NULL)
-        _global_pool = svn_swig_pl_make_pool((SV *)NULL);
+        if (_global_pool == NULL) {
+          _global_pool = svn_swig_pl_make_pool((SV *)NULL);
+          SPAGAIN;
+        }
         arg4 = svn_swig_pl_hash_to_prophash(ST(3), _global_pool);  
       }
     }
@@ -18224,52 +18356,52 @@ XS(SWIG_init) {
     SvREADONLY_on(sv);
   }
   
-  /*@SWIG:/home/evgeny/release/svnrm/1.9.4/prefix/share/swig/2.0.12/perl5/perltypemaps.swg,65,%set_constant@*/ do {
+  /*@SWIG:/tmp/svnrm/prefix/share/swig/2.0.12/perl5/perltypemaps.swg,65,%set_constant@*/ do {
     SV *sv = get_sv((char*) SWIG_prefix "SVN_RA_CAPABILITY_DEPTH", TRUE | 0x2 | GV_ADDMULTI);
     sv_setsv(sv, SWIG_FromCharPtr("depth"));
     SvREADONLY_on(sv);
   } while(0) /*@SWIG@*/;
-  /*@SWIG:/home/evgeny/release/svnrm/1.9.4/prefix/share/swig/2.0.12/perl5/perltypemaps.swg,65,%set_constant@*/ do {
+  /*@SWIG:/tmp/svnrm/prefix/share/swig/2.0.12/perl5/perltypemaps.swg,65,%set_constant@*/ do {
     SV *sv = get_sv((char*) SWIG_prefix "SVN_RA_CAPABILITY_MERGEINFO", TRUE | 0x2 | GV_ADDMULTI);
     sv_setsv(sv, SWIG_FromCharPtr("mergeinfo"));
     SvREADONLY_on(sv);
   } while(0) /*@SWIG@*/;
-  /*@SWIG:/home/evgeny/release/svnrm/1.9.4/prefix/share/swig/2.0.12/perl5/perltypemaps.swg,65,%set_constant@*/ do {
+  /*@SWIG:/tmp/svnrm/prefix/share/swig/2.0.12/perl5/perltypemaps.swg,65,%set_constant@*/ do {
     SV *sv = get_sv((char*) SWIG_prefix "SVN_RA_CAPABILITY_LOG_REVPROPS", TRUE | 0x2 | GV_ADDMULTI);
     sv_setsv(sv, SWIG_FromCharPtr("log-revprops"));
     SvREADONLY_on(sv);
   } while(0) /*@SWIG@*/;
-  /*@SWIG:/home/evgeny/release/svnrm/1.9.4/prefix/share/swig/2.0.12/perl5/perltypemaps.swg,65,%set_constant@*/ do {
+  /*@SWIG:/tmp/svnrm/prefix/share/swig/2.0.12/perl5/perltypemaps.swg,65,%set_constant@*/ do {
     SV *sv = get_sv((char*) SWIG_prefix "SVN_RA_CAPABILITY_PARTIAL_REPLAY", TRUE | 0x2 | GV_ADDMULTI);
     sv_setsv(sv, SWIG_FromCharPtr("partial-replay"));
     SvREADONLY_on(sv);
   } while(0) /*@SWIG@*/;
-  /*@SWIG:/home/evgeny/release/svnrm/1.9.4/prefix/share/swig/2.0.12/perl5/perltypemaps.swg,65,%set_constant@*/ do {
+  /*@SWIG:/tmp/svnrm/prefix/share/swig/2.0.12/perl5/perltypemaps.swg,65,%set_constant@*/ do {
     SV *sv = get_sv((char*) SWIG_prefix "SVN_RA_CAPABILITY_COMMIT_REVPROPS", TRUE | 0x2 | GV_ADDMULTI);
     sv_setsv(sv, SWIG_FromCharPtr("commit-revprops"));
     SvREADONLY_on(sv);
   } while(0) /*@SWIG@*/;
-  /*@SWIG:/home/evgeny/release/svnrm/1.9.4/prefix/share/swig/2.0.12/perl5/perltypemaps.swg,65,%set_constant@*/ do {
+  /*@SWIG:/tmp/svnrm/prefix/share/swig/2.0.12/perl5/perltypemaps.swg,65,%set_constant@*/ do {
     SV *sv = get_sv((char*) SWIG_prefix "SVN_RA_CAPABILITY_ATOMIC_REVPROPS", TRUE | 0x2 | GV_ADDMULTI);
     sv_setsv(sv, SWIG_FromCharPtr("atomic-revprops"));
     SvREADONLY_on(sv);
   } while(0) /*@SWIG@*/;
-  /*@SWIG:/home/evgeny/release/svnrm/1.9.4/prefix/share/swig/2.0.12/perl5/perltypemaps.swg,65,%set_constant@*/ do {
+  /*@SWIG:/tmp/svnrm/prefix/share/swig/2.0.12/perl5/perltypemaps.swg,65,%set_constant@*/ do {
     SV *sv = get_sv((char*) SWIG_prefix "SVN_RA_CAPABILITY_INHERITED_PROPS", TRUE | 0x2 | GV_ADDMULTI);
     sv_setsv(sv, SWIG_FromCharPtr("inherited-props"));
     SvREADONLY_on(sv);
   } while(0) /*@SWIG@*/;
-  /*@SWIG:/home/evgeny/release/svnrm/1.9.4/prefix/share/swig/2.0.12/perl5/perltypemaps.swg,65,%set_constant@*/ do {
+  /*@SWIG:/tmp/svnrm/prefix/share/swig/2.0.12/perl5/perltypemaps.swg,65,%set_constant@*/ do {
     SV *sv = get_sv((char*) SWIG_prefix "SVN_RA_CAPABILITY_EPHEMERAL_TXNPROPS", TRUE | 0x2 | GV_ADDMULTI);
     sv_setsv(sv, SWIG_FromCharPtr("ephemeral-txnprops"));
     SvREADONLY_on(sv);
   } while(0) /*@SWIG@*/;
-  /*@SWIG:/home/evgeny/release/svnrm/1.9.4/prefix/share/swig/2.0.12/perl5/perltypemaps.swg,65,%set_constant@*/ do {
+  /*@SWIG:/tmp/svnrm/prefix/share/swig/2.0.12/perl5/perltypemaps.swg,65,%set_constant@*/ do {
     SV *sv = get_sv((char*) SWIG_prefix "SVN_RA_CAPABILITY_GET_FILE_REVS_REVERSE", TRUE | 0x2 | GV_ADDMULTI);
     sv_setsv(sv, SWIG_FromCharPtr("get-file-revs-reversed"));
     SvREADONLY_on(sv);
   } while(0) /*@SWIG@*/;
-  /*@SWIG:/home/evgeny/release/svnrm/1.9.4/prefix/share/swig/2.0.12/perl5/perltypemaps.swg,65,%set_constant@*/ do {
+  /*@SWIG:/tmp/svnrm/prefix/share/swig/2.0.12/perl5/perltypemaps.swg,65,%set_constant@*/ do {
     SV *sv = get_sv((char*) SWIG_prefix "SVN_RA_ABI_VERSION", TRUE | 0x2 | GV_ADDMULTI);
     sv_setsv(sv, SWIG_From_int  SWIG_PERL_CALL_ARGS_1((int)(2)));
     SvREADONLY_on(sv);

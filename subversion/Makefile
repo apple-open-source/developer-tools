@@ -6,10 +6,14 @@ ifndef DEVELOPER_DIR
 DEVELOPER_DIR := $(shell xcode-select -p)
 endif
 
+ifndef DEVELOPER_INSTALL_DIR
+DEVELOPER_INSTALL_DIR := $(shell xcode-select -p)
+endif
+
 APR_TOOLCHAIN_DIR=$(dir $(shell xcrun --toolchain $(TOOLCHAINS) -f apr-1-config))/..
 
 Project               = subversion
-ProjectVersion        = 1.9.4
+ProjectVersion        = 1.9.7
 
 #-------------------------------------------------------------------------
 # build/get-py-info.py appends "-framework Python" to its --link and --libs
@@ -31,7 +35,7 @@ Patches        = build_get-py-info.py.diff \
                  PR-13100837.diff \
                  apr14.diff
 
-Extra_Make_Flags = 
+Extra_Make_Flags = -j $(shell sysctl -n hw.activecpu)
 Extra_Cxx_Flags = -stdlib=libc++
 Extra_LD_Flags = -headerpad_max_install_names
 
@@ -57,8 +61,8 @@ install_source::
 	done
 	ed - $(SRCROOT)/$(Project)/build-outputs.mk < $(SRCROOT)/files/fix-build-outputs.mk.ed
 
-OSV = $(DSTROOT)$(DEVELOPER_DIR)/usr/local/OpenSourceVersions
-OSL = $(DSTROOT)$(DEVELOPER_DIR)/usr/local/OpenSourceLicenses
+OSV = $(DSTROOT)$(DEVELOPER_INSTALL_DIR)/usr/local/OpenSourceVersions
+OSL = $(DSTROOT)$(DEVELOPER_INSTALL_DIR)/usr/local/OpenSourceLicenses
 
 install-plist:
 	$(MKDIR) $(OSV)

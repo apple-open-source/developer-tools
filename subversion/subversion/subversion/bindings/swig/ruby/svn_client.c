@@ -2041,7 +2041,7 @@ SWIG_ruby_failed(void)
 } 
 
 
-/*@SWIG:/home/evgeny/release/svnrm/1.9.4/prefix/share/swig/2.0.12/ruby/rubyprimtypes.swg,19,%ruby_aux_method@*/
+/*@SWIG:/tmp/svnrm/prefix/share/swig/2.0.12/ruby/rubyprimtypes.swg,19,%ruby_aux_method@*/
 SWIGINTERN VALUE SWIG_AUX_NUM2LONG(VALUE *args)
 {
   VALUE obj = args[0];
@@ -2146,7 +2146,7 @@ SWIG_From_int  (int value)
 }
 
 
-/*@SWIG:/home/evgeny/release/svnrm/1.9.4/prefix/share/swig/2.0.12/ruby/rubyprimtypes.swg,19,%ruby_aux_method@*/
+/*@SWIG:/tmp/svnrm/prefix/share/swig/2.0.12/ruby/rubyprimtypes.swg,19,%ruby_aux_method@*/
 SWIGINTERN VALUE SWIG_AUX_NUM2ULONG(VALUE *args)
 {
   VALUE obj = args[0];
