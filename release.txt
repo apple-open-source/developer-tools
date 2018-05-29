@@ -1,4 +1,4 @@
-# Developer Tools 9.3.1 Edge9E501
+# Developer Tools 9.4 EdgeSeed9F1027a
 bison	14	Other
 bootstrap_cmds	96.20.2	Other
 cctools	906	Other
