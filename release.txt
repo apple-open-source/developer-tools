@@ -1,11 +1,11 @@
-# Developer Tools 9.4 EdgeSeed9F1027a
+# Developer Tools 9.4.1 EdgeSeed9F2000
 bison	14	Other
 bootstrap_cmds	96.20.2	Other
 cctools	906	Other
 CoreOSMakefiles	78	Other
 developer_cmds	66	Other
 gcc_select	134	Other
-Git	101	Other
+Git	101.1	Other
 gm4	16	Other
 gnumake	131	Other
 gperf	13	Other
