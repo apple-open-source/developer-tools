@@ -3622,6 +3622,17 @@ revert_file_externals(const svn_test_opts_t *opts, apr_pool_t *pool)
     SVN_ERR(check_db_rows(&b, "", rows));
   }
 
+  SVN_ERR(sbox_wc_update(&b, "", 1));
+  {
+    nodes_row_t rows[] = {
+      { 0, "",    "normal",      1, "" },
+      { 0, "f",   "normal",      1, "f" },
+      { 0, "g",   "normal",      1, "f", TRUE },
+      { 0 }
+    };
+    SVN_ERR(check_db_rows(&b, "", rows));
+  }
+
   return SVN_NO_ERROR;
 }
 
@@ -12021,7 +12032,7 @@ static struct svn_test_descriptor_t test_funcs[] =
                        "move depth expansion"),
     SVN_TEST_OPTS_XFAIL(move_retract,
                        "move retract (issue 4336)"),
-    SVN_TEST_OPTS_PASS(move_delete_file_externals,
+    SVN_TEST_OPTS_XFAIL(move_delete_file_externals,
                        "move/delete file externals (issue 4293)"),
     SVN_TEST_OPTS_PASS(update_with_tree_conflict,
                        "update with tree conflict (issue 4347)"),

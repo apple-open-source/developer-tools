@@ -23,10 +23,10 @@
 #    under the License.
 # ====================================================================
 #
-# $HeadURL: https://svn.apache.org/repos/asf/subversion/branches/1.9.x/tools/dev/which-error.py $
-# $LastChangedDate: 2013-12-05 00:42:34 +0000 (Thu, 05 Dec 2013) $
-# $LastChangedBy: breser $
-# $LastChangedRevision: 1547977 $
+# $HeadURL: https://svn.apache.org/repos/asf/subversion/branches/1.10.x/tools/dev/which-error.py $
+# $LastChangedDate: 2016-04-30 08:16:53 +0000 (Sat, 30 Apr 2016) $
+# $LastChangedBy: stefan2 $
+# $LastChangedRevision: 1741723 $
 #
 
 import errno
@@ -36,7 +36,7 @@ import re
 
 try:
   from svn import core
-except ImportError, e:
+except ImportError as e:
   sys.stderr.write("ERROR: Unable to import Subversion's Python bindings: '%s'\n" \
                    "Hint: Set your PYTHONPATH environment variable, or adjust your " \
                    "PYTHONSTARTUP\nfile to point to your Subversion install " \
@@ -95,6 +95,8 @@ def print_error(code):
   except KeyError:
     if code == -41:
       print("Sit by a lake.")
+    elif code >= 120100 and code < 121000:
+      print('%08d  <error code from libserf; see serf.h>' % (code))
     else:
       print('%08d  *** UNKNOWN ERROR CODE ***' % (code))
 

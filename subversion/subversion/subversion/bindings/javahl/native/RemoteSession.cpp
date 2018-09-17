@@ -646,6 +646,8 @@ build_string_array(const Iterator& iter,
     {
       const char* element;
       jstring jitem = (jstring)iter.next();
+      if (JNIUtil::isExceptionThrown())
+        return NULL;
       if (contains_relpaths)
         {
           Relpath item(jitem, pool);
@@ -836,7 +838,7 @@ RemoteSession::status(jobject jthis, jstring jstatus_target,
   proxy_callbacks.m_extra_baton.baton = &rp->m_target_revision;
 
   apr_pool_t* report_pool = rp->get_report_pool();
-  std::auto_ptr<EditorProxy> editor(
+  EditorProxy::UniquePtr editor(
       new EditorProxy(jstatus_editor, report_pool,
                       repos_root_url, base_relpath,
                       m_context->checkCancel, m_context,
@@ -854,7 +856,7 @@ RemoteSession::status(jobject jthis, jstring jstatus_target,
                                 editor->delta_editor(),
                                 editor->delta_baton(),
                                 report_pool),);
-  rp->set_reporter_data(raw_reporter, report_baton, editor.release());
+  rp->set_reporter_data(raw_reporter, report_baton, editor);
 }
 
 // TODO: diff
@@ -959,7 +961,10 @@ long_iterable_to_revnum_array(jobject jlong_iterable, apr_pool_t* pool)
   Iterator iter(jlong_iterable);
   while (iter.hasNext())
     {
-      const jlong entry = env->CallLongMethod(iter.next(), mid);
+      jobject next = iter.next();
+      if (JNIUtil::isExceptionThrown())
+        return NULL;
+      const jlong entry = env->CallLongMethod(next, mid);
       if (JNIUtil::isExceptionThrown())
         return NULL;
       APR_ARRAY_PUSH(array, svn_revnum_t) = svn_revnum_t(entry);
@@ -971,6 +976,8 @@ jobject
 location_hash_to_map(apr_hash_t* locations, apr_pool_t* scratch_pool)
 {
   JNIEnv* env = JNIUtil::getEnv();
+  if (JNIUtil::isExceptionThrown())
+    return NULL;
 
   jclass long_cls = env->FindClass("java/lang/Long");
   if (JNIUtil::isExceptionThrown())

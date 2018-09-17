@@ -143,7 +143,7 @@ extern "C" {
           "Integers not equal\n"                                  \
           "  Expected: %" APR_INT64_T_FMT "\n"                    \
           "     Found: %" APR_INT64_T_FMT "\n"                    \
-          "\n  at %s:%d",                                         \
+          "  at %s:%d",                                           \
           tst_int2, tst_int1, __FILE__, __LINE__);                \
   } while(0)
 
@@ -165,6 +165,8 @@ typedef struct svn_test_opts_t
   const char *repos_dir;
   /* Repository url: The url to access REPOS_DIR as */
   const char *repos_url;
+  /* Memcached server. */
+  const char *memcached_server;
   /* Repository template: pre-created repository to copy for tests */
   const char *repos_template;
   /* Minor version to use for servers and FS backends, or zero to use
@@ -345,6 +347,12 @@ svn_error_t *
 svn_test__init_auth_baton(svn_auth_baton_t **baton,
                           apr_pool_t *result_pool);
 
+/* Create a temp folder for test & schedule it for automatic cleanup.
+ * Uses POOL for all allocations. */
+svn_error_t *
+svn_test_make_sandbox_dir(const char **sb_dir_p,
+                          const char *sb_name,
+                          apr_pool_t *pool);
 
 /*
  * Test predicates

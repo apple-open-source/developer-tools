@@ -105,6 +105,7 @@ typedef struct dir_conf_t {
   enum conf_flag txdelta_cache;      /* whether to enable txdelta caching */
   enum conf_flag fulltext_cache;     /* whether to enable fulltext caching */
   enum conf_flag revprop_cache;      /* whether to enable revprop caching */
+  enum conf_flag nodeprop_cache;     /* whether to enable nodeprop caching */
   enum conf_flag block_read;         /* whether to enable block read mode */
   const char *hooks_env;             /* path to hook script env config file */
 } dir_conf_t;
@@ -132,6 +133,15 @@ init(apr_pool_t *p, apr_pool_t *plog, apr_pool_t *ptemp, server_rec *s)
     {
       ap_log_perror(APLOG_MARK, APLOG_ERR, serr->apr_err, p,
                     "mod_dav_svn: error calling svn_fs_initialize: '%s'",
+                    serr->message ? serr->message : "(no more info)");
+      return HTTP_INTERNAL_SERVER_ERROR;
+    }
+
+  serr = svn_repos_authz_initialize(p);
+  if (serr)
+    {
+      ap_log_perror(APLOG_MARK, APLOG_ERR, serr->apr_err, p,
+               "mod_dav_svn: error calling svn_repos_authz_initialize: '%s'",
                     serr->message ? serr->message : "(no more info)");
       return HTTP_INTERNAL_SERVER_ERROR;
     }
@@ -240,6 +250,7 @@ create_dir_config(apr_pool_t *p, char *dir)
   conf->v2_protocol = CONF_FLAG_DEFAULT;
   conf->hooks_env = NULL;
   conf->txdelta_cache = CONF_FLAG_DEFAULT;
+  conf->nodeprop_cache = CONF_FLAG_DEFAULT;
 
   return conf;
 }
@@ -270,14 +281,15 @@ merge_dir_config(apr_pool_t *p, void *base, void *overrides)
   newconf->txdelta_cache = INHERIT_VALUE(parent, child, txdelta_cache);
   newconf->fulltext_cache = INHERIT_VALUE(parent, child, fulltext_cache);
   newconf->revprop_cache = INHERIT_VALUE(parent, child, revprop_cache);
+  newconf->nodeprop_cache = INHERIT_VALUE(parent, child, nodeprop_cache);
   newconf->block_read = INHERIT_VALUE(parent, child, block_read);
   newconf->root_dir = INHERIT_VALUE(parent, child, root_dir);
   newconf->hooks_env = INHERIT_VALUE(parent, child, hooks_env);
 
   if (parent->fs_path)
     ap_log_error(APLOG_MARK, APLOG_WARNING, 0, NULL,
-                 "mod_dav_svn: nested Location '%s' hinders access to '%s' "
-                 "in SVNPath Location '%s'",
+                 "mod_dav_svn: Location '%s' hinders access to '%s' "
+                 "in parent SVNPath Location '%s'",
                  child->root_dir,
                  svn_urlpath__skip_ancestor(parent->root_dir, child->root_dir),
                  parent->root_dir);
@@ -562,6 +574,19 @@ SVNCacheRevProps_cmd(cmd_parms *cmd, void *config, int arg)
     conf->revprop_cache = CONF_FLAG_ON;
   else
     conf->revprop_cache = CONF_FLAG_OFF;
+
+  return NULL;
+}
+
+static const char *
+SVNCacheNodeProps_cmd(cmd_parms *cmd, void *config, int arg)
+{
+  dir_conf_t *conf = config;
+
+  if (arg)
+    conf->nodeprop_cache = CONF_FLAG_ON;
+  else
+    conf->nodeprop_cache = CONF_FLAG_OFF;
 
   return NULL;
 }
@@ -898,21 +923,6 @@ dav_svn__check_httpv2_support(request_rec *r)
 }
 
 
-svn_boolean_t
-dav_svn__check_ephemeral_txnprops_support(request_rec *r)
-{
-  svn_version_t *version = dav_svn__get_master_version(r);
-
-  /* We know this server supports ephemeral txnprops.  But if we're
-     proxying requests to a master server, we need to see if it
-     supports them, too.  */
-  if (version && (! svn_version__at_least(version, 1, 8, 0)))
-    return FALSE;
-
-  return TRUE;
-}
-
-
 /* FALSE if path authorization should be skipped.
  * TRUE if either the bypass or the apache subrequest methods should be used.
  */
@@ -978,7 +988,9 @@ dav_svn__get_fulltext_cache_flag(request_rec *r)
   dir_conf_t *conf;
 
   conf = ap_get_module_config(r->per_dir_config, &dav_svn_module);
-  return conf->fulltext_cache == CONF_FLAG_ON;
+
+  /* fulltext caching is enabled by default. */
+  return get_conf_flag(conf->fulltext_cache, TRUE);
 }
 
 
@@ -988,9 +1000,21 @@ dav_svn__get_revprop_cache_flag(request_rec *r)
   dir_conf_t *conf;
 
   conf = ap_get_module_config(r->per_dir_config, &dav_svn_module);
-  return conf->revprop_cache == CONF_FLAG_ON;
+
+  /* revprop caching is enabled by default. */
+  return get_conf_flag(conf->revprop_cache, TRUE);
 }
 
+svn_boolean_t
+dav_svn__get_nodeprop_cache_flag(request_rec *r)
+{
+  dir_conf_t *conf;
+
+  conf = ap_get_module_config(r->per_dir_config, &dav_svn_module);
+
+  /* node properties caching is enabled by default. */
+  return get_conf_flag(conf->nodeprop_cache, TRUE);
+}
 
 svn_boolean_t
 dav_svn__get_block_read_flag(request_rec *r)
@@ -998,7 +1022,9 @@ dav_svn__get_block_read_flag(request_rec *r)
   dir_conf_t *conf;
 
   conf = ap_get_module_config(r->per_dir_config, &dav_svn_module);
-  return conf->block_read == CONF_FLAG_ON;
+
+  /* the block-read feature is disabled by default. */
+  return get_conf_flag(conf->block_read, FALSE);
 }
 
 int
@@ -1341,6 +1367,13 @@ static const command_rec cmds[] =
                "but should only be enabled under the conditions described"
                "in the documentation"
                "(default is Off)."),
+
+  /* per directory/location */
+  AP_INIT_FLAG("SVNCacheNodeProps", SVNCacheNodeProps_cmd, NULL,
+               ACCESS_CONF|RSRC_CONF,
+               "speeds up data access by caching node properties "
+               "if sufficient in-memory cache is available"
+               "(default is On)."),
 
   /* per directory/location */
   AP_INIT_FLAG("SVNBlockRead", SVNBlockRead_cmd, NULL,

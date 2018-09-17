@@ -918,43 +918,43 @@ def disallow_propset_invalid_formatted_externals(sbox):
 
   # It should not be possible to set these external properties on a
   # directory.
-  for ext in [ 'arg1',
-               'arg1 arg2 arg3',
-               'arg1 arg2 arg3 arg4',
-               'arg1 arg2 arg3 arg4 arg5',
-               '-r',
-               '-r1',
-               '-r 1',
-               '-r1 arg1',
-               '-r 1 arg1',
-               'arg1 -r',
-               'arg1 -r1',
-               'arg1 -r 1',
+  for ext in [ b'arg1',
+               b'arg1 arg2 arg3',
+               b'arg1 arg2 arg3 arg4',
+               b'arg1 arg2 arg3 arg4 arg5',
+               b'-r',
+               b'-r1',
+               b'-r 1',
+               b'-r1 arg1',
+               b'-r 1 arg1',
+               b'arg1 -r',
+               b'arg1 -r1',
+               b'arg1 -r 1',
                ]:
     change_external_expect_error(A_path, ext,
                                  '.*Error parsing svn:externals.*')
 
-  for ext in [ '-r abc arg1 arg2',
-               '-rabc arg1 arg2',
-               'arg1 -r abc arg2',
-               'arg1 -rabc arg2',
+  for ext in [ b'-r abc arg1 arg2',
+               b'-rabc arg1 arg2',
+               b'arg1 -r abc arg2',
+               b'arg1 -rabc arg2',
                ]:
     change_external_expect_error(A_path, ext,
                                  '.*Error parsing svn:externals.*')
 
-  for ext in [ 'http://example.com/ http://example.com/',
-               '-r1 http://example.com/ http://example.com/',
-               '-r 1 http://example.com/ http://example.com/',
-               'http://example.com/ -r1 http://example.com/',
-               'http://example.com/ -r 1 http://example.com/',
+  for ext in [ b'http://example.com/ http://example.com/',
+               b'-r1 http://example.com/ http://example.com/',
+               b'-r 1 http://example.com/ http://example.com/',
+               b'http://example.com/ -r1 http://example.com/',
+               b'http://example.com/ -r 1 http://example.com/',
                ]:
     change_external_expect_error(A_path, ext,
                                  '.*cannot use two absolute URLs.*')
 
-  for ext in [ 'http://example.com/ -r1 foo',
-               'http://example.com/ -r 1 foo',
-               '-r1 foo http://example.com/',
-               '-r 1 foo http://example.com/'
+  for ext in [ b'http://example.com/ -r1 foo',
+               b'http://example.com/ -r 1 foo',
+               b'-r1 foo http://example.com/',
+               b'-r 1 foo http://example.com/'
                ]:
     change_external_expect_error(A_path, ext,
                                  '.*cannot use a URL \'.*\' as the ' \
@@ -3076,6 +3076,7 @@ def list_include_externals(sbox):
     expected_stdout, [], 0, 'ls', '--include-externals', C_url)
 
 @Issue(4293)
+@XFail()
 def move_with_file_externals(sbox):
   "move with file externals"
 
@@ -3243,7 +3244,7 @@ def file_external_unversioned_obstruction(sbox):
   sbox.build()
   wc_dir = sbox.wc_dir
 
-  expected_output = verify.RegexOutput('r2 committed .*')
+  expected_output = verify.RegexOutput(b'r2 committed .*')
   svntest.actions.run_and_verify_svnmucc(expected_output, [],
                            '-U', sbox.repo_url, '-m', 'r2: set external',
                            'propset', 'svn:externals', '^/A/mu mu-ext', 'A')
@@ -3252,18 +3253,28 @@ def file_external_unversioned_obstruction(sbox):
 
   # Update reports a tree-conflict but status doesn't show any such
   # conflict.  I'm no sure whether this is correct.
-  expected_output = svntest.wc.State(wc_dir, {
-      'A'        : Item(status=' U'),
-      'A/mu-ext' : Item(status='  ', treeconflict='A'),
-      })
   expected_disk = svntest.main.greek_state.copy()
   expected_disk.add({
       'A/mu-ext' : Item('unversioned obstruction'),
       })
   expected_status = svntest.actions.get_virginal_state(wc_dir, 2)
-  expected_status.add({
-      'A/mu-ext' : Item(status='M ', wc_rev='2', switched='X'),
+  svntest.actions.run_and_verify_svn(
+                  None,
+                  ".*svn: warning: W155014: The file external '.*mu-ext'"
+                  " can not be created because the node exists.*",
+                  'up', wc_dir)
+  svntest.actions.verify_disk(wc_dir, expected_disk)
+  svntest.actions.run_and_verify_status(wc_dir, expected_status)
+
+  os.remove(sbox.ospath('A/mu-ext'))
+
+  expected_output = svntest.wc.State(wc_dir, {
+      'A/mu-ext' : Item(status='A '),
       })
+  expected_status.add({
+      'A/mu-ext' : Item(status='  ', wc_rev='2', switched='X'),
+      })
+  expected_disk.tweak('A/mu-ext', contents="This is the file 'mu'.\n")
   svntest.actions.run_and_verify_update(wc_dir,
                                         expected_output, expected_disk,
                                         expected_status)
@@ -3849,8 +3860,8 @@ def copy_pin_externals_wc_mixed_revisions(sbox):
                                      '--pin-externals')
 
 @Issue(4558)
-def copy_pin_externals_whitepace_dir(sbox):
-  "copy --pin-externals with whitepace dir"
+def copy_pin_externals_whitespace_dir(sbox):
+  "copy --pin-externals with whitespace dir"
 
   sbox.build(empty=True)
   repo_url = sbox.repo_url
@@ -4354,6 +4365,39 @@ def external_externally_removed(sbox):
   sbox.simple_propdel('svn:externals', '')
   sbox.simple_update() # Should succeed
 
+def invalid_uris_in_repo(sbox):
+  "invalid URIs in repo"
+
+  sbox.build(empty=True),
+
+  # Using a dump file because the client may not allow adding invalid URIs.
+  svntest.actions.load_repo(sbox,
+                            os.path.join(os.path.dirname(sys.argv[0]),
+                                         'externals_tests_data',
+                                         'invalid_uris_in_repo.dump'),
+                            create_wc=False)
+
+  # 'foo://host:-/D X'
+  expected_output = svntest.wc.State(sbox.wc_dir, {
+    '' : Item(status=' U')
+    })
+  expected_disk =  svntest.wc.State('', {
+    })
+  expected_error = ".*warning: W205011: Error handling externals definition.*"
+
+  # A repository might have invalid URIs and the client used to SEGV.
+  # r1 has 'foo://host:-/D X'
+  # r2 has 'foo://host::/D X'
+  # r3 has 'foo://host:123xx/D X'
+  # r4 has 'foo://host:123:123/D X'
+  for revision in range(1,4):
+    svntest.actions.run_and_verify_checkout(sbox.repo_url, sbox.wc_dir,
+                                            expected_output,
+                                            expected_disk,
+                                            expected_error,
+                                            "-r", revision)
+    svntest.main.safe_rmtree(sbox.wc_dir)
+
 ########################################################################
 # Run the tests
 
@@ -4424,11 +4468,12 @@ test_list = [ None,
               copy_pin_externals_wc_local_mods,
               copy_pin_externals_wc_switched_subtrees,
               copy_pin_externals_wc_mixed_revisions,
-              copy_pin_externals_whitepace_dir,
+              copy_pin_externals_whitespace_dir,
               nested_notification,
               file_external_to_normal_file,
               file_external_recorded_info,
               external_externally_removed,
+              invalid_uris_in_repo,
              ]
 
 if __name__ == '__main__':

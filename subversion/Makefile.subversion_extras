@@ -9,11 +9,13 @@ GnuAfterInstall       = perl-bindings post-install
 Extra_Configure_Flags = --enable-shared --disable-static \
                         --without-berkeley-db \
                         --without-apxs \
+                        --with-lz4=internal \
+                        --with-utf8proc=internal \
                         --with-apr=$(APR_TOOLCHAIN_DIR) \
                         --with-apr-util=$(APR_TOOLCHAIN_DIR) \
                         --with-swig=$(shell test -e /usr/bin/swig && echo /usr || echo /usr/local) \
                         --with-ruby-sitedir=$(RBLIBDIR)/ruby \
-                        --without-sasl \
+                        --with-sasl=$(SDKROOT)/usr \
                         --includedir=$(Install_Prefix)/local/include
 
 # We are only performing post-install actions here.

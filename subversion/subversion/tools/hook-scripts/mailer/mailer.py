@@ -22,10 +22,10 @@
 #
 # mailer.py: send email describing a commit
 #
-# $HeadURL: https://svn.apache.org/repos/asf/subversion/branches/1.9.x/tools/hook-scripts/mailer/mailer.py $
-# $LastChangedDate: 2015-02-13 11:17:40 +0000 (Fri, 13 Feb 2015) $
-# $LastChangedBy: rhuijben $
-# $LastChangedRevision: 1659509 $
+# $HeadURL: https://svn.apache.org/repos/asf/subversion/branches/1.10.x/tools/hook-scripts/mailer/mailer.py $
+# $LastChangedDate: 2017-01-07 19:35:49 +0000 (Sat, 07 Jan 2017) $
+# $LastChangedBy: julianfoad $
+# $LastChangedRevision: 1777846 $
 #
 # USAGE: mailer.py commit      REPOS REVISION [CONFIG-FILE]
 #        mailer.py propchange  REPOS REVISION AUTHOR REVPROPNAME [CONFIG-FILE]
@@ -291,7 +291,10 @@ class SMTPOutput(MailedOutput):
     self.write(self.mail_headers(group, params))
 
   def finish(self):
-    server = smtplib.SMTP(self.cfg.general.smtp_hostname)
+    if self.cfg.is_set('general.smtp_ssl') and self.cfg.general.smtp_ssl == 'yes':
+      server = smtplib.SMTP_SSL(self.cfg.general.smtp_hostname)
+    else:
+      server = smtplib.SMTP(self.cfg.general.smtp_hostname)
     if self.cfg.is_set('general.smtp_username'):
       server.login(self.cfg.general.smtp_username,
                    self.cfg.general.smtp_password)

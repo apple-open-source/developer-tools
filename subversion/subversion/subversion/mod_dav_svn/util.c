@@ -37,14 +37,17 @@
 #include "svn_fs.h"
 #include "svn_dav.h"
 #include "svn_base64.h"
+#include "svn_ctype.h"
 
 #include "dav_svn.h"
 #include "private/svn_fspath.h"
+#include "private/svn_string_private.h"
 
 dav_error *
 dav_svn__new_error(apr_pool_t *pool,
                    int status,
                    int error_id,
+                   apr_status_t aprerr,
                    const char *desc)
 {
   if (error_id == 0)
@@ -58,10 +61,10 @@ dav_svn__new_error(apr_pool_t *pool,
  * > 2.2 below perpetuates this.
  */
 #if AP_MODULE_MAGIC_AT_LEAST(20091119,0)
-  return dav_new_error(pool, status, error_id, 0, desc);
+  return dav_new_error(pool, status, error_id, aprerr, desc);
 #else
 
-  errno = 0; /* For the same reason as in dav_svn__new_error_svn */
+  errno = aprerr; /* For the same reason as in dav_svn__new_error_svn */
 
   return dav_new_error(pool, status, error_id, desc);
 #endif
@@ -71,20 +74,22 @@ dav_error *
 dav_svn__new_error_svn(apr_pool_t *pool,
                        int status,
                        int error_id,
+                       apr_status_t aprerr,
                        const char *desc)
 {
   if (error_id == 0)
     error_id = SVN_ERR_RA_DAV_REQUEST_FAILED;
 
 #if AP_MODULE_MAGIC_AT_LEAST(20091119,0)
-  return dav_new_error_tag(pool, status, error_id, 0,
+  return dav_new_error_tag(pool, status, error_id, aprerr,
                            desc, SVN_DAV_ERROR_NAMESPACE, SVN_DAV_ERROR_TAG);
 #else
-  /* dav_new_error_tag will record errno but Subversion makes no attempt
-     to ensure that it is valid.  We reset it to avoid putting incorrect
-     information into the error log, at the expense of possibly removing
-     valid information. */
-  errno = 0;
+  /* dav_new_error_tag will record errno so we use it to pass aprerr.
+     This overrwites any existing errno value but since Subversion
+     makes no attempt to avoid system calls after a failed system call
+     there is no guarantee that any existing errno represents a
+     relevant error. */
+  errno = aprerr;
 
   return dav_new_error_tag(pool, status, error_id, desc,
                            SVN_DAV_ERROR_NAMESPACE, SVN_DAV_ERROR_TAG);
@@ -100,7 +105,7 @@ build_error_chain(apr_pool_t *pool, svn_error_t *err, int status)
   char buffer[128];
   const char *msg = svn_err_best_message(err, buffer, sizeof(buffer));
 
-  dav_error *derr = dav_svn__new_error_svn(pool, status, err->apr_err,
+  dav_error *derr = dav_svn__new_error_svn(pool, status, err->apr_err, 0,
                                            apr_pstrdup(pool, msg));
 
   if (err->child)
@@ -606,7 +611,7 @@ dav_svn__test_canonical(const char *path, apr_pool_t *pool)
 
   /* Otherwise, generate a generic HTTP_BAD_REQUEST error. */
   return dav_svn__new_error_svn(
-     pool, HTTP_BAD_REQUEST, 0,
+     pool, HTTP_BAD_REQUEST, 0, 0,
      apr_psprintf(pool,
                   "Path '%s' is not canonicalized; "
                   "there is a problem with the client.", path));
@@ -684,7 +689,7 @@ dav_svn__make_base64_output_stream(apr_bucket_brigade *bb,
   wb->output = output;
   svn_stream_set_write(stream, brigade_write_fn);
 
-  return svn_base64_encode(stream, pool);
+  return svn_base64_encode2(stream, FALSE, pool);
 }
 
 void
@@ -725,7 +730,7 @@ dav_svn__final_flush_or_error(request_rec *r,
     {
       apr_status_t apr_err = ap_fflush(output->r->output_filters, bb);
       if (apr_err && (! derr))
-        derr = dav_svn__new_error(pool, HTTP_INTERNAL_SERVER_ERROR, 0,
+        derr = dav_svn__new_error(pool, HTTP_INTERNAL_SERVER_ERROR, 0, apr_err,
                                   "Error flushing brigade.");
     }
   return derr;
@@ -893,7 +898,7 @@ request_body_to_string(svn_string_t **request_str,
             {
               ap_log_rerror(APLOG_MARK, APLOG_ERR, 0, r,
                             "Request body is larger than the configured "
-                            "limit of %lu", (unsigned long)limit_req_body);
+                            "limit of %" APR_OFF_T_FMT, limit_req_body);
               result = HTTP_REQUEST_ENTITY_TOO_LARGE;
               goto cleanup;
             }
@@ -908,9 +913,7 @@ request_body_to_string(svn_string_t **request_str,
   apr_brigade_destroy(brigade);
 
   /* Make an svn_string_t from our svn_stringbuf_t. */
-  *request_str = svn_string_create_empty(pool);
-  (*request_str)->data = buf->data;
-  (*request_str)->len = buf->len;
+  *request_str = svn_stringbuf__morph_into_string(buf);
   return OK;
 
  cleanup:
@@ -935,4 +938,65 @@ dav_svn__parse_request_skel(svn_skel_t **skel,
 
   *skel = svn_skel__parse(skel_str->data, skel_str->len, pool);
   return OK;
+}
+
+svn_error_t *
+dav_svn__get_youngest_rev(svn_revnum_t *youngest_p,
+                          dav_svn_repos *repos,
+                          apr_pool_t *scratch_pool)
+{
+  if (repos->youngest_rev == SVN_INVALID_REVNUM)
+    {
+      svn_revnum_t revnum;
+      SVN_ERR(svn_fs_youngest_rev(&revnum, repos->fs, scratch_pool));
+      repos->youngest_rev = revnum;
+    }
+
+   *youngest_p = repos->youngest_rev;
+   return SVN_NO_ERROR;
+}
+
+const char *
+dav_svn__fuzzy_escape_author(const char *author,
+                             svn_boolean_t is_svn_client,
+                             apr_pool_t *result_pool,
+                             apr_pool_t *scratch_pool)
+{
+  apr_size_t len = strlen(author);
+  if (is_svn_client && !svn_xml_is_xml_safe(author, len))
+    {
+      /* We are talking to a Subversion client, which will (like any proper
+         xml parser) error out if we produce control characters in XML.
+
+         However Subversion clients process both the generic
+         <creator-displayname /> as the custom element for svn:author.
+
+         Let's skip outputting the invalid characters here to make the XML
+         valid, so clients can see the custom element.
+
+         Subversion Clients will then either use a slightly invalid
+         author (unlikely) or more likely use the second result, which
+         will be transferred with full escaping capabilities.
+
+         We have tests in place to assert proper behavior over the RA layer.
+       */
+      apr_size_t i;
+      svn_stringbuf_t *buf;
+
+      buf = svn_stringbuf_ncreate(author, len, scratch_pool);
+
+      for (i = 0; i < buf->len; i++)
+        {
+          char c = buf->data[i];
+
+          if (svn_ctype_iscntrl(c))
+            {
+              svn_stringbuf_remove(buf, i--, 1);
+            }
+        }
+
+      author = buf->data;
+    }
+
+  return apr_xml_quote_string(result_pool, author, 1);
 }

@@ -24,14 +24,16 @@
 #
 
 '''usage: python run_tests.py
-            [--verbose] [--log-to-stdout] [--cleanup] [--parallel]
+            [--verbose] [--log-to-stdout] [--cleanup] [--bin=<path>]
+            [--parallel | --parallel=<n>] [--global-scheduler]
             [--url=<base-url>] [--http-library=<http-library>] [--enable-sasl]
             [--fs-type=<fs-type>] [--fsfs-packing] [--fsfs-sharding=<n>]
             [--list] [--milestone-filter=<regex>] [--mode-filter=<type>]
             [--server-minor-version=<version>] [--http-proxy=<host>:<port>]
-            [--httpd-version=<version>]
+            [--httpd-version=<version>] [--httpd-whitelist=<version>]
             [--config-file=<file>] [--ssl-cert=<file>]
             [--exclusive-wc-locks] [--memcached-server=<url:port>]
+            [--fsfs-compression=<type>] [--fsfs-dir-deltification=<true|false>]
             <abs_srcdir> <abs_builddir>
             <prog ...>
 
@@ -44,11 +46,22 @@ and filename of a test program, optionally followed by '#' and a comma-
 separated list of test numbers; the default is to run all the tests in it.
 '''
 
-import os, sys
+import os, sys, shutil, codecs
 import re
 import logging
-import optparse, subprocess, imp, threading, traceback, exceptions
+import optparse, subprocess, imp, threading, traceback
 from datetime import datetime
+
+try:
+  # Python >=3.0
+  import queue
+except ImportError:
+  # Python <3.0
+  import Queue as queue
+
+if sys.version_info < (3, 0):
+  # Python >= 3.0 already has this build in
+  import exceptions
 
 # Ensure the compiled C tests use a known locale (Python tests set the locale
 # explicitly).
@@ -78,7 +91,8 @@ def _get_term_width():
   def ioctl_GWINSZ(fd):
     try:
       import fcntl, termios, struct, os
-      cr = struct.unpack('hh', fcntl.ioctl(fd, termios.TIOCGWINSZ, '1234'))
+      cr = struct.unpack('hh', fcntl.ioctl(fd, termios.TIOCGWINSZ,
+                                           struct.pack('hh', 0, 0)))
     except:
       return None
     return cr
@@ -112,6 +126,12 @@ def _get_term_width():
       cr = (25, 80)
   return int(cr[1])
 
+def ensure_str(s):
+  '''If S is not a string already, convert it to a string'''
+  if isinstance(s, str):
+    return s
+  else:
+    return s.decode("latin-1")
 
 class TestHarness:
   '''Test harness for Subversion tests.
@@ -250,10 +270,18 @@ class TestHarness:
       cmdline.append('--http-proxy-password=%s' % self.opts.http_proxy_password)
     if self.opts.httpd_version is not None:
       cmdline.append('--httpd-version=%s' % self.opts.httpd_version)
+    if self.opts.httpd_whitelist is not None:
+      cmdline.append('--httpd-whitelist=%s' % self.opts.httpd_whitelist)
     if self.opts.exclusive_wc_locks is not None:
       cmdline.append('--exclusive-wc-locks')
     if self.opts.memcached_server is not None:
       cmdline.append('--memcached-server=%s' % self.opts.memcached_server)
+    if self.opts.fsfs_compression is not None:
+      cmdline.append('--fsfs-compression=%s' % self.opts.fsfs_compression)
+    if self.opts.fsfs_dir_deltification is not None:
+      cmdline.append('--fsfs-dir-deltification=%s' % self.opts.fsfs_dir_deltification)
+
+    self.py_test_cmdline = cmdline
 
     # The svntest module is very pedantic about the current working directory
     old_cwd = os.getcwd()
@@ -269,14 +297,234 @@ class TestHarness:
       svntest.main = sys.modules['svntest.main']
       svntest.testcase = sys.modules['svntest.testcase']
 
-      if svntest.main.logger is None:
-        import logging
-        svntest.main.logger = logging.getLogger()
       svntest.main.parse_options(cmdline, optparse.SUPPRESS_USAGE)
-
       svntest.testcase.TextColors.disable()
     finally:
       os.chdir(old_cwd)
+
+  class Job:
+    '''A single test or test suite to execute. After execution, the results
+    can be taken from the respective data fields.'''
+
+    def __init__(self, number, is_python, progabs, progdir, progbase):
+      '''number is the test count for C tests and the test nr for Python.'''
+      self.number = number
+      self.is_python = is_python
+      self.progabs = progabs
+      self.progdir = progdir
+      self.progbase = progbase
+      self.result = None
+      self.stdout_lines = []
+      self.stderr_lines = []
+      self.taken = 0
+
+    def test_count(self):
+      if self.is_python:
+        return 1
+      else:
+        return self.number
+
+    def _command_line(self, harness):
+      if self.is_python:
+        cmdline = list(harness.py_test_cmdline)
+        cmdline.insert(0, 'python')
+        cmdline.insert(1, self.progabs)
+        # Run the test apps in "child process" mode,
+        # i.e. w/o cleaning up global directories etc.
+        cmdline.append('-c')
+        cmdline.append(str(self.number))
+      else:
+        cmdline = list(harness.c_test_cmdline)
+        cmdline[0] = self.progabs
+        cmdline[1] = '--srcdir=%s' % os.path.join(harness.srcdir, self.progdir)
+      return cmdline
+
+    def execute(self, harness):
+      start_time = datetime.now()
+      prog = subprocess.Popen(self._command_line(harness),
+                              stdout=subprocess.PIPE,
+                              stderr=subprocess.PIPE,
+                              cwd=self.progdir)
+
+      self.stdout_lines = prog.stdout.readlines()
+      self.stderr_lines = prog.stderr.readlines()
+      prog.wait()
+      self.result = prog.returncode
+      self.taken = datetime.now() - start_time
+
+  class CollectingThread(threading.Thread):
+    '''A thread that lists the individual tests in a given case and creates
+    jobs objects for them.  in  in  test cases in their own processes.
+    Receives test numbers to run from the queue, and saves results into
+    the results field.'''
+    def __init__(self, srcdir, builddir, testcase):
+      threading.Thread.__init__(self)
+      self.srcdir = srcdir
+      self.builddir = builddir
+      self.testcase = testcase
+      self.result = []
+
+    def _count_c_tests(self, progabs, progdir, progbase):
+      'Run a c test, escaping parameters as required.'
+      cmdline = [ progabs, '--list' ]
+      prog = subprocess.Popen(cmdline, stdout=subprocess.PIPE, cwd=progdir)
+      lines = prog.stdout.readlines()
+      self.result.append(TestHarness.Job(len(lines) - 2, False, progabs,
+                                         progdir, progbase))
+      prog.wait()
+
+    def _count_py_tests(self, progabs, progdir, progbase):
+      'Run a c test, escaping parameters as required.'
+      cmdline = [ 'python', progabs, '--list' ]
+      prog = subprocess.Popen(cmdline, stdout=subprocess.PIPE, cwd=progdir)
+      lines = prog.stdout.readlines()
+
+      for i in range(0, len(lines) - 2):
+        self.result.append(TestHarness.Job(i + 1, True, progabs, 
+                                           progdir, progbase))
+      prog.wait()
+
+    def run(self):
+      "Run a single test. Return the test's exit code."
+
+      progdir, progbase, test_nums = self.testcase
+
+      if progbase[-3:] == '.py':
+        progabs = os.path.abspath(os.path.join(self.srcdir, progdir, progbase))
+        self._count_py_tests(progabs, progdir, progbase)
+      else:
+        progabs = os.path.abspath(os.path.join(self.builddir, progdir,
+                                               progbase))
+        self._count_c_tests(progabs, progdir, progbase)
+
+    def get_result(self):
+      return self.result
+
+  class TestSpawningThread(threading.Thread):
+    '''A thread that runs test cases in their own processes.
+    Receives test jobs to run from the queue, and shows some progress
+    indication on stdout.  The detailed test results are stored inside
+    the job objects.'''
+    def __init__(self, queue, harness):
+      threading.Thread.__init__(self)
+      self.queue = queue
+      self.harness = harness
+      self.results = []
+
+    def run(self):
+      while True:
+        try:
+          job = self.queue.get_nowait()
+        except queue.Empty:
+          return
+
+        job.execute(self.harness)
+
+        if job.result:
+          os.write(sys.stdout.fileno(), b'!' * job.test_count())
+        else:
+          os.write(sys.stdout.fileno(), b'.' * job.test_count())
+
+
+  def _run_global_scheduler(self, testlist, has_py_tests):
+    # Collect all tests to execute (separate jobs for each test in python
+    # test cases, one job for each c test case).  Do that concurrently to
+    # mask latency.  This takes .5s instead of about 3s.
+    threads = [ ]
+    for count, testcase in enumerate(testlist):
+      threads.append(self.CollectingThread(self.srcdir, self.builddir,
+                                           testcase))
+
+    for t in threads:
+      t.start()
+
+    jobs = []
+    for t in threads:
+      t.join()
+      jobs.extend(t.result)
+
+    # Put all jobs into our "todo" queue.
+    # Scramble them for a more even resource utilization.
+    job_queue = queue.Queue()
+    total_count = 0
+    scrambled = list(jobs)
+    scrambled.sort(key=lambda x: ("1" if x.test_count() < 30 else "0") + str(x.number))
+    for job in scrambled:
+      total_count += job.test_count()
+      job_queue.put(job)
+
+    # Use the svntest infrastructure to initialize the common test template
+    # wc and repos.
+    if has_py_tests:
+      old_cwd = os.getcwd()
+      os.chdir(jobs[-1].progdir)
+      svntest.main.options.keep_local_tmp = True
+      svntest.main.execute_tests([])
+      os.chdir(old_cwd)
+
+    # Some more prep work
+    if self.log:
+      log = self.log
+    else:
+      log = sys.stdout
+
+    if self.opts.parallel is None:
+      thread_count = 1
+    else:
+      if self.opts.parallel == 1:
+        thread_count = 5
+      else:
+        thread_count = self.opts.parallel
+
+    # Actually run the tests in concurrent sub-processes
+    print('Tests to execute: %d' % total_count)
+    sys.stdout.flush()
+
+    threads = [ TestHarness.TestSpawningThread(job_queue, self)
+                for i in range(thread_count) ]
+    for t in threads:
+      t.start()
+    for t in threads:
+      t.join()
+
+    print("")
+
+    # Aggregate and log the results
+    failed = 0
+    taken = 0
+    last_test_name = ""
+    for job in jobs:
+      if last_test_name != job.progbase:
+        if last_test_name != "":
+          log.write('ELAPSED: %s %s\n\n' % (last_test_name, str(taken)))
+        last_test_name = job.progbase
+        taken = job.taken
+      else:
+        taken += job.taken
+
+      for line in job.stderr_lines:
+        log.write(ensure_str(line))
+
+      for line in job.stdout_lines:
+        self._process_test_output_line(ensure_str(line))
+
+      self._check_for_unknown_failure(log, job.progbase, job.result)
+      failed = job.result or failed
+
+    log.write('ELAPSED: %s %s\n\n' % (last_test_name, str(taken)))
+
+    return failed
+
+  def _run_local_schedulers(self, testlist):
+    '''Serial execution of all test suites using their respective internal
+    schedulers.'''
+    testcount = len(testlist)
+
+    failed = 0
+    for count, testcase in enumerate(testlist):
+      failed = self._run_test(testcase, count, testcount) or failed
+
+    return failed
 
   def run(self, testlist):
     '''Run all test programs given in TESTLIST. Print a summary of results, if
@@ -327,19 +575,17 @@ class TestHarness:
 
     # Run the tests
     testlist = c_tests + py_tests
-    testcount = len(testlist)
-    for count, testcase in enumerate(testlist):
-      failed = self._run_test(testcase, count, testcount) or failed
+    if self.opts.global_scheduler is None:
+      failed = self._run_local_schedulers(testlist)
+    else:
+      failed = self._run_global_scheduler(testlist, len(py_tests) > 0)
 
-    if self.log is None:
-      return failed
-
-    # Open the log in binary mode because it can contain binary data
-    # from diff_tests.py's testing of svnpatch. This may prevent
-    # readlines() from reading the whole log because it thinks it
-    # has encountered the EOF marker.
-    self._open_log('rb')
-    log_lines = self.log.readlines()
+    # Open the log again to for filtering.
+    if self.logfile:
+      self._open_log('r')
+      log_lines = self.log.readlines()
+    else:
+      log_lines = []
 
     # Remove \r characters introduced by opening the log as binary
     if sys.platform == 'win32':
@@ -443,7 +689,7 @@ class TestHarness:
     # Copy the truly interesting verbose logs to a separate file, for easier
     # viewing.
     if xpassed or failed_list:
-      faillog = open(self.faillogfile, 'wb')
+      faillog = codecs.open(self.faillogfile, 'w', encoding="latin-1")
       last_start_lineno = None
       last_start_re = re.compile('^(FAIL|SKIP|XFAIL|PASS|START|CLEANUP|END):')
       for lineno, line in enumerate(log_lines):
@@ -457,7 +703,7 @@ class TestHarness:
         if last_start_re.match(line):
           last_start_lineno = lineno + 1
       faillog.close()
-    elif os.path.exists(self.faillogfile):
+    elif self.faillogfile and os.path.exists(self.faillogfile):
       print("WARNING: no failures, but '%s' exists from a previous run."
             % self.faillogfile)
 
@@ -474,7 +720,7 @@ class TestHarness:
     'Open the log file with the required MODE.'
     if self.logfile:
       self._close_log()
-      self.log = open(self.logfile, mode)
+      self.log = codecs.open(self.logfile, mode, encoding="latin-1")
 
   def _close_log(self):
     'Close the log file.'
@@ -482,10 +728,38 @@ class TestHarness:
       self.log.close()
       self.log = None
 
+  def _process_test_output_line(self, line):
+    if sys.platform == 'win32':
+      # Remove CRs inserted because we parse the output as binary.
+      line = line.replace('\r', '')
+
+    # If using --log-to-stdout self.log in None.
+    if self.log:
+      self.log.write(line)
+
+    if line.startswith('PASS') or line.startswith('FAIL') \
+        or line.startswith('XFAIL') or line.startswith('XPASS') \
+        or line.startswith('SKIP'):
+      return 1
+
+    return 0
+
+  def _check_for_unknown_failure(self, log, progbase, test_failed):
+    # We always return 1 for failed tests. Some other failure than 1
+    # probably means the test didn't run at all and probably didn't
+    # output any failure info. In that case, log a generic failure message.
+    # ### Even if failure==1 it could be that the test didn't run at all.
+    if test_failed and test_failed != 1:
+      if self.log:
+        log.write('FAIL:  %s: Unknown test failure; see tests.log.\n' % progbase)
+        log.flush()
+      else:
+        log.write('FAIL:  %s: Unknown test failure.\n' % progbase)
+
   def _run_c_test(self, progabs, progdir, progbase, test_nums, dot_count):
     'Run a c test, escaping parameters as required.'
     if self.opts.list_tests and self.opts.milestone_filter:
-      print 'WARNING: --milestone-filter option does not currently work with C tests'
+      print('WARNING: --milestone-filter option does not currently work with C tests')
 
     if not os.access(progbase, os.X_OK):
       print("\nNot an executable file: " + progbase)
@@ -509,11 +783,11 @@ class TestHarness:
     def progress_func(completed):
       if not self.log or self.dots_written >= dot_count:
         return
-      dots = (completed * dot_count) / total
+      dots = (completed * dot_count) // total
       if dots > dot_count:
         dots = dot_count
       dots_to_write = dots - self.dots_written
-      os.write(sys.stdout.fileno(), '.' * dots_to_write)
+      os.write(sys.stdout.fileno(), b'.' * dots_to_write)
       self.dots_written = dots
 
     tests_completed = 0
@@ -521,17 +795,8 @@ class TestHarness:
                             stderr=self.log)
     line = prog.stdout.readline()
     while line:
-      if sys.platform == 'win32':
-        # Remove CRs inserted because we parse the output as binary.
-        line = line.replace('\r', '')
-
-      # If using --log-to-stdout self.log in None.
-      if self.log:
-        self.log.write(line)
-
-      if line.startswith('PASS') or line.startswith('FAIL') \
-           or line.startswith('XFAIL') or line.startswith('XPASS') \
-           or line.startswith('SKIP'):
+      line = ensure_str(line)
+      if self._process_test_output_line(line):
         tests_completed += 1
         progress_func(tests_completed)
 
@@ -539,7 +804,7 @@ class TestHarness:
 
     # If we didn't run any tests, still print out the dots
     if not tests_completed:
-      os.write(sys.stdout.fileno(), '.' * dot_count)
+      os.write(sys.stdout.fileno(), b'.' * dot_count)
 
     prog.wait()
     return prog.returncode
@@ -547,8 +812,13 @@ class TestHarness:
   def _run_py_test(self, progabs, progdir, progbase, test_nums, dot_count):
     'Run a python test, passing parameters as needed.'
     try:
-      prog_mod = imp.load_module(progbase[:-3], open(progabs, 'r'), progabs,
-                                 ('.py', 'U', imp.PY_SOURCE))
+      if sys.version_info < (3, 0):
+        prog_mod = imp.load_module(progbase[:-3], open(progabs, 'r'), progabs,
+                                   ('.py', 'U', imp.PY_SOURCE))
+      else:
+        prog_mod = imp.load_module(progbase[:-3],
+                                   open(progabs, 'r', encoding="utf-8"),
+                                   progabs, ('.py', 'U', imp.PY_SOURCE))
     except:
       print("\nError loading test (details in following traceback): " + progbase)
       traceback.print_exc()
@@ -572,14 +842,14 @@ class TestHarness:
          in parallel mode."""
       if not self.log:
         return
-      dots = (completed * dot_count) / total
+      dots = (completed * dot_count) // total
       if dots > dot_count:
         dots = dot_count
       self.progress_lock.acquire()
       if self.dots_written < dot_count:
         dots_to_write = dots - self.dots_written
         self.dots_written = dots
-        os.write(old_stdout, '.' * dots_to_write)
+        os.write(old_stdout, b'.' * dots_to_write)
       self.progress_lock.release()
 
     serial_only = hasattr(prog_mod, 'serial_only') and prog_mod.serial_only
@@ -598,7 +868,7 @@ class TestHarness:
                                           test_selection=test_nums)
     except svntest.Failure:
       if self.log:
-        os.write(old_stdout, '.' * dot_count)
+        os.write(old_stdout, b'.' * dot_count)
       failed = True
 
     # restore some values
@@ -662,16 +932,7 @@ class TestHarness:
     else:
       os.chdir(old_cwd)
 
-    # We always return 1 for failed tests. Some other failure than 1
-    # probably means the test didn't run at all and probably didn't
-    # output any failure info. In that case, log a generic failure message.
-    # ### Even if failure==1 it could be that the test didn't run at all.
-    if failed and failed != 1:
-      if self.log:
-        log.write('FAIL:  %s: Unknown test failure; see tests.log.\n' % progbase)
-        log.flush()
-      else:
-        log.write('FAIL:  %s: Unknown test failure.\n' % progbase)
+    self._check_for_unknown_failure(log, progbase, failed)
 
     if not self.opts.list_tests:
       # Log the elapsed time.
@@ -685,7 +946,7 @@ class TestHarness:
     # we printed a "Running all tests in ..." line, add the test result.
     if self.log:
       if self.opts.list_tests:
-        print ''
+        print()
       else:
         if failed:
           print(TextColors.FAILURE + 'FAILURE' + TextColors.ENDC)
@@ -716,6 +977,8 @@ def create_parser():
                     help='Base url to the repos (e.g. svn://localhost)')
   parser.add_option('-f', '--fs-type', action='store',
                     help='Subversion file system type (fsfs(-v[46]), bdb or fsx)')
+  parser.add_option('-g', '--global-scheduler', action='store_true',
+                    help='Run tests from all scripts together')
   parser.add_option('--http-library', action='store',
                     help="Make svn use this DAV library (neon or serf)")
   parser.add_option('--bin', action='store', dest='svn_bin',
@@ -759,10 +1022,16 @@ def create_parser():
                     help='Password for the HTTP Proxy.')
   parser.add_option('--httpd-version', action='store',
                     help='Assume HTTPD is this version.')
+  parser.add_option('--httpd-whitelist', action='store',
+                    help='Assume HTTPD whitelist is this version.')
   parser.add_option('--exclusive-wc-locks', action='store_true',
                     help='Use sqlite exclusive locking for working copies')
   parser.add_option('--memcached-server', action='store',
                     help='Use memcached server at specified URL (FSFS only)')
+  parser.add_option('--fsfs-compression', action='store', type='str',
+                    help='Set compression type (for fsfs)')
+  parser.add_option('--fsfs-dir-deltification', action='store', type='str',
+                    help='Set directory deltification option (for fsfs)')
 
   parser.set_defaults(set_log_level=None)
   return parser
@@ -771,7 +1040,9 @@ def main():
   (opts, args) = create_parser().parse_args(sys.argv[1:])
 
   if len(args) < 3:
-    print(__doc__)
+    print("{}: at least three positional arguments required; got {!r}".format(
+      os.path.basename(sys.argv[0]), args
+    ))
     sys.exit(2)
 
   if opts.log_to_stdout:

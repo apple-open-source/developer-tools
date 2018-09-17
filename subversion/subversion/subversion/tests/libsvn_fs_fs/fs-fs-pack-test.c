@@ -690,7 +690,7 @@ recover_fully_packed(const svn_test_opts_t *opts,
 
 /* ------------------------------------------------------------------------ */
 /* Regression test for issue #4320 (fsfs file-hinting fails when reading a rep
-   from the transaction that is commiting rev = SHARD_SIZE). */
+   from the transaction that is committing rev = SHARD_SIZE). */
 #define REPO_NAME "test-repo-file-hint-at-shard-boundary"
 #define SHARD_SIZE 4
 #define MAX_REV (SHARD_SIZE - 1)
@@ -1364,8 +1364,9 @@ plain_0_length(const svn_test_opts_t *opts,
       memcpy(rev_contents->data + offset, noderev_str->data, noderev_str->len);
     }
 
-  SVN_ERR(svn_io_write_atomic(rev_path, rev_contents->data,
-                              rev_contents->len, NULL, pool));
+  SVN_ERR(svn_io_write_atomic2(rev_path, rev_contents->data,
+                               rev_contents->len, NULL, FALSE,
+                               pool));
 
   if (svn_fs_fs__use_log_addressing(fs))
     {
@@ -1692,7 +1693,7 @@ compare_0_length_rep(const svn_test_opts_t *opts,
 
   enum { COUNT = 5 };
   const char *file_names[COUNT] = { no_rep_file,
-                                    empty_delta_file, 
+                                    empty_plain_file, 
                                     plain_file,
                                     empty_delta_file,
                                     delta_file };

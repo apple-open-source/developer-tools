@@ -57,29 +57,23 @@ Item = svntest.wc.StateItem
 
 # How we currently test 'svnfsfs' --
 #
-#   'svnadmin create':   Create an empty repository, test that the
-#                        root node has a proper created-revision,
-#                        because there was once a bug where it
-#                        didn't.
+#   'svnfsfs stats':      Run this on a greek repo, then verify that the
+#                         various sections are present. The section contents
+#                         is matched against section-specific patterns.
 #
-#                        Note also that "svnadmin create" is tested
-#                        implicitly every time we run a python test
-#                        script.  (An empty repository is always
-#                        created and then imported into;  if this
-#                        subcommand failed catastrophically, every
-#                        test would fail and we would know instantly.)
+#   'svnfsfs dump-index': Tested implicitly by the load-index test
 #
-#   'svnadmin createtxn'
-#   'svnadmin rmtxn':    See below.
+#   'svnfsfs load-index': Create a greek repo but set shard to 2 and pack
+#                         it so we can load into a packed shard with more
+#                         than one revision to test ordering issues etc.
+#                         r1 also contains a non-trival number of items such
+#                         that parser issues etc. have a chance to surface.
 #
-#   'svnadmin lstxns':   We don't care about the contents of transactions;
-#                        we only care that they exist or not.
-#                        Therefore, we can simply parse transaction headers.
-#
-#   'svnadmin dump':     A couple regression tests that ensure dump doesn't
-#                        error out, and one to check that the --quiet option
-#                        really does what it's meant to do. The actual
-#                        contents of the dump aren't verified at all.
+#                         The idea is dump the index of the pack, mess with
+#                         it to cover lots of UI guarantees but keep the
+#                         semantics of the relevant bits. Then feed it back
+#                         to load-index and verify that the result is still
+#                         a complete, consistent etc. repo.
 #
 ######################################################################
 # Helper routines
@@ -92,18 +86,155 @@ def patch_format(repo_dir, shard_size):
   contents = open(format_path, 'rb').read()
   processed_lines = []
 
-  for line in contents.split("\n"):
-    if line.startswith("layout "):
-      processed_lines.append("layout sharded %d" % shard_size)
+  for line in contents.split(b"\n"):
+    if line.startswith(b"layout "):
+      processed_lines.append(b"layout sharded %d" % shard_size)
     else:
       processed_lines.append(line)
 
-  new_contents = "\n".join(processed_lines)
-  os.chmod(format_path, 0666)
+  new_contents = b"\n".join(processed_lines)
+  os.chmod(format_path, svntest.main.S_ALL_RW)
   open(format_path, 'wb').write(new_contents)
 
 ######################################################################
 # Tests
+
+#----------------------------------------------------------------------
+
+@SkipUnless(svntest.main.is_fs_type_fsfs)
+def test_stats(sbox):
+  "stats output"
+
+  sbox.build(create_wc=False)
+
+  exit_code, output, errput = \
+    svntest.actions.run_and_verify_svnfsfs(None, [], 'stats', sbox.repo_dir)
+
+  # split output into sections
+  sections = { }
+
+  last_line = ''
+  section_name = ''
+  section_contents = []
+  for line in output:
+    line = line.rstrip()
+    if line != '':
+
+      # If the first character is not a space, then LINE is a section header
+      if line[0] == ' ':
+        section_contents.append(line)
+      else:
+
+        # Store previous section
+        if section_name != '':
+          sections[section_name] = section_contents
+
+          # Is the output formatted nicely?
+          if last_line != '':
+            logger.warn("Error: no empty line before section '" + line + "'")
+            raise svntest.Failure
+
+        # start new section
+        section_name = line
+        section_contents = []
+
+    last_line = line
+
+  sections[section_name] = section_contents
+
+  # verify that these sections exist
+  sections_to_find = ['Reading revisions',
+                      'Global statistics:',
+                      'Noderev statistics:',
+                      'Representation statistics:',
+                      'Directory representation statistics:',
+                      'File representation statistics:',
+                      'Directory property representation statistics:',
+                      'File property representation statistics:',
+                      'Largest representations:',
+                      'Extensions by number of representations:',
+                      'Extensions by size of changed files:',
+                      'Extensions by size of representations:',
+                      'Histogram of expanded node sizes:',
+                      'Histogram of representation sizes:',
+                      'Histogram of file sizes:',
+                      'Histogram of file representation sizes:',
+                      'Histogram of file property sizes:',
+                      'Histogram of file property representation sizes:',
+                      'Histogram of directory sizes:',
+                      'Histogram of directory representation sizes:',
+                      'Histogram of directory property sizes:',
+                      'Histogram of directory property representation sizes:']
+  patterns_to_find = {
+    'Reading revisions' : ['\s+ 0[ 0-9]*'],
+    'Global .*'         : ['.*\d+ bytes in .*\d+ revisions',
+                           '.*\d+ bytes in .*\d+ changes',
+                           '.*\d+ bytes in .*\d+ node revision records',
+                           '.*\d+ bytes in .*\d+ representations',
+                           '.*\d+ bytes expanded representation size',
+                           '.*\d+ bytes with rep-sharing off' ],
+    'Noderev .*'        : ['.*\d+ bytes in .*\d+ nodes total',
+                           '.*\d+ bytes in .*\d+ directory noderevs',
+                           '.*\d+ bytes in .*\d+ file noderevs' ],
+    'Representation .*' : ['.*\d+ bytes in .*\d+ representations total',
+                           '.*\d+ bytes in .*\d+ directory representations',
+                           '.*\d+ bytes in .*\d+ file representations',
+                           '.*\d+ bytes in .*\d+ representations of added file nodes',
+                           '.*\d+ bytes in .*\d+ directory property representations',
+                           '.*\d+ bytes in .*\d+ file property representations',
+                           '.*\d+ average delta chain length',
+                           '.*\d+ bytes in header & footer overhead' ],
+    '.* representation statistics:' : 
+                          ['.*\d+ bytes in .*\d+ reps',
+                           '.*\d+ bytes in .*\d+ shared reps',
+                           '.*\d+ bytes expanded size',
+                           '.*\d+ bytes expanded shared size',
+                           '.*\d+ bytes with rep-sharing off',
+                           '.*\d+ shared references',
+                           '.*\d+ average delta chain length'],
+    'Largest.*:'        : ['.*\d+ r\d+ */\S*'],
+    'Extensions by number .*:' :
+                          ['.*\d+ \( ?\d+%\) representations'],
+    'Extensions by size .*:' :
+                          ['.*\d+ \( ?\d+%\) bytes'],
+    'Histogram of .*:'  : ['.*\d+ \.\. < \d+.*\d+ \( ?\d+%\) bytes in *\d+ \( ?\d+%\) items']
+  }
+
+  # check that the output contains all sections
+  for section_name in sections_to_find:
+    if not section_name in sections.keys():
+      logger.warn("Error: section '" + section_name + "' not found")
+      raise svntest.Failure
+
+  # check section contents
+  for section_name in sections.keys():
+    patterns = []
+
+    # find the suitable patterns for the current section
+    for pattern in patterns_to_find.keys():
+      if re.match(pattern, section_name):
+        patterns = patterns_to_find[pattern]
+        break;
+
+    if len(patterns) == 0:
+      logger.warn("Error: unexpected section '" + section_name + "' found'")
+      logger.warn(sections[section_name])
+      raise svntest.Failure
+
+    # each line in the section must match one of the patterns
+    for line in sections[section_name]:
+      found = False
+
+      for pattern in patterns:
+        if re.match(pattern, line):
+          found = True
+          break
+
+      if not found:
+        logger.warn("Error: unexpected line '" + line + "' in section '"
+                    + section_name + "'")
+        logger.warn(sections[section_name])
+        raise svntest.Failure
 
 #----------------------------------------------------------------------
 
@@ -114,15 +245,12 @@ def load_index_sharded(sbox):
   "load-index in a packed repo"
 
   # Configure two files per shard to trigger packing.
-  sbox.build()
+  sbox.build(create_wc=False)
   patch_format(sbox.repo_dir, shard_size=2)
 
-  # With --fsfs-packing, everything is already packed and we
-  # can skip this part.
-  if not svntest.main.options.fsfs_packing:
-    expected_output = ["Packing revisions in shard 0...done.\n"]
-    svntest.actions.run_and_verify_svnadmin(expected_output, [],
-                                            "pack", sbox.repo_dir)
+  expected_output = ["Packing revisions in shard 0...done.\n"]
+  svntest.actions.run_and_verify_svnadmin(expected_output, [],
+                                          "pack", sbox.repo_dir)
 
   # Read P2L index using svnfsfs.
   exit_code, items, errput = \
@@ -133,10 +261,10 @@ def load_index_sharded(sbox):
   #
   # * uses the same encoding as the dump-index output
   # * is not in ascending item offset order
-  # * ignores lines with the full table header
-  # * ignores the checksum column and beyond
-  # * figures out the correct target revision even if the first item
-  #   does not match the first revision in the pack file
+  # * contains lines with the full table header
+  # * invalid or incorrect data in the checksum column and beyond
+  # * starts with an item which does not belong to the first revision
+  #   in the pack file
   #
   # So, let's mess with the ITEMS list to call in on these promises.
 
@@ -157,8 +285,17 @@ def load_index_sharded(sbox):
       columns.append("junk")
       items[i] = ' '.join(columns) + "\n"
 
-  # first entry is for rev 1, pack starts at rev 0, though
+  # first entry shall be for rev 1, pack starts at rev 0, though
+  for i in range(0, len(items)):
+    if items[i].split()[3] == "1":
+      if i != 1:
+        items[i],items[1] = items[1],items[i]
+      break
+
   assert(items[1].split()[3] == "1")
+
+  # The STDIN data must be binary.
+  items = svntest.main.ensure_list(map(str.encode, items))
 
   # Reload the index
   exit_code, output, errput = svntest.main.run_command_stdin(
@@ -188,6 +325,7 @@ def test_stats_on_empty_repo(sbox):
 
 # list all tests here, starting with None:
 test_list = [ None,
+              test_stats,
               load_index_sharded,
               test_stats_on_empty_repo,
              ]

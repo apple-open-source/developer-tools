@@ -149,6 +149,9 @@ typedef struct dav_svn_repos {
   /* The path to the activities db */
   const char *activities_db;
 
+  /* Cached yongest revision of the repository. SVN_INVALID_REVNUM if
+     youngest revision is not fetched yet. */
+  svn_revnum_t youngest_rev;
 } dav_svn_repos;
 
 
@@ -296,6 +299,10 @@ struct dav_resource_private {
   /* was keyword substitution requested using our public CGI interface
      (ie: /path/to/item?kw=1)? */
   svn_boolean_t keyword_subst;
+
+  /* whether this resource parameters are fixed and won't change
+     between requests. */
+  svn_boolean_t idempotent;
 };
 
 
@@ -329,6 +336,10 @@ svn_boolean_t dav_svn__get_fulltext_cache_flag(request_rec *r);
 /* for the repository referred to by this request, is revprop caching active? */
 svn_boolean_t dav_svn__get_revprop_cache_flag(request_rec *r);
 
+/* for the repository referred to by this request, is node prop caching active? */
+svn_boolean_t
+dav_svn__get_nodeprop_cache_flag(request_rec *r);
+
 /* has block read mode been enabled for the repository referred to by this
  * request? */
 svn_boolean_t dav_svn__get_block_read_flag(request_rec *r);
@@ -347,10 +358,6 @@ svn_boolean_t dav_svn__get_list_parentpath_flag(request_rec *r);
    account the support level expected of based on the specified
    master server version (if provided via SVNMasterVersion).  */
 svn_boolean_t dav_svn__check_httpv2_support(request_rec *r);
-
-/* For the repository referred to by this request, should ephemeral
-   txnprop support be advertised?  */
-svn_boolean_t dav_svn__check_ephemeral_txnprops_support(request_rec *r);
 
 
 
@@ -492,7 +499,7 @@ dav_svn__output_pass_brigade(dav_svn__output *output,
    NOTE:  This function will overwrite the svn:author property, if
    any, found in REVPROPS.  */
 dav_error *
-dav_svn__create_txn(const dav_svn_repos *repos,
+dav_svn__create_txn(dav_svn_repos *repos,
                     const char **ptxn_name,
                     apr_hash_t *revprops,
                     apr_pool_t *pool);
@@ -694,6 +701,7 @@ static const dav_report_elem dav_svn__reports_list[] = {
   { SVN_XML_NAMESPACE, "get-deleted-rev-report" },
   { SVN_XML_NAMESPACE, SVN_DAV__MERGEINFO_REPORT },
   { SVN_XML_NAMESPACE, SVN_DAV__INHERITED_PROPS_REPORT },
+  { SVN_XML_NAMESPACE, "list-report" },
   { NULL, NULL },
 };
 
@@ -745,6 +753,11 @@ dav_error *
 dav_svn__get_inherited_props_report(const dav_resource *resource,
                                     const apr_xml_doc *doc,
                                     dav_svn__output *output);
+
+dav_error *
+dav_svn__list_report(const dav_resource *resource,
+                     const apr_xml_doc *doc,
+                     dav_svn__output *output);
 
 /*** posts/ ***/
 
@@ -830,28 +843,35 @@ dav_svn__authz_read_func(dav_svn__authz_read_baton *baton);
 
    If ERROR_ID is 0, SVN_ERR_RA_DAV_REQUEST_FAILED will be used as a
    default value for the error code.
+
+   mod_dav is definitive documentation of the parameters, but a
+   guideline to the different error is:
+
+   STATUS is the HTTP status returned to the client.
+
+   ERROR_ID is an additional DAV-specific error such as a violation of
+   the DAV rules.  mod_dav.h defines some values but callers can pass
+   others.
+
+   APRERR is any underlying OS/system error.
 */
 dav_error *
 dav_svn__new_error_svn(apr_pool_t *pool,
                        int status,
                        int error_id,
+                       apr_status_t aprerr,
                        const char *desc);
 
 
 /* A wrapper around mod_dav's dav_new_error, mod_dav_svn uses this
    instead of the mod_dav function to enable special mod_dav_svn specific
-   processing.  See dav_new_error for parameter documentation.
-   Note that DESC may be null (it's hard to track this down from
-   dav_new_error()'s documentation, but see the dav_error type,
-   which says that its desc field may be NULL).
-
-   If ERROR_ID is 0, SVN_ERR_RA_DAV_REQUEST_FAILED will be used as a
-   default value for the error code.
+   processing.  See dav_svn__new_error_svn for additional details.
 */
 dav_error *
 dav_svn__new_error(apr_pool_t *pool,
                    int status,
                    int error_id,
+                   apr_status_t aprerr,
                    const char *desc);
 
 
@@ -1082,6 +1102,32 @@ int dav_svn__error_response_tag(request_rec *r, dav_error *err);
  */
 int dav_svn__parse_request_skel(svn_skel_t **skel, request_rec *r,
                                 apr_pool_t *pool);
+
+/* Set *YOUNGEST_P to the number of the youngest revision in REPOS.
+ *
+ * Youngest revision will be cached in REPOS->YOUNGEST_REV to avoid
+ * fetching the youngest revision multiple times during proccessing
+ * the request.
+ *
+ * Uses SCRATCH_POOL for temporary allocations.
+ */
+svn_error_t *
+dav_svn__get_youngest_rev(svn_revnum_t *youngest_p,
+                          dav_svn_repos *repos,
+                          apr_pool_t *scratch_pool);
+
+/* Return the liveprop-encoded form of AUTHOR, allocated in RESULT_POOL.
+ * If IS_SVN_CLIENT is set, assume that the data will be sent to a SVN
+ * client.  This mainly sanitizes AUTHOR strings with control chars in
+ * them without converting them to escape sequences etc.
+ *
+ * Use SCRATCH_POOL for temporary allocations.
+ */
+const char *
+dav_svn__fuzzy_escape_author(const char *author,
+                             svn_boolean_t is_svn_client,
+                             apr_pool_t *result_pool,
+                             apr_pool_t *scratch_pool);
 
 /*** mirror.c ***/
 

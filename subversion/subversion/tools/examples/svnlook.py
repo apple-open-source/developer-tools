@@ -21,7 +21,7 @@
 #    under the License.
 ######################################################################
 #
-# $HeadURL: https://svn.apache.org/repos/asf/subversion/branches/1.9.x/tools/examples/svnlook.py $
+# $HeadURL: https://svn.apache.org/repos/asf/subversion/branches/1.10.x/tools/examples/svnlook.py $
 # $LastChangedDate: 2013-11-14 11:11:07 +0000 (Thu, 14 Nov 2013) $
 # $LastChangedRevision: 1541878 $
 

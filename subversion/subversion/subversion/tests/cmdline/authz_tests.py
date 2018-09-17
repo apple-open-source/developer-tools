@@ -1,6 +1,6 @@
 #!/usr/bin/env python
 #
-#  authz_tests.py:  testing authentication.
+#  authz_tests.py:  testing authorization.
 #
 #  Subversion is a tool for revision control.
 #  See http://subversion.apache.org for more information.
@@ -359,7 +359,7 @@ def authz_write_access(sbox):
 def authz_checkout_test(sbox):
   "test authz for checkout"
 
-  sbox.build(create_wc = False, read_only = True)
+  sbox.build(create_wc = False)
   local_dir = sbox.wc_dir
 
   write_restrictive_svnserve_conf(sbox.repo_dir)
@@ -398,7 +398,7 @@ def authz_checkout_test(sbox):
 def authz_checkout_and_update_test(sbox):
   "test authz for checkout and update"
 
-  sbox.build(create_wc = False, read_only = True)
+  sbox.build(create_wc = False)
   local_dir = sbox.wc_dir
 
   write_restrictive_svnserve_conf(sbox.repo_dir)
@@ -460,7 +460,7 @@ def authz_checkout_and_update_test(sbox):
 def authz_partial_export_test(sbox):
   "test authz for export with unreadable subfolder"
 
-  sbox.build(create_wc = False, read_only = True)
+  sbox.build(create_wc = False)
   local_dir = sbox.wc_dir
 
   # cleanup remains of a previous test run.
@@ -656,7 +656,7 @@ def authz_aliases(sbox):
 def authz_validate(sbox):
   "test the authz validation rules"
 
-  sbox.build(create_wc = False, read_only = True)
+  sbox.build(create_wc = False)
 
   write_restrictive_svnserve_conf(sbox.repo_dir)
 
@@ -782,7 +782,7 @@ def authz_locking(sbox):
                                       sbox.ospath('A/mu'))
 
   if sbox.repo_url.startswith('http'):
-    expected_err = ".*svn: warning: W160039: Unlock.*[Ff]orbidden.*"
+    expected_err = ".*svn: warning: W160039: .*([Aa]uth.*perf|[Ff]orbidden).*"
   else:
     expected_err = ".*svn: warning: W170001: Authorization failed.*"
 
@@ -874,7 +874,7 @@ def authz_svnserve_anon_access_read(sbox):
 def authz_switch_to_directory(sbox):
   "switched to directory, no read access on parents"
 
-  sbox.build(read_only = True)
+  sbox.build()
 
   write_authz_file(sbox, {"/": "*=rw", "/A/B": "*=", "/A/B/E": "jrandom = rw"})
 
@@ -1108,7 +1108,9 @@ def authz_recursive_ls(sbox):
     'A/D/gamma',
     'iota',
     ]
-  svntest.actions.run_and_verify_svn(map(lambda x: x + '\n', expected_entries),
+  with_newline = svntest.main.ensure_list(map(lambda x: x + '\n',
+                                              expected_entries))
+  svntest.actions.run_and_verify_svn(with_newline,
                                      [], 'ls', '-R',
                                      sbox.repo_url)
 

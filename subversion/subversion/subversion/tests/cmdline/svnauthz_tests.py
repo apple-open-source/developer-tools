@@ -53,7 +53,7 @@ def output_command(fp, cmd, opt):
   status = process.returncode
   fp.write(output)
   fp.write(errors)
-  fp.write("Exit %%d\\n" %% status)
+  fp.write(("Exit %%d\\n" %% status).encode())
   return status
 
 for (svnauthz_cmd, svnauthz_opt) in %s:
@@ -590,7 +590,7 @@ def svnauthz_accessof_is_file_test(sbox):
   svntest.main.file_append(authz_path, "x\n")
   # Check that --is returns 1 when the syntax is invalid with a file..
   expected_out = svntest.verify.RegexOutput(
-      ".*Error while parsing config file:",
+      ".*Error while parsing authz file:",
       match_all=False
   )
   svntest.actions.run_and_verify_svnauthz(None, expected_out, 1, False,
@@ -753,7 +753,7 @@ def svnauthz_accessof_is_repo_test(sbox):
 
   # Check that --is returns 1 when the syntax is invalid with a url.
   expected_out = svntest.verify.RegexOutput(
-      ".*Error while parsing config file:",
+      ".*Error while parsing authz file:",
       match_all=False
   )
   svntest.actions.run_and_verify_svnauthz(None, expected_out, 1, False,

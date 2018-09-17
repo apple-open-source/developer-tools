@@ -545,7 +545,7 @@ def no_copy_overwrites(sbox):
 
   # Repeat the last command.  It should *fail* because A/D/H/G already exists.
   svntest.actions.run_and_verify_svn(
-    None, ".*'/A/D/H/G'.*",
+    None, ".*E160020: Path.*/A/D/H/G' already exists.*",
     'cp', dirURL1, dirURL2,
     '-m', 'fooogle')
 
@@ -1297,10 +1297,10 @@ def repos_to_wc_copy_eol_keywords(sbox):
   line_contents = f.readlines()
   f.close()
 
-  if re.match('[^\\r]\\n', raw_contents):
+  if re.match(b'[^\\r]\\n', raw_contents):
     raise svntest.Failure
 
-  if not re.match('.*\$LastChangedRevision:\s*\d+\s*\$', line_contents[3]):
+  if not re.match(b'.*\$LastChangedRevision:\s*\d+\s*\$', line_contents[3]):
     raise svntest.Failure
 
 #-------------------------------------------------------------

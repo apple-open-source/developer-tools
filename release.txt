@@ -1,16 +1,16 @@
-# Developer Tools 9.4.1 EdgeSeed9F2000
+# Developer Tools 10.0 Justice10A255
 bison	14	Other
-bootstrap_cmds	96.20.2	Other
-cctools	906	Other
-CoreOSMakefiles	78	Other
+bootstrap_cmds	96.20.2.200.4	Other
+cctools	921	Other
+CoreOSMakefiles	79	Other
 developer_cmds	66	Other
-gcc_select	134	Other
-Git	101.1	Other
+gcc_select	135	Other
+Git	112	Other
 gm4	16	Other
 gnumake	131	Other
 gperf	13	Other
 headerdoc	8.9.28	Other
-ld64	351.8	Other
+ld64	409.12	Other
 pb_makefiles	1005	Other
-subversion	78	Other
-tapi	902.0.9	Other
+subversion	81	Other
+tapi	1000.10.8	Other

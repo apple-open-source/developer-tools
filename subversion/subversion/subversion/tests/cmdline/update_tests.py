@@ -92,7 +92,7 @@ def update_binary_file(sbox):
 
   # Make a change to the binary file in the original working copy
   svntest.main.file_append(theta_path, "revision 3 text")
-  theta_contents_r3 = theta_contents + "revision 3 text"
+  theta_contents_r3 = theta_contents + b"revision 3 text"
 
   # Created expected output tree for 'svn ci'
   expected_output = svntest.wc.State(wc_dir, {
@@ -113,7 +113,7 @@ def update_binary_file(sbox):
 
   # Make a local mod to theta
   svntest.main.file_append(theta_backup_path, "extra theta text")
-  theta_contents_local = theta_contents + "extra theta text"
+  theta_contents_local = theta_contents + b"extra theta text"
 
   # Create expected output tree for an update of wc_backup.
   expected_output = svntest.wc.State(wc_backup, {
@@ -196,9 +196,9 @@ def update_binary_file_2(sbox):
 
   # Make some mods to the binary files.
   svntest.main.file_append(theta_path, "foobar")
-  new_theta_contents = theta_contents + "foobar"
+  new_theta_contents = theta_contents + b"foobar"
   svntest.main.file_append(zeta_path, "foobar")
-  new_zeta_contents = zeta_contents + "foobar"
+  new_zeta_contents = zeta_contents + b"foobar"
 
   # Created expected output tree for 'svn ci'
   expected_output = svntest.wc.State(wc_dir, {
@@ -286,7 +286,7 @@ def update_binary_file_3(sbox):
 
   # Make some mods to the binary files.
   svntest.main.file_append(theta_path, "foobar")
-  new_theta_contents = theta_contents + "foobar"
+  new_theta_contents = theta_contents + b"foobar"
 
   # Created expected output tree for 'svn ci'
   expected_output = svntest.wc.State(wc_dir, {
@@ -1657,6 +1657,9 @@ def conflict_markers_matching_eol(sbox):
   else:
     crlf = '\r\n'
 
+  # Strict EOL style matching breaks Windows tests at least with Python 2
+  keep_eol_style = not svntest.main.is_os_windows()
+
   # Checkout a second working copy
   wc_backup = sbox.add_wc_path('backup')
   svntest.actions.run_and_verify_svn(None, [], 'checkout',
@@ -1757,10 +1760,11 @@ def conflict_markers_matching_eol(sbox):
     expected_backup_status.tweak(wc_rev = cur_rev)
 
     # Do the update and check the results in three ways.
-    svntest.actions.run_and_verify_update(wc_backup,
-                                          expected_backup_output,
-                                          expected_backup_disk,
-                                          expected_backup_status)
+    svntest.actions.run_and_verify_update2(wc_backup,
+                                           expected_backup_output,
+                                           expected_backup_disk,
+                                           expected_backup_status,
+                                           keep_eol_style=keep_eol_style)
 
     # cleanup for next run
     svntest.main.run_svn(None, 'revert', '-R', wc_backup)
@@ -1788,6 +1792,9 @@ def update_eolstyle_handling(sbox):
   else:
     crlf = '\r\n'
 
+  # Strict EOL style matching breaks Windows tests at least with Python 2
+  keep_eol_style = not svntest.main.is_os_windows()
+
   # Checkout a second working copy
   wc_backup = sbox.add_wc_path('backup')
   svntest.actions.run_and_verify_svn(None, [], 'checkout',
@@ -1814,10 +1821,11 @@ def update_eolstyle_handling(sbox):
   expected_backup_status = svntest.actions.get_virginal_state(wc_backup, 2)
   expected_backup_status.tweak('A/mu', status='M ')
 
-  svntest.actions.run_and_verify_update(wc_backup,
-                                        expected_backup_output,
-                                        expected_backup_disk,
-                                        expected_backup_status)
+  svntest.actions.run_and_verify_update2(wc_backup,
+                                         expected_backup_output,
+                                         expected_backup_disk,
+                                         expected_backup_status,
+                                         keep_eol_style=keep_eol_style)
 
   # Test 2: now change the eol-style property to another value and commit,
   # update the still changed mu in the second working copy; there should be
@@ -1839,10 +1847,11 @@ def update_eolstyle_handling(sbox):
   expected_backup_status = svntest.actions.get_virginal_state(wc_backup, 3)
   expected_backup_status.tweak('A/mu', status='M ')
 
-  svntest.actions.run_and_verify_update(wc_backup,
-                                        expected_backup_output,
-                                        expected_backup_disk,
-                                        expected_backup_status)
+  svntest.actions.run_and_verify_update2(wc_backup,
+                                         expected_backup_output,
+                                         expected_backup_disk,
+                                         expected_backup_status,
+                                         keep_eol_style=keep_eol_style)
 
   # Test 3: now delete the eol-style property and commit, update the still
   # changed mu in the second working copy; there should be no conflict!
@@ -1863,10 +1872,11 @@ def update_eolstyle_handling(sbox):
 
   expected_backup_status = svntest.actions.get_virginal_state(wc_backup, 4)
   expected_backup_status.tweak('A/mu', status='M ')
-  svntest.actions.run_and_verify_update(wc_backup,
-                                        expected_backup_output,
-                                        expected_backup_disk,
-                                        expected_backup_status)
+  svntest.actions.run_and_verify_update2(wc_backup,
+                                         expected_backup_output,
+                                         expected_backup_disk,
+                                         expected_backup_status,
+                                         keep_eol_style=keep_eol_style)
 
 # Bug in which "update" put a bogus revision number on a schedule-add file,
 # causing the wrong version of it to be committed.
@@ -2227,6 +2237,7 @@ def forced_update_failures(sbox):
 # Test for issue #2556. The tests maps a virtual drive to a working copy
 # and tries some basic update, commit and status actions on the virtual
 # drive.
+@SkipUnless(svntest.main.is_os_windows)
 def update_wc_on_windows_drive(sbox):
   "update wc on the root of a Windows (virtual) drive"
 
@@ -2253,10 +2264,6 @@ def update_wc_on_windows_drive(sbox):
 
     return None
 
-  # Skip the test if not on Windows
-  if not svntest.main.windows:
-    raise svntest.Skip
-
   # just create an empty folder, we'll checkout later.
   sbox.build(create_wc = False)
   svntest.main.safe_rmtree(sbox.wc_dir)
@@ -2265,7 +2272,7 @@ def update_wc_on_windows_drive(sbox):
   # create a virtual drive to the working copy folder
   drive = find_the_next_available_drive_letter()
   if drive is None:
-    raise svntest.Skip
+    raise svntest.Skip('No drive letter available')
 
   subprocess.call(['subst', drive +':', sbox.wc_dir])
   wc_dir = drive + ':/'
@@ -2713,6 +2720,7 @@ def update_with_obstructing_additions(sbox):
                                         expected_disk,
                                         expected_status,
                                         [], True,
+                                        '--adds-as-modification', wc_backup,
                                         extra_files=extra_files)
 
   # Some obstructions are still not permitted:
@@ -2823,6 +2831,7 @@ def update_with_obstructing_additions(sbox):
   svntest.actions.run_and_verify_update(wc_dir, expected_output,
                                         expected_disk, expected_status,
                                         [], False,
+                                        '--adds-as-modification',
                                         A_path)
 
   # Resolve the tree conflict.
@@ -2842,7 +2851,7 @@ def update_with_obstructing_additions(sbox):
   svntest.actions.run_and_verify_update(wc_dir, expected_output,
                                         expected_disk, expected_status,
                                         [], False,
-                                        wc_dir, '-N')
+                                        wc_dir, '-N', '--adds-as-modification')
 
   # Resolve the tree conflict.
   svntest.main.run_svn(None, 'resolved', omicron_path)
@@ -3613,7 +3622,7 @@ def update_output_with_conflicts(rev, target, paths=None, resolved=False):
   lines += ['Updated to revision %d.\n' % rev]
   if resolved:
     for path in paths:
-      lines += ["Resolved conflicted state of '%s'\n" % path]
+      lines += ["Merge conflicts in '%s' marked as resolved.\n" % path]
     lines += svntest.main.summary_of_conflicts(text_resolved=len(paths))
   else:
     lines += svntest.main.summary_of_conflicts(text_conflicts=len(paths))
@@ -5137,7 +5146,7 @@ def skip_access_denied(sbox):
   try:
     import msvcrt
   except ImportError:
-    raise svntest.Skip
+    raise svntest.Skip('python msvcrt library not available')
 
   sbox.build()
   wc_dir = sbox.wc_dir
@@ -6626,7 +6635,9 @@ def update_conflict_details(sbox):
                                prev_status='  ', prev_treeconflict='C'),
   })
   svntest.actions.run_and_verify_update(wc_dir, expected_output,
-                                        None, expected_status)
+                                        None, expected_status,
+                                        [], False,
+                                        '--adds-as-modification', wc_dir)
 
   # Update can't pass source as none at a specific URL@revision,
   # because it doesn't know... the working copy could be mixed
@@ -6635,8 +6646,7 @@ def update_conflict_details(sbox):
     {
       "Path" : re.escape(sbox.ospath('A/B')),
 
-      "Conflict Properties File" :
-            re.escape(sbox.ospath('A/B/dir_conflicts.prej')) + '.*',
+      "Conflicted Properties" : "key",
       "Conflict Details": re.escape(
             'incoming dir edit upon update' +
             ' Source  left: (dir) ^/A/B@1' +
@@ -6706,6 +6716,44 @@ def update_conflict_details(sbox):
   svntest.actions.run_and_verify_info(expected_info, sbox.ospath('A/B'),
                                       '--depth', 'infinity')
 
+# Keywords should be updated in local file even if text change is shortcut
+# (due to the local change being the same as the incoming change, for example).
+@XFail()
+def update_keywords_on_shortcut(sbox):
+  "update_keywords_on_shortcut"
+
+  sbox.build()
+  wc_dir = sbox.wc_dir
+
+  # Start with a file with keywords expanded
+  mu_path = sbox.ospath('A/mu')
+  svntest.main.file_append(mu_path, '$LastChangedRevision$\n')
+  svntest.main.run_svn(None, 'ps', 'svn:keywords', 'LastChangedRevision', mu_path)
+  sbox.simple_commit('A/mu')
+
+  # Modify the text, and commit
+  svntest.main.file_append(mu_path, 'New line.\n')
+  sbox.simple_commit('A/mu')
+
+  # Update back to the previous revision
+  sbox.simple_update('A/mu', 2)
+
+  # Make the same change again locally
+  svntest.main.file_append(mu_path, 'New line.\n')
+
+  # Update, so that merging the text change is a short-cut merge
+  text_before_up = open(sbox.ospath('A/mu'), 'r').readlines()
+  sbox.simple_update('A/mu')
+  text_after_up = open(sbox.ospath('A/mu'), 'r').readlines()
+
+  # Check the keywords have been updated
+  if not any(['$LastChangedRevision: 2 $' in line
+              for line in text_before_up]):
+    raise svntest.Failure("keyword not as expected in test set-up phase")
+  if not any(['$LastChangedRevision: 3 $' in line
+              for line in text_after_up]):
+    raise svntest.Failure("update did not update the LastChangedRevision keyword")
+
 def update_add_conflicted_deep(sbox):
   "deep add conflicted"
 
@@ -6744,7 +6792,9 @@ def missing_tmp_update(sbox):
   svntest.actions.run_and_verify_svn(None, '.*Unable to create.*',
                                      'up', wc_dir, '--set-depth', 'infinity')
 
-  svntest.actions.run_and_verify_svn(None, [], 'cleanup', wc_dir)
+  # This re-creates .svn/tmp as a side-effect.
+  svntest.actions.run_and_verify_svn(None, [], 'cleanup',
+                                     '--vacuum-pristines', wc_dir)
 
   svntest.actions.run_and_verify_update(wc_dir, None, None, None, [], False,
                                         wc_dir, '--set-depth', 'infinity')
@@ -6789,6 +6839,21 @@ def update_delete_switched(sbox):
   })
   svntest.actions.run_and_verify_update(wc_dir, None, None, expected_status,
                                         [], False, sbox.ospath('A'), '-r', 0)
+
+@XFail()
+def update_add_missing_local_add(sbox):
+  "update adds missing local addition"
+  
+  sbox.build(read_only=True)
+  
+  # Note that updating 'A' to r0 doesn't reproduce this issue...
+  sbox.simple_update('', revision='0')
+  sbox.simple_mkdir('A')
+  sbox.simple_add_text('mumumu', 'A/mu')
+  os.unlink(sbox.ospath('A/mu'))
+  os.rmdir(sbox.ospath('A'))
+  
+  sbox.simple_update()
 
 #######################################################################
 # Run the tests
@@ -6876,9 +6941,11 @@ test_list = [ None,
               bump_below_tree_conflict,
               update_child_below_add,
               update_conflict_details,
+              update_keywords_on_shortcut,
               update_add_conflicted_deep,
               missing_tmp_update,
               update_delete_switched,
+              update_add_missing_local_add,
              ]
 
 if __name__ == '__main__':

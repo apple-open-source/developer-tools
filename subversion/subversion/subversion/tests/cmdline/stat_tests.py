@@ -702,8 +702,6 @@ def timestamp_behaviour(sbox):
   text_time_behaviour(wc_dir, iota_path, 'iota', expected_status, 'cleanup')
 
   # Create a config to enable use-commit-times
-  config_dir = os.path.join(os.path.abspath(svntest.main.temp_dir),
-                            'use_commit_config')
   config_contents = '''\
 [auth]
 password-stores =
@@ -711,7 +709,7 @@ password-stores =
 [miscellany]
 use-commit-times = yes
 '''
-  svntest.main.create_config_dir(config_dir, config_contents)
+  config_dir = sbox.create_config_dir(config_contents)
 
   other_wc = sbox.add_wc_path('other')
   svntest.actions.run_and_verify_svn(None, [],
@@ -1598,42 +1596,79 @@ def status_dash_u_deleted_directories(sbox):
 
   # check status -u of B
   expected = svntest.verify.UnorderedOutput(
-         ["D                1   %s\n" % "B",
-          "D                1   %s\n" % os.path.join("B", "lambda"),
-          "D                1   %s\n" % os.path.join("B", "E"),
-          "D                1   %s\n" % os.path.join("B", "E", "alpha"),
-          "D                1   %s\n" % os.path.join("B", "E", "beta"),
-          "D                1   %s\n" % os.path.join("B", "F"),
+         ["D                1        1 jrandom      %s\n" % \
+                                        "B",
+          "D                1        1 jrandom      %s\n" % \
+                                        os.path.join("B", "lambda"),
+          "D                1        1 jrandom      %s\n" % \
+                                        os.path.join("B", "E"),
+          "D                1        1 jrandom      %s\n" % \
+                                        os.path.join("B", "E", "alpha"),
+          "D                1        1 jrandom      %s\n" % \
+                                        os.path.join("B", "E", "beta"),
+          "D                1        1 jrandom      %s\n" % 
+          os.path.join("B", "F"),
           "Status against revision:      1\n" ])
   svntest.actions.run_and_verify_svn(expected,
                                      [],
+                                     "status", "-u", "-v", "B")
+
+  expected = \
+         ["D                1   %s\n" % "B",
+          "Status against revision:      1\n" ]
+  svntest.actions.run_and_verify_svn(expected,
+                                     [],
                                      "status", "-u", "B")
+
 
   # again, but now from inside B, should give the same output
   if not os.path.exists('B'):
     os.mkdir('B')
   os.chdir("B")
   expected = svntest.verify.UnorderedOutput(
-         ["D                1   %s\n" % ".",
-          "D                1   %s\n" % "lambda",
-          "D                1   %s\n" % "E",
-          "D                1   %s\n" % os.path.join("E", "alpha"),
-          "D                1   %s\n" % os.path.join("E", "beta"),
-          "D                1   %s\n" % "F",
+         ["D                1        1 jrandom      %s\n" % \
+                                        ".",
+          "D                1        1 jrandom      %s\n" % \
+                                        "lambda",
+          "D                1        1 jrandom      %s\n" % \
+                                        "E",
+          "D                1        1 jrandom      %s\n" % \
+                                        os.path.join("E", "alpha"),
+          "D                1        1 jrandom      %s\n" % \
+                                        os.path.join("E", "beta"),
+          "D                1        1 jrandom      %s\n" % \
+                                        "F",
           "Status against revision:      1\n" ])
+  svntest.actions.run_and_verify_svn(expected,
+                                     [],
+                                     "status", "-u", "-v", ".")
+
+  expected = \
+         ["D                1   %s\n" % ".",
+          "Status against revision:      1\n" ]
   svntest.actions.run_and_verify_svn(expected,
                                      [],
                                      "status", "-u", ".")
 
   # check status -u of B/E
   expected = svntest.verify.UnorderedOutput(
-         ["D                1   %s\n" % os.path.join("B", "E"),
-          "D                1   %s\n" % os.path.join("B", "E", "alpha"),
-          "D                1   %s\n" % os.path.join("B", "E", "beta"),
+         ["D                1        1 jrandom      %s\n" % \
+                                        os.path.join("B", "E"),
+          "D                1        1 jrandom      %s\n" % \
+                                        os.path.join("B", "E", "alpha"),
+          "D                1        1 jrandom      %s\n" % \
+                                        os.path.join("B", "E", "beta"),
           "Status against revision:      1\n" ])
 
   os.chdir(was_cwd)
   os.chdir(A_path)
+  svntest.actions.run_and_verify_svn(expected,
+                                     [],
+                                     "status", "-u", "-v",
+                                     os.path.join("B", "E"))
+
+
+  expected = [ "Status against revision:      1\n" ]
   svntest.actions.run_and_verify_svn(expected,
                                      [],
                                      "status", "-u",
@@ -2189,7 +2224,8 @@ def status_missing_conflicts(sbox):
 
   sbox.simple_rm('A/B/E')
 
-  sbox.simple_update('A/B/E', revision=1)
+  svntest.main.run_svn(False, 'update', sbox.ospath('A/B/E'), '-r', '1',
+    '--accept=postpone')
 
   expected_status = svntest.actions.get_virginal_state(wc_dir, 1)
   expected_status.tweak('A/B/E', status='D ', treeconflict='C', wc_rev=1)
@@ -2242,7 +2278,8 @@ def status_missing_conflicts(sbox):
   sbox.simple_move('A/B/E/beta', 'beta')
 
   sbox.simple_rm('A/B/E')
-  sbox.simple_update('A/B/E', revision=1)
+  svntest.main.run_svn(False, 'update', sbox.ospath('A/B/E'), '-r', '1',
+    '--accept=postpone')
   svntest.actions.run_and_verify_svn(None, [],
                                      'resolve', '--accept=mine-conflict',
                                      '--depth=empty', sbox.ospath('A/B/E'))

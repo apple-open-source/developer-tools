@@ -29,7 +29,7 @@ import shutil, sys, re, os
 import time
 
 # Our testing module
-import main, wc, verify, actions, testcase
+from svntest import main, wc, verify, actions, testcase
 
 from prop_tests import binary_mime_type_on_text_file_warning
 
@@ -446,7 +446,8 @@ def svn_merge(rev_range, source, target, lines=None, elides=[],
                                   prop_resolved=prop_resolved,
                                   tree_resolved=tree_resolved)
   actions.run_and_verify_svn(exp_out, [],
-                                     'merge', rev_arg, source, target, *args)
+                                     'merge', rev_arg, source, target,
+                                     '--accept=postpone', *args)
 
 #----------------------------------------------------------------------
 # Setup helper for issue #4056 and issue #4057 tests.

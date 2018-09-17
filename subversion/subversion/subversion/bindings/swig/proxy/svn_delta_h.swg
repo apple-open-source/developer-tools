@@ -13,6 +13,7 @@
   svn_txdelta_window_handler_t,
   svn_txdelta_next_window_fn_t,
   svn_txdelta_md5_digest_fn_t,
+  svn_txdelta_stream_open_func_t,
   svn_delta_path_driver_cb_func_t,
   svn_file_rev_handler_t,
   svn_file_rev_handler_old_t
@@ -21,6 +22,7 @@
   svn_txdelta_window_handler_t *,
   svn_txdelta_next_window_fn_t *,
   svn_txdelta_md5_digest_fn_t *,
+  svn_txdelta_stream_open_func_t *,
   svn_delta_path_driver_cb_func_t *,
   svn_file_rev_handler_t *,
   svn_file_rev_handler_old_t *
@@ -37,6 +39,7 @@
   void *parent_baton,
   void *dir_baton,
   void *file_baton,
+  void *open_baton,
   void *wrapped_baton,
   void *wrapped_edit_baton,
   void *callback_baton
@@ -140,6 +143,11 @@ static svn_error_t * svn_delta_editor_invoke_abort_edit(
   return (_obj->abort_edit)(edit_baton, scratch_pool);
 }
 
+static svn_error_t * svn_delta_editor_invoke_apply_textdelta_stream(
+  svn_delta_editor_t * _obj, const struct svn_delta_editor_t *editor, void *file_baton, const char *base_checksum, svn_txdelta_stream_open_func_t open_func, void *open_baton, apr_pool_t *scratch_pool) {
+  return (_obj->apply_textdelta_stream)(editor, file_baton, base_checksum, open_func, open_baton, scratch_pool);
+}
+
 static svn_error_t * svn_txdelta_invoke_window_handler(
   svn_txdelta_window_handler_t _obj, svn_txdelta_window_t *window, void *baton) {
   return _obj(window, baton);
@@ -153,6 +161,11 @@ static svn_error_t * svn_txdelta_invoke_next_window_fn(
 static const unsigned char * svn_txdelta_invoke_md5_digest_fn(
   svn_txdelta_md5_digest_fn_t _obj, void *baton) {
   return _obj(baton);
+}
+
+static svn_error_t * svn_txdelta_invoke_stream_open_func(
+  svn_txdelta_stream_open_func_t _obj, svn_txdelta_stream_t **txdelta_stream, void *baton, apr_pool_t *result_pool, apr_pool_t *scratch_pool) {
+  return _obj(txdelta_stream, baton, result_pool, scratch_pool);
 }
 
 static svn_error_t * svn_delta_invoke_path_driver_cb_func(
@@ -189,9 +202,11 @@ static svn_error_t * svn_file_invoke_rev_handler_old(
 %funcptr_member_proxy(svn_delta_editor_t, absent_file, svn_delta_editor_invoke_absent_file);
 %funcptr_member_proxy(svn_delta_editor_t, close_edit, svn_delta_editor_invoke_close_edit);
 %funcptr_member_proxy(svn_delta_editor_t, abort_edit, svn_delta_editor_invoke_abort_edit);
+%funcptr_member_proxy(svn_delta_editor_t, apply_textdelta_stream, svn_delta_editor_invoke_apply_textdelta_stream);
 %funcptr_proxy(svn_txdelta_window_handler_t, svn_txdelta_invoke_window_handler);
 %funcptr_proxy(svn_txdelta_next_window_fn_t, svn_txdelta_invoke_next_window_fn);
 %funcptr_proxy(svn_txdelta_md5_digest_fn_t, svn_txdelta_invoke_md5_digest_fn);
+%funcptr_proxy(svn_txdelta_stream_open_func_t, svn_txdelta_invoke_stream_open_func);
 %funcptr_proxy(svn_delta_path_driver_cb_func_t, svn_delta_invoke_path_driver_cb_func);
 %funcptr_proxy(svn_file_rev_handler_t, svn_file_invoke_rev_handler);
 %funcptr_proxy(svn_file_rev_handler_old_t, svn_file_invoke_rev_handler_old);

@@ -226,6 +226,20 @@ class Sandbox:
 
     return os.path.join(self.tmp_dir, '%s-%s' % (prefix, self.tempname_offs))
 
+  def create_config_dir(self, config_contents=None, server_contents=None,
+                        ssl_cert=None, ssl_url=None, http_proxy=None,
+                        exclusive_wc_locks=None):
+    """Create a config directory with specified or default files.
+       Return its path.
+    """
+
+    tmp_dir = os.path.abspath(svntest.main.temp_dir)
+    config_dir = os.path.join(tmp_dir, 'config_' + self.name)
+    svntest.main.create_config_dir(config_dir, config_contents, server_contents,
+                                   ssl_cert, ssl_url, http_proxy,
+                                   exclusive_wc_locks)
+    return config_dir
+
   def cleanup_test_paths(self):
     "Clean up detritus from this sandbox, and any dependents."
     if self.dependents:
@@ -277,7 +291,7 @@ class Sandbox:
                                   temporary and 'TEMP' or 'PERM',
                                   parts[1])
 
-  def file_protocol_url(self):
+  def file_protocol_repo_url(self):
     """get a file:// url pointing to the repository"""
     return svntest.main.file_scheme_prefix + \
            svntest.wc.svn_uri_quote(
@@ -434,7 +448,8 @@ class Sandbox:
   def simple_append(self, dest, contents, truncate=False):
     """Append CONTENTS to file DEST, optionally truncating it first.
        DEST is a relpath relative to the WC."""
-    open(self.ospath(dest), truncate and 'wb' or 'ab').write(contents)
+    svntest.main.file_write(self.ospath(dest), contents,
+                            truncate and 'wb' or 'ab')
 
   def simple_lock(self, *targets):
     """Lock TARGETS in the WC.

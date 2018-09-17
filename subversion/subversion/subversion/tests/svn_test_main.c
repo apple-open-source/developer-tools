@@ -104,6 +104,7 @@ enum test_options_e {
   reposdir_opt,
   reposurl_opt,
   repostemplate_opt,
+  memcached_server_opt,
   mode_filter_opt,
   sqlite_log_opt,
   parallel_opt,
@@ -144,6 +145,8 @@ static const apr_getopt_option_t cl_options[] =
                     N_("the url to access reposdir as")},
   {"repos-template",repostemplate_opt, 1,
                     N_("the repository to use as template")},
+  {"memcached-server", memcached_server_opt, 1,
+                    N_("the memcached server to use")},
   {"sqlite-logging", sqlite_log_opt, 0,
                     N_("enable SQLite logging")},
   {"parallel",      parallel_opt, 0,
@@ -180,7 +183,7 @@ static void set_cleanup_pool(apr_pool_t *pool)
 }
 
 /* Get the thread-specific cleanup pool. */
-static apr_pool_t *get_cleanup_pool()
+static apr_pool_t *get_cleanup_pool(void)
 {
   void *data;
   apr_status_t status = apr_threadkey_private_get(&data, cleanup_pool_key);
@@ -404,26 +407,29 @@ do_test_num(const char *progname,
             apr_pool_t *pool)
 {
   svn_boolean_t skip, xfail, wimp;
-  svn_error_t *err = NULL;
+  svn_error_t *err;
   const char *msg = NULL;  /* the message this individual test prints out */
   const struct svn_test_descriptor_t *desc;
   const int array_size = get_array_size(test_funcs);
   svn_boolean_t run_this_test; /* This test's mode matches DESC->MODE. */
   enum svn_test_mode_t test_mode;
+  volatile int adjusted_num = test_num; /* volatile for setjmp */
+
+  /* This allows './some-test -- -1' to run the last test. */
+  if (adjusted_num < 0)
+    adjusted_num += array_size + 1;
 
   /* Check our array bounds! */
-  if (test_num < 0)
-    test_num += array_size + 1;
-  if ((test_num > array_size) || (test_num <= 0))
+  if ((adjusted_num > array_size) || (adjusted_num <= 0))
     {
       if (header_msg && *header_msg)
         printf("%s", *header_msg);
-      printf("FAIL: %s: THERE IS NO TEST NUMBER %2d\n", progname, test_num);
+      printf("FAIL: %s: THERE IS NO TEST NUMBER %2d\n", progname, adjusted_num);
       skip_cleanup = TRUE;
       return TRUE;  /* BAIL, this test number doesn't exist. */
     }
 
-  desc = &test_funcs[test_num];
+  desc = &test_funcs[adjusted_num];
   /* Check the test predicate. */
   if (desc->predicate.func
       && desc->predicate.func(opts, desc->predicate.value, pool))
@@ -459,7 +465,7 @@ do_test_num(const char *progname,
     {
       /* Do test */
       if (msg_only || skip || !run_this_test)
-        ; /* pass */
+        err = NULL; /* pass */
       else if (desc->func2)
         err = (*desc->func2)(pool);
       else
@@ -477,7 +483,7 @@ do_test_num(const char *progname,
     }
 
   /* Failure means unexpected results -- FAIL or XPASS. */
-  skip_cleanup = log_results(progname, test_num, msg_only, run_this_test,
+  skip_cleanup = log_results(progname, adjusted_num, msg_only, run_this_test,
                              skip, xfail, wimp, err, msg, desc);
 
   return skip_cleanup;
@@ -746,13 +752,31 @@ svn_test__init_auth_baton(svn_auth_baton_t **ab,
                  SVN_CONFIG_OPTION_PASSWORD_STORES,
                  "windows-cryptoapi");
 
-  SVN_ERR(svn_cmdline_create_auth_baton(ab,
-                                        TRUE  /* non_interactive */,
-                                        "jrandom", "rayjandom",
-                                        NULL,
-                                        TRUE  /* no_auth_cache */,
-                                        FALSE /* trust_server_cert */,
-                                        cfg_config, NULL, NULL, result_pool));
+  SVN_ERR(svn_cmdline_create_auth_baton2(ab,
+                                         TRUE  /* non_interactive */,
+                                         "jrandom", "rayjandom",
+                                         NULL,
+                                         TRUE  /* no_auth_cache */,
+                                         TRUE /* trust_server_cert_unkown_ca */,
+                                         FALSE, FALSE, FALSE, FALSE,
+                                         cfg_config, NULL, NULL, result_pool));
+
+  return SVN_NO_ERROR;
+}
+
+svn_error_t *
+svn_test_make_sandbox_dir(const char **sb_dir_p,
+                          const char *sb_name,
+                          apr_pool_t *pool)
+{
+  const char *sb_dir;
+
+  sb_dir = svn_test_data_path(sb_name, pool);
+  SVN_ERR(svn_io_remove_dir2(sb_dir, TRUE, NULL, NULL, pool));
+  SVN_ERR(svn_io_make_dir_recursively(sb_dir, pool));
+  svn_test_add_dir_cleanup(sb_dir);
+
+  *sb_dir_p = sb_dir;
 
   return SVN_NO_ERROR;
 }
@@ -867,6 +891,10 @@ svn_test_main(int argc, const char *argv[], int max_threads,
 
   if (err)
     return svn_cmdline_handle_exit_error(err, pool, opts.prog_name);
+
+  /* For efficient UTF8 handling (e.g. used by our file I/O routines). */
+  svn_utf_initialize2(FALSE, pool);
+
   while (1)
     {
       const char *opt_arg;
@@ -913,6 +941,10 @@ svn_test_main(int argc, const char *argv[], int max_threads,
                                               pool));
           opts.repos_template = svn_dirent_internal_style(opts.repos_template,
                                                           pool);
+          break;
+        case memcached_server_opt:
+          SVN_INT_ERR(svn_utf_cstring_to_utf8(&opts.memcached_server, opt_arg,
+                                              pool));
           break;
         case list_opt:
           list_mode = TRUE;

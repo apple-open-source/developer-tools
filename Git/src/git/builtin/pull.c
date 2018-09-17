@@ -86,6 +86,7 @@ static int recurse_submodules = RECURSE_SUBMODULES_DEFAULT;
 static enum rebase_type opt_rebase = -1;
 static char *opt_diffstat;
 static char *opt_log;
+static char *opt_signoff;
 static char *opt_squash;
 static char *opt_commit;
 static char *opt_edit;
@@ -144,6 +145,9 @@ static struct option pull_options[] = {
 	OPT_PASSTHRU(0, "log", &opt_log, N_("n"),
 		N_("add (at most <n>) entries from shortlog to merge commit message"),
 		PARSE_OPT_OPTARG),
+	OPT_PASSTHRU(0, "signoff", &opt_signoff, NULL,
+		N_("add Signed-off-by:"),
+		PARSE_OPT_OPTARG),
 	OPT_PASSTHRU(0, "squash", &opt_squash, NULL,
 		N_("create a single commit instead of doing a merge"),
 		PARSE_OPT_NOARG),
@@ -189,7 +193,7 @@ static struct option pull_options[] = {
 	OPT_PASSTHRU(0, "upload-pack", &opt_upload_pack, N_("path"),
 		N_("path to upload pack on remote end"),
 		0),
-	OPT__FORCE(&opt_force, N_("force overwrite of local branch")),
+	OPT__FORCE(&opt_force, N_("force overwrite of local branch"), 0),
 	OPT_PASSTHRU('t', "tags", &opt_tags, NULL,
 		N_("fetch all tags and associated objects"),
 		PARSE_OPT_NOARG),
@@ -553,10 +557,10 @@ static int pull_into_void(const struct object_id *merge_head,
 	 * index/worktree changes that the user already made on the unborn
 	 * branch.
 	 */
-	if (checkout_fast_forward(&empty_tree_oid, merge_head, 0))
+	if (checkout_fast_forward(the_hash_algo->empty_tree, merge_head, 0))
 		return 1;
 
-	if (update_ref("initial pull", "HEAD", merge_head->hash, curr_head->hash, 0, UPDATE_REFS_DIE_ON_ERR))
+	if (update_ref("initial pull", "HEAD", merge_head, curr_head, 0, UPDATE_REFS_DIE_ON_ERR))
 		return 1;
 
 	return 0;
@@ -570,6 +574,7 @@ static int rebase_submodules(void)
 	cp.no_stdin = 1;
 	argv_array_pushl(&cp.args, "submodule", "update",
 				   "--recursive", "--rebase", NULL);
+	argv_push_verbosity(&cp.args);
 
 	return run_command(&cp);
 }
@@ -582,6 +587,7 @@ static int update_submodules(void)
 	cp.no_stdin = 1;
 	argv_array_pushl(&cp.args, "submodule", "update",
 				   "--recursive", "--checkout", NULL);
+	argv_push_verbosity(&cp.args);
 
 	return run_command(&cp);
 }
@@ -606,6 +612,8 @@ static int run_merge(void)
 		argv_array_push(&args, opt_diffstat);
 	if (opt_log)
 		argv_array_push(&args, opt_log);
+	if (opt_signoff)
+		argv_array_push(&args, opt_signoff);
 	if (opt_squash)
 		argv_array_push(&args, opt_squash);
 	if (opt_commit)

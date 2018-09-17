@@ -61,11 +61,11 @@
   void *callback_baton,
   void *progress_baton,
   void *commit_baton,
+  void *receiver_baton,
   void *update_baton,
   void *switch_baton,
   void *status_baton,
   void *diff_baton,
-  void *receiver_baton,
   void *handler_baton,
   void *lock_baton,
   void *ra_baton

@@ -110,7 +110,12 @@ get_value(dav_db *db, const dav_prop_name *name, svn_string_t **pvalue)
       return NULL;
     }
 
-  /* ### if db->props exists, then try in there first */
+  /* If db->props exists, then use it to obtain property value. */
+  if (db->props)
+    {
+      *pvalue = svn_hash_gets(db->props, propname);
+      return NULL;
+    }
 
   /* We've got three different types of properties (node, txn, and
      revision), and we've got two different protocol versions to deal
@@ -199,7 +204,7 @@ save_value(dav_db *db, const dav_prop_name *name,
         /* ignore the unknown namespace of the incoming prop. */
         propname = name->name;
       else
-        return dav_svn__new_error(db->p, HTTP_CONFLICT, 0,
+        return dav_svn__new_error(db->p, HTTP_CONFLICT, 0, 0,
                                   "Properties may only be defined in the "
                                   SVN_DAV_PROP_NS_SVN " and "
                                   SVN_DAV_PROP_NS_CUSTOM " namespaces.");
@@ -328,7 +333,7 @@ db_open(apr_pool_t *p,
          changing unversioned rev props.  Remove this someday: see IZ #916. */
       if (! (resource->baselined
              && resource->type == DAV_RESOURCE_TYPE_VERSION))
-        return dav_svn__new_error(p, HTTP_CONFLICT, 0,
+        return dav_svn__new_error(p, HTTP_CONFLICT, 0, 0,
                                   "Properties may only be changed on working "
                                   "resources.");
     }
@@ -479,7 +484,7 @@ decode_property_value(const svn_string_t **out_propval_p,
             *out_propval_p = svn_base64_decode_string(maybe_encoded_propval,
                                                       pool);
           else
-            return dav_svn__new_error(pool, HTTP_INTERNAL_SERVER_ERROR, 0,
+            return dav_svn__new_error(pool, HTTP_INTERNAL_SERVER_ERROR, 0, 0,
                                       "Unknown property encoding");
           break;
         }
@@ -526,7 +531,7 @@ db_store(dav_db *db,
 
   if (absent && ! elem->first_child)
     /* ### better error check */
-    return dav_svn__new_error(pool, HTTP_INTERNAL_SERVER_ERROR, 0,
+    return dav_svn__new_error(pool, HTTP_INTERNAL_SERVER_ERROR, 0, 0,
                               apr_psprintf(pool,
                                            "'%s' cannot be specified on the "
                                            "value without specifying an "
@@ -705,19 +710,14 @@ db_first_name(dav_db *db, dav_prop_name *pname)
         }
       else
         {
-          svn_node_kind_t kind;
           serr = svn_fs_node_proplist(&db->props,
                                       db->resource->info->root.root,
                                       get_repos_path(db->resource->info),
                                       db->p);
-          if (! serr)
-            serr = svn_fs_check_path(&kind, db->resource->info->root.root,
-                                     get_repos_path(db->resource->info),
-                                     db->p);
 
           if (! serr)
             {
-              if (kind == svn_node_dir)
+              if (db->resource->collection)
                 action = svn_log__get_dir(db->resource->info->repos_path,
                                           db->resource->info->root.rev,
                                           FALSE, TRUE, 0, db->resource->pool);

@@ -97,6 +97,8 @@ main(int argc, char *argv[])
 	addarg("-Wignored-qualifiers"); /* Radar 13535742 */
 	addarg("-fmath-errno");  /* Radar 4011622 */
 	addarg("-fno-blocks");  /* Radar 13118788 */
+	addarg("-Wno-nullability-completeness"); /* Radar 40179527 */
+	addarg("-Wno-nullability-extension"); /* Radar 40179527 */
 
 	for (;;)
 	  {

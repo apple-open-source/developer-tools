@@ -35,11 +35,8 @@ if sys.hexversion < 0x2070000:
 try:
   import sqlite3
 except ImportError:
-  try:
-    from pysqlite2 import dbapi2 as sqlite3
-  except ImportError:
-    sys.stderr.write('[SKIPPED] Python sqlite3 module required\n')
-    sys.exit(0)
+  sys.stderr.write('[SKIPPED] Python sqlite3 module required\n')
+  sys.exit(0)
 
 # don't export this name
 del sys
@@ -53,11 +50,11 @@ class Skip(Exception):
   pass
 
 # import in a specific order: things with the fewest circular imports first.
-import testcase
-import wc
-import verify
-import tree
-import sandbox
-import main
-import actions
-import factory
+from . import testcase
+from . import wc
+from . import verify
+from . import tree
+from . import sandbox
+from . import main
+from . import actions
+from . import factory

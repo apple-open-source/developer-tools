@@ -101,25 +101,19 @@ def write_authz_file_groups(sbox):
 
 def verify_get(test_area_url, path, user, pw,
                expected_status, expected_body, headers):
-  import httplib
-  from urlparse import urlparse
   import base64
 
   req_url = test_area_url + path
 
-  loc = urlparse(req_url)
-
-  if loc.scheme == 'http':
-    h = httplib.HTTPConnection(loc.hostname, loc.port)
-  else:
-    h = httplib.HTTPSConnection(loc.hostname, loc.port)
+  h = svntest.main.create_http_connection(req_url, 0)
 
   if headers is None:
     headers = {}
 
   if user and pw:
       auth_info = user + ':' + pw
-      headers['Authorization'] = 'Basic ' + base64.b64encode(auth_info)
+      user_pw = base64.b64encode(auth_info.encode()).decode()
+      headers['Authorization'] = 'Basic ' + user_pw
   else:
       auth_info = "anonymous"
 
@@ -138,6 +132,8 @@ def verify_get(test_area_url, path, user, pw,
 
   if expected_body:
       actual_body = r.read()
+      if isinstance(expected_body, str) and not isinstance(actual_body, str):
+        actual_body = actual_body.decode()
       if expected_body != actual_body:
         logger.warn("Expected body:")
         logger.warn(expected_body)

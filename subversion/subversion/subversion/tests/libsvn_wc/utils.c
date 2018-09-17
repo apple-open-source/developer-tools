@@ -139,12 +139,9 @@ svn_test__create_fake_wc(const char *wc_abspath,
    * refer to it over its lifetime. */
   my_statements = apr_palloc(scratch_pool, 7 * sizeof(const char *));
   my_statements[0] = statements[STMT_CREATE_SCHEMA];
-  my_statements[1] = statements[STMT_CREATE_NODES];
-  my_statements[2] = statements[STMT_CREATE_NODES_TRIGGERS];
-  my_statements[3] = statements[STMT_CREATE_EXTERNALS];
-  my_statements[4] = statements[STMT_INSTALL_SCHEMA_STATISTICS];
-  my_statements[5] = extra_statements;
-  my_statements[6] = NULL;
+  my_statements[1] = statements[STMT_INSTALL_SCHEMA_STATISTICS];
+  my_statements[2] = extra_statements;
+  my_statements[3] = NULL;
 
   /* Create fake-wc/SUBDIR/.svn/ for placing the metadata. */
   SVN_ERR(svn_io_make_dir_recursively(dotsvn_abspath, scratch_pool));
@@ -530,6 +527,9 @@ sbox_wc_update_depth(svn_test__sandbox_t *b,
   APR_ARRAY_PUSH(paths, const char *) = sbox_wc_path(b, path);
   SVN_ERR(svn_test__create_client_ctx(&ctx, b, b->pool));
 
+  /* Note: Tree conflict resolver tests for libsvn_client depend on this
+   * passing FALSE for adds_as_modifications so that tree conflicts are
+   * created in case of add vs add upon update. */
   return svn_client_update4(&result_revs, paths, &revision, depth,
                             sticky, FALSE, FALSE, FALSE, FALSE,
                             ctx, b->pool);

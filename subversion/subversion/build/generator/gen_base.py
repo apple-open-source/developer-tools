@@ -288,7 +288,7 @@ class GeneratorBase:
             '  { %d, "%s" },' % (num, val),
           ])
 
-       # Remove ',' for c89 compatibility
+      # Remove ',' for c89 compatibility
       lines[-1] = lines[-1][0:-1]
 
       lines.extend([
@@ -296,7 +296,14 @@ class GeneratorBase:
           '',
         ])
 
-    write_struct('svn__errno', errno.errorcode.items())
+    # errno names can vary depending on the Python, and possibly the
+    # OS, version and they are not even used by normal release builds
+    # so omit them from the tarball. We always want the struct itself
+    # so that SVN_DEBUG builds still compile and it needs a dummy
+    # entry to avoid a zero-sized array.
+    write_struct('svn__errno',
+                 [(0, "success")] if self.release_mode
+                                  else errno.errorcode.items())
 
     # Fetch and write apr_errno.h codes.
     aprerr = []
@@ -324,7 +331,8 @@ class GeneratorBase:
                                '\n'.join(lines))
 
   def errno_filter(self, codes):
-    return codes
+    # list() to force the generator under python3
+    return list(codes)
 
   class FileSectionOptionEnum(object):
     # These are accessed via getattr() later on
@@ -596,6 +604,7 @@ class TargetLinked(Target):
     self.external_lib = options.get('external-lib')
     self.external_project = options.get('external-project')
     self.msvc_libs = options.get('msvc-libs', '').split()
+    self.msvc_delayload_targets = []
 
   def add_dependencies(self):
     if self.external_lib or self.external_project:
@@ -696,6 +705,7 @@ class TargetLib(TargetLinked):
     self.link_cmd = options.get('link-cmd', '$(LINK_LIB)')
 
     self.msvc_static = options.get('msvc-static') == 'yes' # is a static lib
+    self.msvc_delayload = options.get('msvc-delayload') == 'yes' # Delay dll load
     self.msvc_fake = options.get('msvc-fake') == 'yes' # has fake target
     self.msvc_export = options.get('msvc-export', '').split()
 
@@ -716,6 +726,22 @@ class TargetApacheMod(TargetLib):
     ### hmm. this is Makefile-specific
     self.compile_cmd = '$(COMPILE_APACHE_MOD)'
     self.link_cmd = '$(LINK_APACHE_MOD)'
+
+class TargetSharedOnlyLib(TargetLib):
+
+  def __init__(self, name, options, gen_obj):
+    TargetLib.__init__(self, name, options, gen_obj)
+
+    self.compile_cmd = '$(COMPILE_SHARED_ONLY_LIB)'
+    self.link_cmd = '$(LINK_SHARED_ONLY_LIB)'
+
+class TargetSharedOnlyCxxLib(TargetLib):
+
+  def __init__(self, name, options, gen_obj):
+    TargetLib.__init__(self, name, options, gen_obj)
+
+    self.compile_cmd = '$(COMPILE_SHARED_ONLY_CXX_LIB)'
+    self.link_cmd = '$(LINK_SHARED_ONLY_CXX_LIB)'
 
 class TargetRaModule(TargetLib):
   pass
@@ -1029,6 +1055,8 @@ _build_types = {
   'ra-module': TargetRaModule,
   'fs-module': TargetFsModule,
   'apache-mod': TargetApacheMod,
+  'shared-only-lib': TargetSharedOnlyLib,
+  'shared-only-cxx-lib': TargetSharedOnlyCxxLib,
   'javah' : TargetJavaHeaders,
   'java' : TargetJavaClasses,
   'i18n' : TargetI18N,

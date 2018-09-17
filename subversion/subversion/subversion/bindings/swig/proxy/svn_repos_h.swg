@@ -14,8 +14,11 @@
   svn_repos_authz_func_t,
   svn_repos_authz_callback_t,
   svn_repos_notify_func_t,
+  svn_repos_dump_filter_func_t,
   svn_repos_freeze_func_t,
   svn_repos_history_func_t,
+  svn_repos_path_change_receiver_t,
+  svn_repos_log_entry_receiver_t,
   svn_repos_file_rev_handler_t,
   svn_repos_verify_callback_t
 };
@@ -23,8 +26,11 @@
   svn_repos_authz_func_t *,
   svn_repos_authz_callback_t *,
   svn_repos_notify_func_t *,
+  svn_repos_dump_filter_func_t *,
   svn_repos_freeze_func_t *,
   svn_repos_history_func_t *,
+  svn_repos_path_change_receiver_t *,
+  svn_repos_log_entry_receiver_t *,
   svn_repos_file_rev_handler_t *,
   svn_repos_verify_callback_t *
 };
@@ -44,11 +50,14 @@
   void *commit_baton,
   void *authz_baton,
   void *callback_baton,
-  void *history_baton,
   void *receiver_baton,
+  void *history_baton,
+  void *path_change_receiver_baton,
+  void *revision_receiver_baton,
   void *handler_baton,
   void *lock_baton,
   void *verify_baton,
+  void *filter_baton,
   void *parse_baton,
   void *revision_baton,
   void *node_baton
@@ -65,6 +74,7 @@
 #ifdef SWIGPYTHON
 %proxy(svn_repos_notify_t);
 %opaque_proxy(svn_repos_t);
+%proxy(svn_repos_log_entry_t);
 %proxy(svn_repos_node_t);
 %proxy(svn_repos_parse_fns3_t);
 %proxy(svn_repos_parse_fns2_t);
@@ -205,6 +215,11 @@ static void svn_repos_invoke_notify_func(
   _obj(baton, notify, scratch_pool);
 }
 
+static svn_error_t * svn_repos_invoke_dump_filter_func(
+  svn_repos_dump_filter_func_t _obj, svn_boolean_t *include, svn_fs_root_t *root, const char *path, void *baton, apr_pool_t *scratch_pool) {
+  return _obj(include, root, path, baton, scratch_pool);
+}
+
 static svn_error_t * svn_repos_invoke_freeze_func(
   svn_repos_freeze_func_t _obj, void *baton, apr_pool_t *pool) {
   return _obj(baton, pool);
@@ -213,6 +228,16 @@ static svn_error_t * svn_repos_invoke_freeze_func(
 static svn_error_t * svn_repos_invoke_history_func(
   svn_repos_history_func_t _obj, void *baton, const char *path, svn_revnum_t revision, apr_pool_t *pool) {
   return _obj(baton, path, revision, pool);
+}
+
+static svn_error_t * svn_repos_invoke_path_change_receiver(
+  svn_repos_path_change_receiver_t _obj, void *baton, svn_repos_path_change_t *change, apr_pool_t *scratch_pool) {
+  return _obj(baton, change, scratch_pool);
+}
+
+static svn_error_t * svn_repos_invoke_log_entry_receiver(
+  svn_repos_log_entry_receiver_t _obj, void *baton, svn_repos_log_entry_t *log_entry, apr_pool_t *scratch_pool) {
+  return _obj(baton, log_entry, scratch_pool);
 }
 
 static svn_error_t * svn_repos_invoke_file_rev_handler(
@@ -254,8 +279,11 @@ static svn_error_t * svn_repos_invoke_verify_callback(
 %funcptr_proxy(svn_repos_authz_func_t, svn_repos_invoke_authz_func);
 %funcptr_proxy(svn_repos_authz_callback_t, svn_repos_invoke_authz_callback);
 %funcptr_proxy(svn_repos_notify_func_t, svn_repos_invoke_notify_func);
+%funcptr_proxy(svn_repos_dump_filter_func_t, svn_repos_invoke_dump_filter_func);
 %funcptr_proxy(svn_repos_freeze_func_t, svn_repos_invoke_freeze_func);
 %funcptr_proxy(svn_repos_history_func_t, svn_repos_invoke_history_func);
+%funcptr_proxy(svn_repos_path_change_receiver_t, svn_repos_invoke_path_change_receiver);
+%funcptr_proxy(svn_repos_log_entry_receiver_t, svn_repos_invoke_log_entry_receiver);
 %funcptr_proxy(svn_repos_file_rev_handler_t, svn_repos_invoke_file_rev_handler);
 %funcptr_proxy(svn_repos_verify_callback_t, svn_repos_invoke_verify_callback);
 

@@ -32,23 +32,14 @@
 #include <apr_strings.h>
 #include <apr_uri.h>
 
-#include <expat.h>
-
 #include "mod_dav_svn.h"
 #include "svn_string.h"
 #include "svn_config.h"
 #include "svn_path.h"
+#include "svn_xml.h"
 #include "private/svn_fspath.h"
 
 extern module AP_MODULE_DECLARE_DATA dontdothat_module;
-
-#ifndef XML_VERSION_AT_LEAST
-#define XML_VERSION_AT_LEAST(major,minor,patch)                  \
-(((major) < XML_MAJOR_VERSION)                                       \
- || ((major) == XML_MAJOR_VERSION && (minor) < XML_MINOR_VERSION)    \
- || ((major) == XML_MAJOR_VERSION && (minor) == XML_MINOR_VERSION && \
-     (patch) <= XML_MICRO_VERSION))
-#endif /* XML_VERSION_AT_LEAST */
 
 typedef struct dontdothat_config_rec {
   const char *config_file;
@@ -95,7 +86,7 @@ typedef struct dontdothat_filter_ctx {
    * stopped in its tracks. */
   svn_boolean_t no_soup_for_you;
 
-  XML_Parser xmlp;
+  svn_xml_parser_t *xmlp;
 
   /* The current location in the REPORT body. */
   parse_state_t state;
@@ -327,6 +318,7 @@ dontdothat_filter(ap_filter_t *f,
       svn_boolean_t last = APR_BUCKET_IS_EOS(e);
       const char *str;
       apr_size_t len;
+      svn_error_t *err;
 
       if (last)
         {
@@ -340,12 +332,14 @@ dontdothat_filter(ap_filter_t *f,
             return rv;
         }
 
-      if (! XML_Parse(ctx->xmlp, str, (int)len, last))
+      err = svn_xml_parse(ctx->xmlp, str, len, last);
+      if (err)
         {
           /* let_it_go so we clean up our parser, no_soup_for_you so that we
            * bail out before bothering to parse this stuff a second time. */
           ctx->let_it_go = TRUE;
           ctx->no_soup_for_you = TRUE;
+          svn_error_clear(err);
         }
 
       /* If we found something that isn't allowed, set the correct status
@@ -394,8 +388,9 @@ dontdothat_filter(ap_filter_t *f,
   return rv;
 }
 
+/* Implements svn_xml_char_data callback */
 static void
-cdata(void *baton, const char *data, int len)
+cdata(void *baton, const char *data, apr_size_t len)
 {
   dontdothat_filter_ctx *ctx = baton;
 
@@ -422,6 +417,7 @@ cdata(void *baton, const char *data, int len)
     }
 }
 
+/* Implements svn_xml_start_elem callback */
 static void
 start_element(void *baton, const char *name, const char **attrs)
 {
@@ -487,6 +483,7 @@ start_element(void *baton, const char *name, const char **attrs)
     }
 }
 
+/* Implements svn_xml_end_elem callback */
 static void
 end_element(void *baton, const char *name)
 {
@@ -559,31 +556,6 @@ end_element(void *baton, const char *name)
     }
 }
 
-#if XML_VERSION_AT_LEAST(1, 95, 8)
-static void
-expat_entity_declaration(void *userData,
-                         const XML_Char *entityName,
-                         int is_parameter_entity,
-                         const XML_Char *value,
-                         int value_length,
-                         const XML_Char *base,
-                         const XML_Char *systemId,
-                         const XML_Char *publicId,
-                         const XML_Char *notationName)
-{
-  dontdothat_filter_ctx *ctx = userData;
-
-  /* Stop the parser if an entity declaration is hit. */
-  XML_StopParser(ctx->xmlp, 0 /* resumable */);
-}
-#else
-/* A noop default_handler. */
-static void
-expat_default_handler(void *userData, const XML_Char *s, int len)
-{
-}
-#endif
-
 static svn_boolean_t
 is_valid_wildcard(const char *wc)
 {
@@ -641,16 +613,6 @@ config_enumerator(const char *wildcard,
     return FALSE;
   else
     return TRUE;
-}
-
-static apr_status_t
-clean_up_parser(void *baton)
-{
-  XML_Parser xmlp = baton;
-
-  XML_ParserFree(xmlp);
-
-  return APR_SUCCESS;
 }
 
 static void
@@ -719,21 +681,8 @@ dontdothat_insert_filters(request_rec *r)
 
       ctx->state = STATE_BEGINNING;
 
-      ctx->xmlp = XML_ParserCreate(NULL);
-
-      apr_pool_cleanup_register(r->pool, ctx->xmlp,
-                                clean_up_parser,
-                                apr_pool_cleanup_null);
-
-      XML_SetUserData(ctx->xmlp, ctx);
-      XML_SetElementHandler(ctx->xmlp, start_element, end_element);
-      XML_SetCharacterDataHandler(ctx->xmlp, cdata);
-
-#if XML_VERSION_AT_LEAST(1, 95, 8)
-      XML_SetEntityDeclHandler(ctx->xmlp, expat_entity_declaration);
-#else
-      XML_SetDefaultHandler(ctx->xmlp, expat_default_handler);
-#endif
+      ctx->xmlp = svn_xml_make_parser(ctx, start_element, end_element,
+                                      cdata, r->pool);
 
       ap_add_input_filter("DONTDOTHAT_FILTER", ctx, r, r->connection);
     }

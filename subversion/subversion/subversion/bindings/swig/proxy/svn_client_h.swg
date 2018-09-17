@@ -4,6 +4,8 @@
 
 /* No default constructors for opaque structs */
 #ifdef SWIGPYTHON
+%nodefault svn_client_conflict_t;
+%nodefault svn_client_conflict_option_t;
 #endif
 
 /* Callback typemaps */
@@ -20,6 +22,7 @@
   svn_client_diff_summarize_func_t,
   svn_client_import_filter_func_t,
   svn_client_status_func_t,
+  svn_client_conflict_walk_func_t,
   svn_client_list_func2_t,
   svn_client_list_func_t,
   svn_info_receiver_t,
@@ -38,6 +41,7 @@
   svn_client_diff_summarize_func_t *,
   svn_client_import_filter_func_t *,
   svn_client_status_func_t *,
+  svn_client_conflict_walk_func_t *,
   svn_client_list_func2_t *,
   svn_client_list_func_t *,
   svn_info_receiver_t *,
@@ -67,6 +71,7 @@
   void *status_baton,
   void *receiver_baton,
   void *summarize_baton,
+  void *conflict_walk_func_baton,
   void *callback_baton,
   void *patch_baton
 };
@@ -88,7 +93,10 @@
 %proxy(svn_client_diff_summarize_t);
 %proxy(svn_client_ctx_t);
 %proxy(svn_client_status_t);
+%opaque_proxy(svn_client_conflict_t);
+%opaque_proxy(svn_client_conflict_option_t);
 %proxy(svn_client_copy_source_t);
+%proxy(svn_client_shelved_patch_info_t);
 %proxy(svn_info_t);
 %proxy(svn_client_info2_t);
 #endif
@@ -151,6 +159,11 @@ static svn_error_t * svn_client_invoke_status_func(
   return _obj(baton, path, status, scratch_pool);
 }
 
+static svn_error_t * svn_client_invoke_conflict_walk_func(
+  svn_client_conflict_walk_func_t _obj, void *baton, svn_client_conflict_t *conflict, apr_pool_t *scratch_pool) {
+  return _obj(baton, conflict, scratch_pool);
+}
+
 static svn_error_t * svn_client_invoke_list_func2(
   svn_client_list_func2_t _obj, void *baton, const char *path, const svn_dirent_t *dirent, const svn_lock_t *lock, const char *abs_path, const char *external_parent_url, const char *external_target, apr_pool_t *scratch_pool) {
   return _obj(baton, path, dirent, lock, abs_path, external_parent_url, external_target, scratch_pool);
@@ -190,6 +203,7 @@ static svn_error_t * svn_client_invoke_patch_func(
 %funcptr_proxy(svn_client_diff_summarize_func_t, svn_client_invoke_diff_summarize_func);
 %funcptr_proxy(svn_client_import_filter_func_t, svn_client_invoke_import_filter_func);
 %funcptr_proxy(svn_client_status_func_t, svn_client_invoke_status_func);
+%funcptr_proxy(svn_client_conflict_walk_func_t, svn_client_invoke_conflict_walk_func);
 %funcptr_proxy(svn_client_list_func2_t, svn_client_invoke_list_func2);
 %funcptr_proxy(svn_client_list_func_t, svn_client_invoke_list_func);
 %funcptr_proxy(svn_info_receiver_t, svn_info_invoke_receiver);

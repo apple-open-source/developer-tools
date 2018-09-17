@@ -13,7 +13,7 @@ endif
 APR_TOOLCHAIN_DIR=$(dir $(shell xcrun --toolchain $(TOOLCHAINS) -f apr-1-config))/..
 
 Project               = subversion
-ProjectVersion        = 1.9.7
+ProjectVersion        = 1.10.0
 
 #-------------------------------------------------------------------------
 # build/get-py-info.py appends "-framework Python" to its --link and --libs
@@ -28,7 +28,7 @@ Patches        = build_get-py-info.py.diff \
                  Makefile.in.diff \
                  spawn.diff \
                  xcode.diff \
-                 configure.noperlppc.diff \
+                 configure.noperli386.diff \
                  PR-11438447.diff \
                  build-outputs.mk.perl.diff \
                  serf-1.diff \
@@ -41,6 +41,10 @@ Extra_LD_Flags = -headerpad_max_install_names
 
 ifndef SDKROOT
 SDKROOT := $(shell xcrun --sdk macosx.internal --show-sdk-path)
+endif
+
+ifndef XCODE_SDKROOT
+XCODE_SDKROOT := $(shell xcrun --sdk com.apple.dt.xcode.macosx.support.internal --show-sdk-path)
 endif
 
 include $(DEVELOPER_DIR)/AppleInternal/Makefiles/DT_Signing.mk

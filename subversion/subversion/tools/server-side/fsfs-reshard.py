@@ -46,10 +46,10 @@
 #    under the License.
 # ====================================================================
 #
-# $HeadURL: https://svn.apache.org/repos/asf/subversion/branches/1.9.x/tools/server-side/fsfs-reshard.py $
-# $LastChangedDate: 2009-11-16 19:07:17 +0000 (Mon, 16 Nov 2009) $
-# $LastChangedBy: hwright $
-# $LastChangedRevision: 880911 $
+# $HeadURL: https://svn.apache.org/repos/asf/subversion/branches/1.10.x/tools/server-side/fsfs-reshard.py $
+# $LastChangedDate: 2016-04-30 08:16:53 +0000 (Sat, 30 Apr 2016) $
+# $LastChangedBy: stefan2 $
+# $LastChangedRevision: 1741723 $
 
 import os, stat, sys
 
@@ -277,7 +277,7 @@ def shard(path, max_files_per_shard, start, end):
   tmp = path + '.reshard'
   try:
     os.mkdir(tmp)
-  except OSError, e:
+  except OSError as e:
     if e.errno != EEXIST:
       raise
 
@@ -335,7 +335,7 @@ def main():
 
   try:
     max_files_per_shard = int(max_files_per_shard)
-  except ValueError, OverflowError:
+  except ValueError as OverflowError:
     sys.stderr.write("error: maximum files per shard ('%s') is not a valid number.\n" \
       % max_files_per_shard)
     sys.stderr.flush()

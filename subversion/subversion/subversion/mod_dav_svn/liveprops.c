@@ -239,7 +239,7 @@ get_last_modified_time(const char **datestring,
     }
 
   if (timeval)
-    memcpy(timeval, &timeval_tmp, sizeof(*timeval));
+    *timeval = timeval_tmp;
 
   if (! datestring)
     return 0;
@@ -423,43 +423,10 @@ insert_prop_internal(const dav_resource *resource,
         if (last_author == NULL)
           return DAV_PROP_INSERT_NOTDEF;
 
-        if (svn_xml_is_xml_safe(last_author->data, last_author->len)
-            || !resource->info->repos->is_svn_client)
-          value = apr_xml_quote_string(scratch_pool, last_author->data, 1);
-        else
-          {
-            /* We are talking to a Subversion client, which will (like any proper
-               xml parser) error out if we produce control characters in XML.
-
-               However Subversion clients process both the generic
-               <creator-displayname /> as the custom element for svn:author.
-
-               Let's skip outputting the invalid characters here to make the XML
-               valid, so clients can see the custom element.
-
-               Subversion Clients will then either use a slightly invalid
-               author (unlikely) or more likely use the second result, which
-               will be transferred with full escaping capabilities.
-
-               We have tests in place to assert proper behavior over the RA layer.
-             */
-            apr_size_t i;
-            svn_stringbuf_t *buf;
-
-            buf = svn_stringbuf_create_from_string(last_author, scratch_pool);
-
-            for (i = 0; i < buf->len; i++)
-              {
-                char c = buf->data[i];
-
-                if (svn_ctype_iscntrl(c))
-                  {
-                    svn_stringbuf_remove(buf, i--, 1);
-                  }
-              }
-
-            value = apr_xml_quote_string(scratch_pool, buf->data, 1);
-          }
+        /* We need to sanitize the LAST_AUTHOR. */
+        value = dav_svn__fuzzy_escape_author(last_author->data,
+                                      resource->info->repos->is_svn_client,
+                                      scratch_pool, scratch_pool);
         break;
       }
 
@@ -598,8 +565,8 @@ insert_prop_internal(const dav_resource *resource,
         {
           svn_revnum_t revnum;
 
-          serr = svn_fs_youngest_rev(&revnum, resource->info->repos->fs,
-                                     scratch_pool);
+          serr = dav_svn__get_youngest_rev(&revnum, resource->info->repos,
+                                           scratch_pool);
           if (serr != NULL)
             {
               ap_log_rerror(APLOG_MARK, APLOG_ERR, serr->apr_err,
@@ -720,7 +687,6 @@ insert_prop_internal(const dav_resource *resource,
               || resource->type == DAV_RESOURCE_TYPE_WORKING
               || resource->type == DAV_RESOURCE_TYPE_VERSION))
         {
-          svn_node_kind_t kind;
           svn_checksum_t *checksum;
           svn_checksum_kind_t checksum_kind;
 
@@ -733,14 +699,20 @@ insert_prop_internal(const dav_resource *resource,
               checksum_kind = svn_checksum_sha1;
             }
 
-          serr = svn_fs_check_path(&kind, resource->info->root.root,
-                                   resource->info->repos_path, scratch_pool);
-          if (!serr && kind == svn_node_file)
-            serr = svn_fs_file_checksum(&checksum, checksum_kind,
-                                        resource->info->root.root,
-                                        resource->info->repos_path, TRUE,
-                                        scratch_pool);
-          if (serr != NULL)
+          serr = svn_fs_file_checksum(&checksum, checksum_kind,
+                                      resource->info->root.root,
+                                      resource->info->repos_path, TRUE,
+                                      scratch_pool);
+          if (serr && serr->apr_err == SVN_ERR_FS_NOT_FILE)
+            {
+              /* It should not happen since we're already checked
+                 RESOURCE->COLLECTION, but svn_fs_check_path() call
+                 was added in r1239596 for some reason. Keep it for
+                 now. */
+              svn_error_clear(serr);
+              return DAV_PROP_INSERT_NOTSUPP;
+            }
+          else if (serr)
             {
               ap_log_rerror(APLOG_MARK, APLOG_ERR, serr->apr_err,
                             resource->info->r,
@@ -755,9 +727,6 @@ insert_prop_internal(const dav_resource *resource,
               value = error_value;
               break;
             }
-
-          if (kind != svn_node_file)
-            return DAV_PROP_INSERT_NOTSUPP;
 
           value = svn_checksum_to_cstring(checksum, scratch_pool);
 

@@ -36,6 +36,7 @@ import sys
 import tarfile
 import tempfile
 import logging
+import stat
 
 logger = logging.getLogger()
 
@@ -63,7 +64,7 @@ def replace_sbox_with_tarfile(sbox, tar_filename,
                               dir=None):
   try:
     svntest.main.safe_rmtree(sbox.wc_dir)
-  except OSError, e:
+  except OSError as e:
     pass
 
   if not dir:
@@ -81,7 +82,7 @@ def replace_sbox_with_tarfile(sbox, tar_filename,
 def replace_sbox_repo_with_tarfile(sbox, tar_filename, dir=None):
   try:
     svntest.main.safe_rmtree(sbox.repo_dir)
-  except OSError, e:
+  except OSError as e:
     pass
 
   if not dir:
@@ -130,7 +131,7 @@ def check_dav_cache(dir_path, wc_id, expected_dav_caches):
 
   # Check if python's sqlite can read our db
   c.execute('select sqlite_version()')
-  sqlite_ver = map(int, c.fetchone()[0].split('.'))
+  sqlite_ver = svntest.main.ensure_list(map(int, c.fetchone()[0].split('.')))
 
   # SQLite versions have 3 or 4 number groups
   major = sqlite_ver[0]
@@ -157,7 +158,7 @@ def check_dav_cache(dir_path, wc_id, expected_dav_caches):
     if row is None:
       raise svntest.Failure("no dav cache for '%s'" % (local_relpath))
     dav_cache = str(row[0])
-    if dav_cache != expected_dav_cache:
+    if dav_cache != str(expected_dav_cache):
       raise svntest.Failure(
               "wrong dav cache for '%s'\n  Found:    '%s'\n  Expected: '%s'" %
                 (local_relpath, dav_cache, expected_dav_cache))
@@ -378,9 +379,9 @@ def upgrade_wcprops(sbox):
   # to be.  (This could be smarter.)
   expected_dav_caches = {
    '' :
-    '(svn:wc:ra_dav:version-url 41 /svn-test-work/local_tmp/repos/!svn/ver/1)',
+    b'(svn:wc:ra_dav:version-url 41 /svn-test-work/local_tmp/repos/!svn/ver/1)',
    'iota' :
-    '(svn:wc:ra_dav:version-url 46 /svn-test-work/local_tmp/repos/!svn/ver/1/iota)',
+    b'(svn:wc:ra_dav:version-url 46 /svn-test-work/local_tmp/repos/!svn/ver/1/iota)',
   }
   check_dav_cache(sbox.wc_dir, 1, expected_dav_caches)
 
@@ -390,7 +391,7 @@ def xml_entries_relocate(path, from_url, to_url):
   adm_name = svntest.main.get_admin_name()
   entries = os.path.join(path, adm_name, 'entries')
   txt = open(entries).read().replace('url="' + from_url, 'url="' + to_url)
-  os.chmod(entries, 0777)
+  os.chmod(entries, svntest.main.S_ALL_RWX)
   open(entries, 'w').write(txt)
 
   for dirent in os.listdir(path):
@@ -408,8 +409,8 @@ def simple_entries_replace(path, from_url, to_url):
   adm_name = svntest.main.get_admin_name()
   entries = os.path.join(path, adm_name, 'entries')
   txt = open(entries).read().replace(from_url, to_url)
-  os.chmod(entries, 0777)
-  open(entries, 'wb').write(txt)
+  os.chmod(entries, svntest.main.S_ALL_RWX)
+  open(entries, 'wb').write(txt.encode())
 
   for dirent in os.listdir(path):
     item_path = os.path.join(path, dirent)
@@ -760,61 +761,6 @@ def dirs_only_upgrade(sbox):
       })
   run_and_verify_status_no_server(sbox.wc_dir, expected_status)
 
-def read_tree_conflict_data(sbox, path):
-  dot_svn = svntest.main.get_admin_name()
-  db = svntest.sqlite3.connect(os.path.join(sbox.wc_dir, dot_svn, 'wc.db'))
-  for row in db.execute("select tree_conflict_data from actual_node "
-                        "where tree_conflict_data is not null "
-                        "and local_relpath = '%s'" % path):
-    return
-  raise svntest.Failure("conflict expected for '%s'" % path)
-
-def no_actual_node(sbox, path):
-  dot_svn = svntest.main.get_admin_name()
-  db = svntest.sqlite3.connect(os.path.join(sbox.wc_dir, dot_svn, 'wc.db'))
-  for row in db.execute("select 1 from actual_node "
-                        "where local_relpath = '%s'" % path):
-    raise svntest.Failure("no actual node expected for '%s'" % path)
-
-def upgrade_tree_conflict_data(sbox):
-  "upgrade tree conflict data (f20->f21)"
-
-  wc_dir = sbox.wc_dir
-  replace_sbox_with_tarfile(sbox, 'upgrade_tc.tar.bz2')
-
-  # Check and see if we can still read our tree conflicts
-  expected_status = svntest.actions.get_virginal_state(wc_dir, 2)
-  expected_status.tweak('A/D/G/pi', status='D ', treeconflict='C')
-  expected_status.tweak('A/D/G/tau', status='! ', treeconflict='C',
-                        wc_rev=None)
-  expected_status.tweak('A/D/G/rho', status='A ', copied='+',
-                        treeconflict='C', wc_rev='-')
-
-  # Look inside pre-upgrade database
-  read_tree_conflict_data(sbox, 'A/D/G')
-  no_actual_node(sbox, 'A/D/G/pi')
-  no_actual_node(sbox, 'A/D/G/rho')
-  no_actual_node(sbox, 'A/D/G/tau')
-
-  # While the upgrade from f20 to f21 will work the upgrade from f22
-  # to f23 will not, since working nodes are present.
-  exit_code, output, errput = svntest.main.run_svn('format 22', 'upgrade',
-                                                    wc_dir)
-
-  if not exit_code:
-    run_and_verify_status_no_server(wc_dir, expected_status)
-  else:
-    if not svntest.verify.RegexOutput('.*format 22 with WORKING nodes.*',
-                                      match_all=False).matches(errput):
-      raise svntest.Failure()
-
-  # Look insde post-upgrade database
-  read_tree_conflict_data(sbox, 'A/D/G/pi')
-  read_tree_conflict_data(sbox, 'A/D/G/rho')
-  read_tree_conflict_data(sbox, 'A/D/G/tau')
-  # no_actual_node(sbox, 'A/D/G')  ### not removed but should be?
-
-
 @Issue(3898)
 def delete_in_copy_upgrade(sbox):
   "upgrade a delete within a copy"
@@ -971,27 +917,6 @@ def tree_replace2(sbox):
     })
   run_and_verify_status_no_server(sbox.wc_dir, expected_status)
 
-def upgrade_from_format_28(sbox):
-  """upgrade from format 28: rename pristines"""
-
-  # Start with a format-28 WC that is a clean checkout of the Greek tree.
-  replace_sbox_with_tarfile(sbox, 'format_28.tar.bz2')
-
-  # Get the old and new pristine file paths for file 'iota'.
-  checksum = '2c0aa9014a0cd07f01795a333d82485ef6d083e2'
-  old_pristine_path = os.path.join(sbox.wc_dir, svntest.main.get_admin_name(),
-                                   'pristine', checksum[0:2], checksum)
-  new_pristine_path = old_pristine_path + '.svn-base'
-
-  assert os.path.exists(old_pristine_path)
-  assert not os.path.exists(new_pristine_path)
-
-  # Upgrade the WC
-  svntest.actions.run_and_verify_svn(None, [], 'upgrade', sbox.wc_dir)
-
-  assert not os.path.exists(old_pristine_path)
-  assert os.path.exists(new_pristine_path)
-
 @Issue(3901)
 def depth_exclude(sbox):
   "upgrade 1.6.x wc that has depth=exclude"
@@ -1143,21 +1068,21 @@ def upgrade_file_externals(sbox):
   svntest.main.run_svnadmin('setuuid', sbox.repo_dir,
                             '07146bbd-0b64-4aaf-ab70-cd76a0df2d41')
 
-  expected_output = svntest.verify.RegexOutput('r2 committed.*')
+  expected_output = svntest.verify.RegexOutput(b'r2 committed.*')
   svntest.actions.run_and_verify_svnmucc(expected_output, [],
                                          '-m', 'r2',
                                          'propset', 'svn:externals',
                                          '^/A/B/E EX\n^/A/mu muX',
                                          sbox.repo_url + '/A/B/F')
 
-  expected_output = svntest.verify.RegexOutput('r3 committed.*')
+  expected_output = svntest.verify.RegexOutput(b'r3 committed.*')
   svntest.actions.run_and_verify_svnmucc(expected_output, [],
                                          '-m', 'r3',
                                          'propset', 'svn:externals',
                                          '^/A/B/F FX\n^/A/B/lambda lambdaX',
                                          sbox.repo_url + '/A/C')
 
-  expected_output = svntest.verify.RegexOutput('r4 committed.*')
+  expected_output = svntest.verify.RegexOutput(b'r4 committed.*')
   svntest.actions.run_and_verify_svnmucc(expected_output, [],
                                          '-m', 'r4',
                                          'propset', 'pname1', 'pvalue1',
@@ -1260,12 +1185,17 @@ def upgrade_not_present_replaced(sbox):
                                      sbox.wc_dir)
 
   expected_output = svntest.wc.State(sbox.wc_dir, {
-      'A/B/E'         : Item(status='E '),
-      'A/B/E/alpha'   : Item(status='A '),
-      'A/B/E/beta'    : Item(status='A '),
-      'A/B/lambda'    : Item(status='E '),
+      'A/B/E'         : Item(status='  ', treeconflict='C'),
+      'A/B/E/beta'    : Item(status='  ', treeconflict='A'),
+      'A/B/E/alpha'   : Item(status='  ', treeconflict='A'),
+      'A/B/lambda'    : Item(status='  ', treeconflict='C'),
       })
   expected_status = svntest.actions.get_virginal_state(sbox.wc_dir, 1)
+  expected_status.tweak('A/B/E', status='R ', treeconflict='C'),
+  expected_status.tweak('A/B/E/beta', status='D '),
+  expected_status.tweak('A/B/E/alpha', status='D '),
+  expected_status.tweak('A/B/lambda', status='R ', treeconflict='C'),
+
   svntest.actions.run_and_verify_update(sbox.wc_dir, expected_output,
                                         None, expected_status)
 
@@ -1462,14 +1392,15 @@ def auto_analyze(sbox):
   # svntest.main.chmod_tree will not reset it.)
   for path, subdirs, files in os.walk(sbox.wc_dir):
     for d in subdirs:
-      os.chmod(os.path.join(path, d), 0555)
+      os.chmod(os.path.join(path, d), svntest.main.S_ALL_RX)
     for f in files:
-      os.chmod(os.path.join(path, f), 0444)
+      os.chmod(os.path.join(path, f), svntest.main.S_ALL_READ)
 
   state = svntest.actions.get_virginal_state(sbox.wc_dir, 1)
   svntest.actions.run_and_verify_status(sbox.wc_dir, state)
 
-  svntest.main.chmod_tree(sbox.wc_dir, 0666, 0022)
+  svntest.main.chmod_tree(sbox.wc_dir, svntest.main.S_ALL_RW,
+                          stat.S_IWGRP | stat.S_IWOTH)
 
   state = svntest.actions.get_virginal_state(sbox.wc_dir, 1)
   svntest.actions.run_and_verify_status(sbox.wc_dir, state)
@@ -1599,13 +1530,11 @@ test_list = [ None,
               missing_dirs2,
               delete_and_keep_local,
               dirs_only_upgrade,
-              upgrade_tree_conflict_data,
               delete_in_copy_upgrade,
               replaced_files,
               upgrade_with_scheduled_change,
               tree_replace1,
               tree_replace2,
-              upgrade_from_format_28,
               depth_exclude,
               depth_exclude_2,
               add_add_del_del_tc,

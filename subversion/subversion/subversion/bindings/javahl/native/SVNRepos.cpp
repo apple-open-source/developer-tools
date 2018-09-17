@@ -240,12 +240,14 @@ void SVNRepos::dump(File &path, OutputStream &dataOut,
                      " (%ld)"), youngest), );
     }
 
-  SVN_JNI_ERR(svn_repos_dump_fs3(repos, dataOut.getStream(requestPool),
+  SVN_JNI_ERR(svn_repos_dump_fs4(repos, dataOut.getStream(requestPool),
                                  lower, upper, incremental, useDeltas,
+                                 true, true,
                                  notifyCallback != NULL
                                     ? ReposNotifyCallback::notify
                                     : NULL,
                                  notifyCallback,
+                                 NULL, NULL,
                                  checkCancel, this, requestPool.getPool()), );
 }
 
@@ -330,6 +332,7 @@ void SVNRepos::load(File &path,
                     bool usePostCommitHook,
                     bool validateProps,
                     bool ignoreDates,
+                    bool normalizeProps,
                     const char *relativePath,
                     ReposNotifyCallback *notifyCallback)
 {
@@ -366,10 +369,10 @@ void SVNRepos::load(File &path,
                               path.getInternalStyle(requestPool), NULL,
                               requestPool.getPool(), requestPool.getPool()), );
 
-  SVN_JNI_ERR(svn_repos_load_fs5(repos, dataIn.getStream(requestPool),
+  SVN_JNI_ERR(svn_repos_load_fs6(repos, dataIn.getStream(requestPool),
                                  lower, upper, uuid_action, relativePath,
                                  usePreCommitHook, usePostCommitHook,
-                                 validateProps, ignoreDates,
+                                 validateProps, ignoreDates, normalizeProps,
                                  notifyCallback != NULL
                                     ? ReposNotifyCallback::notify
                                     : NULL,

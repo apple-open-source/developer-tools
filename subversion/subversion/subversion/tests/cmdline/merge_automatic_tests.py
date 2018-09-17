@@ -213,7 +213,7 @@ def get_3ways_from_output(output):
 
   merges = []
   for line in output:
-    print "## " + line,
+    sys.stdout.write("## " + line + " ")
     # Extract "A1" from a line like "DBG: merge.c:11336: base  svn://.../A@1"
     match = re.search(r'merge\.c:.* base .* /(\w+)@([0-9-]+)', line)
     if match:
@@ -1429,7 +1429,7 @@ test_list = [ None,
               effective_sync_results_in_reintegrate,
               reintegrate_subtree_not_updated,
               merge_to_copy_and_add,
-              merge_delete_crlf_file
+              merge_delete_crlf_file,
              ]
 
 if __name__ == '__main__':

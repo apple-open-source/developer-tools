@@ -6,6 +6,7 @@
 #ifdef SWIGPYTHON
 %nodefault svn_diff_t;
 %nodefault svn_diff_hunk_t;
+%nodefault svn_diff_binary_patch_t;
 %nodefault svn_patch_file_t;
 #endif
 
@@ -35,6 +36,7 @@
 %proxy(svn_diff_file_options_t);
 %opaque_proxy(svn_diff_hunk_t);
 %proxy(svn_prop_patch_t);
+%opaque_proxy(svn_diff_binary_patch_t);
 %proxy(svn_patch_t);
 %opaque_proxy(svn_patch_file_t);
 #endif

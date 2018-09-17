@@ -937,7 +937,7 @@ def log_through_copyfrom_history(sbox):
 def escape_control_chars(sbox):
   "mod_dav_svn must escape invalid XML control chars"
 
-  dump_str = """SVN-fs-dump-format-version: 2
+  dump_str = b"""SVN-fs-dump-format-version: 2
 
 UUID: ffcae364-69ee-0310-a980-ca5f10462af2
 
@@ -2288,13 +2288,13 @@ def log_search(sbox):
   log_chain = parse_log_output(output)
   check_log_chain(log_chain, [7, 6, 3])
 
-  # search is case-sensitive
+  # search is case-insensitive
   exit_code, output, err = svntest.actions.run_and_verify_svn(
                              None, [], 'log', '--search',
                              'FOR REVISION [367]')
 
   log_chain = parse_log_output(output)
-  check_log_chain(log_chain, [])
+  check_log_chain(log_chain, [7, 6, 3])
 
   # multi-pattern search
   exit_code, output, err = svntest.actions.run_and_verify_svn(
@@ -2686,6 +2686,99 @@ def log_revision_move_copy(sbox):
                                      'log', '-v', '-q', sbox.wc_dir,
                                      '-c3')
 
+def log_on_deleted_deep(sbox):
+  "log on deleted deep path"
+
+  sbox.build()
+  sbox.simple_propset('k', 'v', 'A/B/E/alpha')
+  sbox.simple_commit() #r2
+  sbox.simple_propset('k', 'v', 'A/B/E/beta')
+  sbox.simple_commit() #r3
+
+  sbox.simple_update() # Or commit fails
+  sbox.simple_move('A/B', 'B')
+  sbox.simple_commit() #r4
+
+  expected_output = svntest.verify.RegexListOutput([
+     r'-+\n',
+     r'r1 .*\n',
+     r'-+\n',
+     r'r2 .*\n',
+     r'-+\n',
+     r'r2 .*\n',
+     r'-+\n',
+     r'r3 .*\n',
+     r'-+\n',
+  ])
+  # In deleted location
+  svntest.actions.run_and_verify_svn(expected_output, [],
+                                     'log', sbox.repo_url + '/A/B/E@3',
+                                     '-q', '-c', '1-2,2-3')
+
+  svntest.actions.run_and_verify_svn(expected_output, [],
+                                     'log', sbox.repo_url + '/A/B/E@3',
+                                     'alpha', 'beta',
+                                     '-q', '-c', '1-2,2-3')
+
+  # In new location
+  svntest.actions.run_and_verify_svn(expected_output, [],
+                                     'log', sbox.repo_url + '/B/E',
+                                     '-q', '-c', '1-2,2-3')
+
+  svntest.actions.run_and_verify_svn(expected_output, [],
+                                     'log', sbox.repo_url + '/B/E@4',
+                                     'alpha', 'beta',
+                                     '-q', '-c', '1-2,2-3')
+
+  expected_output = svntest.verify.RegexListOutput([
+     r'-+\n',
+     r'r1 .*\n',
+     r'-+\n',
+     r'r2 .*\n',
+     r'-+\n',
+  ])
+  # 2 ranges
+  svntest.actions.run_and_verify_svn(expected_output, [],
+                                     'log', sbox.repo_url + '/A/B/E@3',
+                                     'alpha',
+                                     '-q', '-c', '1,2')
+
+  svntest.actions.run_and_verify_svn(expected_output, [],
+                                     'log', sbox.repo_url + '/B/E',
+                                     'alpha',
+                                     '-q', '-c', '1,2')
+
+  svntest.actions.run_and_verify_svn(expected_output, [],
+                                     'log', sbox.repo_url + '/A/B/E@3',
+                                     '',
+                                     '-q', '-c', '1,2')
+
+  svntest.actions.run_and_verify_svn(expected_output, [],
+                                     'log', sbox.repo_url + '/B/E',
+                                     '',
+                                     '-q', '-c', '1,2')
+
+  # 1 range
+  svntest.actions.run_and_verify_svn(expected_output, [],
+                                     'log', sbox.repo_url + '/A/B/E@3',
+                                     'alpha',
+                                     '-q', '-c', '1-2')
+
+  svntest.actions.run_and_verify_svn(expected_output, [],
+                                     'log', sbox.repo_url + '/B/E',
+                                     'alpha',
+                                     '-q', '-c', '1-2')
+
+  svntest.actions.run_and_verify_svn(expected_output, [],
+                                     'log', sbox.repo_url + '/A/B/E@3',
+                                     '',
+                                     '-q', '-c', '1-2')
+
+  svntest.actions.run_and_verify_svn(expected_output, [],
+                                     'log', sbox.repo_url + '/B/E',
+                                     '',
+                                     '-q', '-c', '1-2')
+
 
 ########################################################################
 # Run the tests
@@ -2736,6 +2829,7 @@ test_list = [ None,
               mergeinfo_log,
               merge_sensitive_log_xml_reverse_merges,
               log_revision_move_copy,
+              log_on_deleted_deep,
              ]
 
 if __name__ == '__main__':

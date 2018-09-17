@@ -9,6 +9,7 @@
 %nodefault svn_fs_id_t;
 %nodefault svn_fs_txn_t;
 %nodefault svn_fs_root_t;
+%nodefault svn_fs_path_change_iterator_t;
 %nodefault svn_fs_history_t;
 %nodefault svn_fs_lock_target_t;
 #endif
@@ -21,6 +22,7 @@
   svn_fs_progress_notify_func_t,
   svn_fs_hotcopy_notify_t,
   svn_fs_freeze_func_t,
+  svn_fs_mergeinfo_receiver_t,
   svn_fs_process_contents_func_t,
   svn_fs_lock_callback_t,
   svn_fs_get_locks_callback_t,
@@ -32,6 +34,7 @@
   svn_fs_progress_notify_func_t *,
   svn_fs_hotcopy_notify_t *,
   svn_fs_freeze_func_t *,
+  svn_fs_mergeinfo_receiver_t *,
   svn_fs_process_contents_func_t *,
   svn_fs_lock_callback_t *,
   svn_fs_get_locks_callback_t *,
@@ -65,8 +68,10 @@
 %opaque_proxy(svn_fs_id_t);
 %opaque_proxy(svn_fs_txn_t);
 %opaque_proxy(svn_fs_root_t);
+%proxy(svn_fs_path_change3_t);
 %proxy(svn_fs_path_change2_t);
 %proxy(svn_fs_path_change_t);
+%opaque_proxy(svn_fs_path_change_iterator_t);
 %opaque_proxy(svn_fs_history_t);
 %proxy(svn_fs_dirent_t);
 %opaque_proxy(svn_fs_lock_target_t);
@@ -103,6 +108,11 @@ static svn_error_t * svn_fs_invoke_freeze_func(
   return _obj(baton, pool);
 }
 
+static svn_error_t * svn_fs_invoke_mergeinfo_receiver(
+  svn_fs_mergeinfo_receiver_t _obj, const char *path, svn_mergeinfo_t mergeinfo, void *baton, apr_pool_t *scratch_pool) {
+  return _obj(path, mergeinfo, baton, scratch_pool);
+}
+
 static svn_error_t * svn_fs_invoke_process_contents_func(
   svn_fs_process_contents_func_t _obj, const unsigned char *contents, apr_size_t len, void *baton, apr_pool_t *scratch_pool) {
   return _obj(contents, len, baton, scratch_pool);
@@ -131,6 +141,7 @@ static svn_error_t * svn_fs_invoke_pack_notify(
 %funcptr_proxy(svn_fs_progress_notify_func_t, svn_fs_invoke_progress_notify_func);
 %funcptr_proxy(svn_fs_hotcopy_notify_t, svn_fs_invoke_hotcopy_notify);
 %funcptr_proxy(svn_fs_freeze_func_t, svn_fs_invoke_freeze_func);
+%funcptr_proxy(svn_fs_mergeinfo_receiver_t, svn_fs_invoke_mergeinfo_receiver);
 %funcptr_proxy(svn_fs_process_contents_func_t, svn_fs_invoke_process_contents_func);
 %funcptr_proxy(svn_fs_lock_callback_t, svn_fs_invoke_lock_callback);
 %funcptr_proxy(svn_fs_get_locks_callback_t, svn_fs_invoke_get_locks_callback);
