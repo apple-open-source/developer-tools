@@ -45427,15 +45427,15 @@ SWIGEXPORT void Init_core(void) {
   rb_define_module_function(mCore, "svn_pool_create_allocator", _wrap_svn_pool_create_allocator, -1);
   rb_define_const(mCore, "SVN_VER_MAJOR", SWIG_From_int((int)(1)));
   rb_define_const(mCore, "SVN_VER_MINOR", SWIG_From_int((int)(10)));
-  rb_define_const(mCore, "SVN_VER_PATCH", SWIG_From_int((int)(0)));
-  rb_define_const(mCore, "SVN_VER_MICRO", SWIG_From_int((int)(0)));
+  rb_define_const(mCore, "SVN_VER_PATCH", SWIG_From_int((int)(3)));
+  rb_define_const(mCore, "SVN_VER_MICRO", SWIG_From_int((int)(3)));
   rb_define_const(mCore, "SVN_VER_LIBRARY", SWIG_From_int((int)(1)));
-  rb_define_const(mCore, "SVN_VER_TAG", SWIG_FromCharPtr(" (r1827917)"));
+  rb_define_const(mCore, "SVN_VER_TAG", SWIG_FromCharPtr(" (r1842928)"));
   rb_define_const(mCore, "SVN_VER_NUMTAG", SWIG_FromCharPtr(""));
-  rb_define_const(mCore, "SVN_VER_REVISION", SWIG_From_int((int)(1827917)));
-  rb_define_const(mCore, "SVN_VER_NUM", SWIG_FromCharPtr("1.10.0"));
-  rb_define_const(mCore, "SVN_VER_NUMBER", SWIG_FromCharPtr("1.10.0"));
-  rb_define_const(mCore, "SVN_VERSION", SWIG_FromCharPtr("1.10.0 (r1827917)"));
+  rb_define_const(mCore, "SVN_VER_REVISION", SWIG_From_int((int)(1842928)));
+  rb_define_const(mCore, "SVN_VER_NUM", SWIG_FromCharPtr("1.10.3"));
+  rb_define_const(mCore, "SVN_VER_NUMBER", SWIG_FromCharPtr("1.10.3"));
+  rb_define_const(mCore, "SVN_VERSION", SWIG_FromCharPtr("1.10.3 (r1842928)"));
   
   SwigClassSvn_version_t.klass = rb_define_class_under(mCore, "Svn_version_t", rb_cObject);
   SWIG_TypeClientData(SWIGTYPE_p_svn_version_t, (void *) &SwigClassSvn_version_t);

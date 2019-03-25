@@ -1,16 +1,15 @@
-# Developer Tools 10.1 Biscayne10B61
+# Developer Tools 10.2 Everglades10E125
 bison	14	Other
-bootstrap_cmds	96.20.2.200.4	Other
-cctools	921	Other
+bootstrap_cmds	96.20.2.250.2	Other
+cctools	927.0.2	Other
 CoreOSMakefiles	79	Other
 developer_cmds	66	Other
 gcc_select	135	Other
-Git	113	Other
+Git	117	Other
 gm4	16	Other
 gnumake	131	Other
 gperf	13	Other
 headerdoc	8.9.28	Other
-ld64	409.12	Other
+ld64	450.3	Other
 pb_makefiles	1005	Other
-subversion	81	Other
-tapi	1000.10.8	Other
+subversion	83	Other

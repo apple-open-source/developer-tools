@@ -452,9 +452,9 @@ def open_pipe(command, bufsize=-1, stdin=None, stdout=None, stderr=None):
   should be passed to wait_on_pipe."""
   command = [str(x) for x in command]
 
-  # On Windows subprocess.Popen() won't accept a Python script as
-  # a valid program to execute, rather it wants the Python executable.
-  if (sys.platform == 'win32') and (command[0].endswith('.py')):
+  # Always run python scripts under the same Python executable as used
+  # for the test suite.
+  if command[0].endswith('.py'):
     command.insert(0, sys.executable)
 
   command_string = command[0] + ' ' + ' '.join(map(_quote_arg, command[1:]))
@@ -1632,6 +1632,15 @@ def server_has_atomic_revprop():
 
 def server_has_reverse_get_file_revs():
   return options.server_caps.has_reverse_get_file_revs
+
+def python_sqlite_can_read_our_wc_db():
+  """Check if the Python builtin is capable enough to peek into wc.db"""
+  # Currently enough (1.7-1.9)
+  return svntest.sqlite3.sqlite_version_info >= (3, 6, 18)
+
+def python_sqlite_can_read_without_rowid():
+  """Check if the Python builtin is capable enough to read new rep-cache"""
+  return svntest.sqlite3.sqlite_version_info >= (3, 8, 2)
 
 def is_plaintext_password_storage_disabled():
   try:

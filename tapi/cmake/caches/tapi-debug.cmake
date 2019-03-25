@@ -1,5 +1,0 @@
-# Dev setup
-include(${CMAKE_CURRENT_LIST_DIR}/tapi-defaults.cmake)
-
-set(CMAKE_BUILD_TYPE Debug CACHE STRING "" FORCE)
-set(LLVM_ENABLE_ASSERTIONS ON CACHE BOOL "" FORCE)

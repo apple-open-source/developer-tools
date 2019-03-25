@@ -13,7 +13,7 @@ endif
 APR_TOOLCHAIN_DIR=$(dir $(shell xcrun --toolchain $(TOOLCHAINS) -f apr-1-config))/..
 
 Project               = subversion
-ProjectVersion        = 1.10.0
+ProjectVersion        = 1.10.3
 
 #-------------------------------------------------------------------------
 # build/get-py-info.py appends "-framework Python" to its --link and --libs
