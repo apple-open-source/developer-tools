@@ -1,15 +1,17 @@
-# Developer Tools 10.2 Everglades10E125
+# Developer Tools 11.0 Yellowstone11A420a
 bison	14	Other
-bootstrap_cmds	96.20.2.250.2	Other
-cctools	927.0.2	Other
+bootstrap_cmds	116	Other
+cctools	949.0.1	Other
 CoreOSMakefiles	79	Other
 developer_cmds	66	Other
-gcc_select	135	Other
-Git	117	Other
+gcc_select	136	Other
+Git	122	Other
 gm4	16	Other
-gnumake	131	Other
+gnumake	132	Other
 gperf	13	Other
 headerdoc	8.9.28	Other
-ld64	450.3	Other
+ld64	512.4	Other
+libgit2	25	Other
 pb_makefiles	1005	Other
-subversion	83	Other
+subversion	86	Other
+tapi	1100.0.11	Other

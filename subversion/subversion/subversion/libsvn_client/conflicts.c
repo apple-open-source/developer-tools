@@ -5913,6 +5913,9 @@ describe_incoming_edit_list_modified_revs(apr_array_header_t *edits,
   const char *s = "";
   int i;
 
+  if (edits->nelts == 0)
+    return _(" (no revisions found)");
+
   if (edits->nelts <= max_revs_to_display)
     num_revs_to_skip = 0;
   else
@@ -6665,8 +6668,10 @@ resolve_merge_incoming_added_file_text_update(
   apr_hash_t *working_props;
   apr_array_header_t *propdiffs;
   svn_error_t *err;
+  svn_wc_conflict_reason_t local_change;
 
   local_abspath = svn_client_conflict_get_local_abspath(conflict);
+  local_change = svn_client_conflict_get_local_change(conflict);
 
   /* Set up tempory storage for the working version of file. */
   SVN_ERR(svn_wc__get_tmpdir(&wc_tmpdir, ctx->wc_ctx, local_abspath,
@@ -6677,19 +6682,30 @@ resolve_merge_incoming_added_file_text_update(
                                  svn_io_file_del_none,
                                  scratch_pool, scratch_pool));
 
-  /* Copy the detranslated working file to temporary storage. */
-  SVN_ERR(svn_wc__translated_stream(&working_file_stream, ctx->wc_ctx,
-                                    local_abspath, local_abspath,
-                                    SVN_WC_TRANSLATE_TO_NF,
-                                    scratch_pool, scratch_pool));
+  if (local_change == svn_wc_conflict_reason_unversioned)
+    {
+      /* Copy the unversioned file to temporary storage. */
+      SVN_ERR(svn_stream_open_readonly(&working_file_stream, local_abspath,
+                                       scratch_pool, scratch_pool));
+      /* Unversioned files have no properties. */
+      working_props = apr_hash_make(scratch_pool);
+    }
+  else
+    {
+      /* Copy the detranslated working file to temporary storage. */
+      SVN_ERR(svn_wc__translated_stream(&working_file_stream, ctx->wc_ctx,
+                                        local_abspath, local_abspath,
+                                        SVN_WC_TRANSLATE_TO_NF,
+                                        scratch_pool, scratch_pool));
+      /* Get a copy of the working file's properties. */
+      SVN_ERR(svn_wc_prop_list2(&working_props, ctx->wc_ctx, local_abspath,
+                                scratch_pool, scratch_pool));
+      filter_props(working_props, scratch_pool);
+    }
+
   SVN_ERR(svn_stream_copy3(working_file_stream, working_file_tmp_stream,
                            ctx->cancel_func, ctx->cancel_baton,
                            scratch_pool));
-
-  /* Get a copy of the working file's properties. */
-  SVN_ERR(svn_wc_prop_list2(&working_props, ctx->wc_ctx, local_abspath,
-                            scratch_pool, scratch_pool));
-  filter_props(working_props, scratch_pool);
 
   /* Create an empty file as fake "merge-base" for the two added files.
    * The files are not ancestrally related so this is the best we can do. */
@@ -7689,20 +7705,46 @@ resolve_update_incoming_added_dir_merge(svn_client_conflict_option_t *option,
   const char *local_abspath;
   const char *lock_abspath;
   svn_error_t *err;
+  svn_wc_conflict_reason_t local_change;
 
   local_abspath = svn_client_conflict_get_local_abspath(conflict);
+  local_change = svn_client_conflict_get_local_change(conflict);
 
-  SVN_ERR(svn_wc__acquire_write_lock_for_resolve(
-            &lock_abspath, ctx->wc_ctx, local_abspath,
-            scratch_pool, scratch_pool));
+  if (local_change == svn_wc_conflict_reason_unversioned)
+    {
+      char *parent_abspath = svn_dirent_dirname(local_abspath, scratch_pool);
+      SVN_ERR(svn_wc__acquire_write_lock_for_resolve(
+                &lock_abspath, ctx->wc_ctx, parent_abspath,
+                scratch_pool, scratch_pool));
 
-  err = svn_wc__conflict_tree_update_local_add(ctx->wc_ctx,
-                                               local_abspath,
-                                               ctx->cancel_func,
-                                               ctx->cancel_baton,
-                                               ctx->notify_func2,
-                                               ctx->notify_baton2,
-                                               scratch_pool);
+      /* The update/switch operation has added the incoming versioned
+       * directory as a deleted op-depth layer. We can revert this layer
+       * to make the incoming tree appear in the working copy.
+       * This meta-data-only revert operation effecively merges the
+       * versioned and unversioned trees but leaves all unversioned files as
+       * they were. This is the best we can do; 3-way merging of unversioned
+       * files with files from the repository is impossible because there is
+       * no known merge base. No unversioned data will be lost, and any
+       * differences to files in the repository will show up in 'svn diff'. */
+      err = svn_wc_revert5(ctx->wc_ctx, local_abspath, svn_depth_infinity,
+                           FALSE, NULL, TRUE, TRUE /* metadata_only */,
+                           NULL, NULL, /* no cancellation */
+                           ctx->notify_func2, ctx->notify_baton2,
+                           scratch_pool);
+    }
+  else
+    {
+      SVN_ERR(svn_wc__acquire_write_lock_for_resolve(
+                &lock_abspath, ctx->wc_ctx, local_abspath,
+                scratch_pool, scratch_pool));
+      err = svn_wc__conflict_tree_update_local_add(ctx->wc_ctx,
+                                                   local_abspath,
+                                                   ctx->cancel_func,
+                                                   ctx->cancel_baton,
+                                                   ctx->notify_func2,
+                                                   ctx->notify_baton2,
+                                                   scratch_pool);
+    }
 
   err = svn_error_compose_create(err, svn_wc__release_write_lock(ctx->wc_ctx,
                                                                  lock_abspath,
@@ -9397,6 +9439,7 @@ configure_option_incoming_added_file_text_merge(svn_client_conflict_t *conflict,
       incoming_new_kind == svn_node_file &&
       incoming_change == svn_wc_conflict_action_add &&
       (local_change == svn_wc_conflict_reason_obstructed ||
+       local_change == svn_wc_conflict_reason_unversioned ||
        local_change == svn_wc_conflict_reason_added))
     {
       const char *description;
@@ -9522,8 +9565,9 @@ configure_option_incoming_added_dir_merge(svn_client_conflict_t *conflict,
       incoming_change == svn_wc_conflict_action_add &&
       (local_change == svn_wc_conflict_reason_added ||
        (operation == svn_wc_operation_merge &&
-       local_change == svn_wc_conflict_reason_obstructed)))
-
+        local_change == svn_wc_conflict_reason_obstructed) ||
+       (operation != svn_wc_operation_merge &&
+        local_change == svn_wc_conflict_reason_unversioned)))
     {
       const char *description;
       const char *wcroot_abspath;

@@ -8,7 +8,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: PACKAGE VERSION\n"
 "Report-Msgid-Bugs-To: dev@subversion.apache.org\n"
-"POT-Creation-Date: 2018-10-05 15:37+0000\n"
+"POT-Creation-Date: 2019-01-07 10:21+0000\n"
 "PO-Revision-Date: YEAR-MO-DA HO:MI+ZONE\n"
 "Last-Translator: FULL NAME <EMAIL@ADDRESS>\n"
 "Language-Team: LANGUAGE <LL@li.org>\n"
@@ -3010,41 +3010,45 @@ msgid ""
 "'^/%s@r%ld'"
 msgstr ""
 
-#: ../libsvn_client/conflicts.c:5942 ../libsvn_client/conflicts.c:5956
-#: ../libsvn_client/conflicts.c:5962
+#: ../libsvn_client/conflicts.c:5917
+msgid " (no revisions found)"
+msgstr ""
+
+#: ../libsvn_client/conflicts.c:5945 ../libsvn_client/conflicts.c:5959
+#: ../libsvn_client/conflicts.c:5965
 #, c-format
 msgid "%s r%ld by %s%s"
 msgstr ""
 
-#: ../libsvn_client/conflicts.c:5952
+#: ../libsvn_client/conflicts.c:5955
 #, c-format
 msgid ""
 "%s\n"
 " [%d revisions omitted for brevity],\n"
 msgstr ""
 
-#: ../libsvn_client/conflicts.c:6021
+#: ../libsvn_client/conflicts.c:6024
 #, c-format
 msgid ""
 "Changes destined for a directory arrived during merge of\n"
 "'^/%s:%ld'."
 msgstr ""
 
-#: ../libsvn_client/conflicts.c:6028
+#: ../libsvn_client/conflicts.c:6031
 #, c-format
 msgid ""
 "Changes destined for a file arrived during merge of\n"
 "'^/%s:%ld'."
 msgstr ""
 
-#: ../libsvn_client/conflicts.c:6034
+#: ../libsvn_client/conflicts.c:6037
 #, c-format
 msgid ""
 "Changes arrived during merge of\n"
 "'^/%s:%ld'."
 msgstr ""
 
-#: ../libsvn_client/conflicts.c:6046
+#: ../libsvn_client/conflicts.c:6049
 #, c-format
 msgid ""
 "Changes destined for a directory arrived via the following revisions during "
@@ -3052,7 +3056,7 @@ msgid ""
 "'^/%s:%ld-%ld'"
 msgstr ""
 
-#: ../libsvn_client/conflicts.c:6053
+#: ../libsvn_client/conflicts.c:6056
 #, c-format
 msgid ""
 "Changes destined for a file arrived via the following revisions during merge "
@@ -3060,35 +3064,35 @@ msgid ""
 "'^/%s:%ld-%ld'"
 msgstr ""
 
-#: ../libsvn_client/conflicts.c:6059
+#: ../libsvn_client/conflicts.c:6062
 #, c-format
 msgid ""
 "Changes from the following revisions arrived during merge of\n"
 "'^/%s:%ld-%ld'"
 msgstr ""
 
-#: ../libsvn_client/conflicts.c:6071
+#: ../libsvn_client/conflicts.c:6074
 #, c-format
 msgid ""
 "Changes destined for a directory arrived during reverse-merge of\n"
 "'^/%s:%ld'."
 msgstr ""
 
-#: ../libsvn_client/conflicts.c:6078
+#: ../libsvn_client/conflicts.c:6081
 #, c-format
 msgid ""
 "Changes destined for a file arrived during reverse-merge of\n"
 "'^/%s:%ld'."
 msgstr ""
 
-#: ../libsvn_client/conflicts.c:6084
+#: ../libsvn_client/conflicts.c:6087
 #, c-format
 msgid ""
 "Changes arrived during reverse-merge of\n"
 "'^/%s:%ld'."
 msgstr ""
 
-#: ../libsvn_client/conflicts.c:6096
+#: ../libsvn_client/conflicts.c:6099
 #, c-format
 msgid ""
 "Changes destined for a directory arrived via the following revisions during "
@@ -3096,7 +3100,7 @@ msgid ""
 "'^/%s:%ld-%ld'"
 msgstr ""
 
-#: ../libsvn_client/conflicts.c:6104
+#: ../libsvn_client/conflicts.c:6107
 #, c-format
 msgid ""
 "Changes destined for a file arrived via the following revisions during "
@@ -3104,432 +3108,432 @@ msgid ""
 "'^/%s:%ld-%ld'"
 msgstr ""
 
-#: ../libsvn_client/conflicts.c:6112
+#: ../libsvn_client/conflicts.c:6115
 #, c-format
 msgid ""
 "Changes from the following revisions arrived during reverse-merge of\n"
 "'^/%s:%ld-%ld'"
 msgstr ""
 
-#: ../libsvn_client/conflicts.c:6301
+#: ../libsvn_client/conflicts.c:6304
 #, c-format
 msgid ""
 "Tree conflict on '%s' can only be resolved to the current working copy state"
 msgstr ""
 
-#: ../libsvn_client/conflicts.c:6485 ../libsvn_client/conflicts.c:6491
+#: ../libsvn_client/conflicts.c:6488 ../libsvn_client/conflicts.c:6494
 #, c-format
 msgid ""
 "Cannot resolve tree conflict on '%s' (expected a base node but found none)"
 msgstr ""
 
-#: ../libsvn_client/conflicts.c:6496 ../libsvn_client/conflicts.c:6522
-#: ../libsvn_client/conflicts.c:6549 ../libsvn_client/conflicts.c:6572
+#: ../libsvn_client/conflicts.c:6499 ../libsvn_client/conflicts.c:6525
+#: ../libsvn_client/conflicts.c:6552 ../libsvn_client/conflicts.c:6575
 #, c-format
 msgid "Unexpected option id '%d'"
 msgstr ""
 
-#: ../libsvn_client/conflicts.c:6505 ../libsvn_client/conflicts.c:6514
+#: ../libsvn_client/conflicts.c:6508 ../libsvn_client/conflicts.c:6517
 #, c-format
 msgid ""
 "Cannot resolve tree conflict on '%s' (expected base node kind '%s', but "
 "found '%s')"
 msgstr ""
 
-#: ../libsvn_client/conflicts.c:6530 ../libsvn_client/conflicts.c:6540
+#: ../libsvn_client/conflicts.c:6533 ../libsvn_client/conflicts.c:6543
 #, c-format
 msgid ""
 "Cannot resolve tree conflict on '%s' (expected base node from '^/%s@%ld', "
 "but found '^/%s@%ld')"
 msgstr ""
 
-#: ../libsvn_client/conflicts.c:6558 ../libsvn_client/conflicts.c:6566
+#: ../libsvn_client/conflicts.c:6561 ../libsvn_client/conflicts.c:6569
 #, c-format
 msgid ""
 "Cannot resolve tree conflict on '%s' (expected an added item, but the item "
 "is not added)"
 msgstr ""
 
-#: ../libsvn_client/conflicts.c:6736 ../libsvn_client/conflicts.c:8574
+#: ../libsvn_client/conflicts.c:6752 ../libsvn_client/conflicts.c:8616
 #, c-format
 msgid "If needed, a backup copy of '%s' can be found at '%s'"
 msgstr ""
 
-#: ../libsvn_client/conflicts.c:7599
+#: ../libsvn_client/conflicts.c:7615
 #, c-format
 msgid ""
 "Conflict resolution option '%d' requires details for tree conflict at '%s' "
 "to be fetched from the repository"
 msgstr ""
 
-#: ../libsvn_client/conflicts.c:7623
+#: ../libsvn_client/conflicts.c:7639
 #, c-format
 msgid "Could not determine when '%s' was added the repository"
 msgstr ""
 
-#: ../libsvn_client/conflicts.c:7638
+#: ../libsvn_client/conflicts.c:7654
 #, c-format
 msgid "Could not determine when '%s' was deleted from the repository"
 msgstr ""
 
-#: ../libsvn_client/conflicts.c:7927
+#: ../libsvn_client/conflicts.c:7969
 #, c-format
 msgid ""
 "Could not determine the revision in which '^/%s' was added to the "
 "repository.\n"
 msgstr ""
 
-#: ../libsvn_client/conflicts.c:8023
+#: ../libsvn_client/conflicts.c:8065
 #, c-format
 msgid ""
 "Cannot resolve tree conflict on '%s' (expected a copied item, but the item "
 "is not a copy)"
 msgstr ""
 
-#: ../libsvn_client/conflicts.c:8034
+#: ../libsvn_client/conflicts.c:8076
 #, c-format
 msgid ""
 "Cannot resolve tree conflict on '%s' (expected an item copied from a "
 "revision smaller than r%ld, but the item was copied from r%ld)"
 msgstr ""
 
-#: ../libsvn_client/conflicts.c:8046
+#: ../libsvn_client/conflicts.c:8088
 #, c-format
 msgid ""
 "Cannot resolve tree conflict on '%s' (expected an item copied from a "
 "revision larger than r%ld, but the item was copied from r%ld)"
 msgstr ""
 
-#: ../libsvn_client/conflicts.c:8065
+#: ../libsvn_client/conflicts.c:8107
 #, c-format
 msgid ""
 "Cannot resolve tree conflict on '%s' (expected an item copied from '^/%s' or "
 "from '^/%s' but the item was copied from '^/%s@%ld')"
 msgstr ""
 
-#: ../libsvn_client/conflicts.c:8087
+#: ../libsvn_client/conflicts.c:8129
 #, c-format
 msgid ""
 "Cannot resolve tree conflict on '%s' (expected an item copied from '^/%s', "
 "but the item was copied from '^/%s@%ld')"
 msgstr ""
 
-#: ../libsvn_client/conflicts.c:8136
+#: ../libsvn_client/conflicts.c:8178
 #, c-format
 msgid ""
 "Conflict resolution option '%d' requires details for tree conflict at '%s' "
 "to be fetched from the repository."
 msgstr ""
 
-#: ../libsvn_client/conflicts.c:8146
+#: ../libsvn_client/conflicts.c:8188
 #, c-format
 msgid ""
 "Could not find the revision in which '%s' was deleted from the repository"
 msgstr ""
 
-#: ../libsvn_client/conflicts.c:8171
+#: ../libsvn_client/conflicts.c:8213
 #, c-format
 msgid ""
 "Cannot resolve tree conflict on '%s' (expected node kind '%s' but found '%s')"
 msgstr ""
 
-#: ../libsvn_client/conflicts.c:8338 ../libsvn_client/conflicts.c:8621
+#: ../libsvn_client/conflicts.c:8380 ../libsvn_client/conflicts.c:8663
 #, c-format
 msgid ""
 "The specified conflict resolution option requires details for tree conflict "
 "at '%s' to be fetched from the repository first."
 msgstr ""
 
-#: ../libsvn_client/conflicts.c:8345
+#: ../libsvn_client/conflicts.c:8387
 #, c-format
 msgid "Invalid operation code '%d' recorded for conflict at '%s'"
 msgstr ""
 
-#: ../libsvn_client/conflicts.c:8682
+#: ../libsvn_client/conflicts.c:8724
 #, c-format
 msgid ""
 "Cannot resolve tree conflict on '%s' (expected a copied item at '%s', but "
 "the item is not a copy)"
 msgstr ""
 
-#: ../libsvn_client/conflicts.c:8695
+#: ../libsvn_client/conflicts.c:8737
 #, c-format
 msgid ""
 "Cannot resolve tree conflict on '%s' (could not determine origin of '%s')"
 msgstr ""
 
-#: ../libsvn_client/conflicts.c:8715
+#: ../libsvn_client/conflicts.c:8757
 #, c-format
 msgid ""
 "Cannot resolve tree conflict on '%s' (could not find common ancestor of '^/"
 "%s@%ld'  and '^/%s@%ld')"
 msgstr ""
 
-#: ../libsvn_client/conflicts.c:9070 ../libsvn_client/conflicts.c:9153
-#: ../libsvn_client/conflicts.c:10325
+#: ../libsvn_client/conflicts.c:9112 ../libsvn_client/conflicts.c:9195
+#: ../libsvn_client/conflicts.c:10369
 msgid "Postpone"
 msgstr ""
 
-#: ../libsvn_client/conflicts.c:9071 ../libsvn_client/conflicts.c:9154
-#: ../libsvn_client/conflicts.c:10326
+#: ../libsvn_client/conflicts.c:9113 ../libsvn_client/conflicts.c:9196
+#: ../libsvn_client/conflicts.c:10370
 msgid "skip this conflict and leave it unresolved"
 msgstr ""
 
-#: ../libsvn_client/conflicts.c:9080 ../libsvn_client/conflicts.c:9101
-#: ../libsvn_client/conflicts.c:9159
+#: ../libsvn_client/conflicts.c:9122 ../libsvn_client/conflicts.c:9143
+#: ../libsvn_client/conflicts.c:9201
 msgid "Accept base"
 msgstr ""
 
-#: ../libsvn_client/conflicts.c:9081
+#: ../libsvn_client/conflicts.c:9123
 msgid "discard local and incoming changes for this binary file"
 msgstr ""
 
-#: ../libsvn_client/conflicts.c:9086 ../libsvn_client/conflicts.c:9107
-#: ../libsvn_client/conflicts.c:9165
+#: ../libsvn_client/conflicts.c:9128 ../libsvn_client/conflicts.c:9149
+#: ../libsvn_client/conflicts.c:9207
 msgid "Accept incoming"
 msgstr ""
 
-#: ../libsvn_client/conflicts.c:9087
+#: ../libsvn_client/conflicts.c:9129
 msgid "accept incoming version of binary file"
 msgstr ""
 
-#: ../libsvn_client/conflicts.c:9092 ../libsvn_client/conflicts.c:9131
-#: ../libsvn_client/conflicts.c:9171 ../libsvn_client/conflicts.c:9228
+#: ../libsvn_client/conflicts.c:9134 ../libsvn_client/conflicts.c:9173
+#: ../libsvn_client/conflicts.c:9213 ../libsvn_client/conflicts.c:9270
 msgid "Mark as resolved"
 msgstr ""
 
-#: ../libsvn_client/conflicts.c:9093
+#: ../libsvn_client/conflicts.c:9135
 msgid "accept binary file as it appears in the working copy"
 msgstr ""
 
-#: ../libsvn_client/conflicts.c:9102
+#: ../libsvn_client/conflicts.c:9144
 msgid "discard local and incoming changes for this file"
 msgstr ""
 
-#: ../libsvn_client/conflicts.c:9108
+#: ../libsvn_client/conflicts.c:9150
 msgid "accept incoming version of entire file"
 msgstr ""
 
-#: ../libsvn_client/conflicts.c:9113
+#: ../libsvn_client/conflicts.c:9155
 msgid "Reject incoming"
 msgstr ""
 
-#: ../libsvn_client/conflicts.c:9114
+#: ../libsvn_client/conflicts.c:9156
 msgid "reject all incoming changes for this file"
 msgstr ""
 
-#: ../libsvn_client/conflicts.c:9119 ../libsvn_client/conflicts.c:9177
+#: ../libsvn_client/conflicts.c:9161 ../libsvn_client/conflicts.c:9219
 msgid "Accept incoming for conflicts"
 msgstr ""
 
-#: ../libsvn_client/conflicts.c:9120
+#: ../libsvn_client/conflicts.c:9162
 msgid "accept changes only where they conflict"
 msgstr ""
 
-#: ../libsvn_client/conflicts.c:9125 ../libsvn_client/conflicts.c:9183
+#: ../libsvn_client/conflicts.c:9167 ../libsvn_client/conflicts.c:9225
 msgid "Reject conflicts"
 msgstr ""
 
-#: ../libsvn_client/conflicts.c:9126 ../libsvn_client/conflicts.c:9184
+#: ../libsvn_client/conflicts.c:9168 ../libsvn_client/conflicts.c:9226
 msgid "reject changes which conflict and accept the rest"
 msgstr ""
 
-#: ../libsvn_client/conflicts.c:9132
+#: ../libsvn_client/conflicts.c:9174
 msgid "accept the file as it appears in the working copy"
 msgstr ""
 
-#: ../libsvn_client/conflicts.c:9160
+#: ../libsvn_client/conflicts.c:9202
 msgid "discard local and incoming changes for this property"
 msgstr ""
 
-#: ../libsvn_client/conflicts.c:9166
+#: ../libsvn_client/conflicts.c:9208
 msgid "accept incoming version of entire property value"
 msgstr ""
 
-#: ../libsvn_client/conflicts.c:9172
+#: ../libsvn_client/conflicts.c:9214
 msgid "accept working copy version of entire property value"
 msgstr ""
 
-#: ../libsvn_client/conflicts.c:9178
+#: ../libsvn_client/conflicts.c:9220
 msgid "accept incoming changes only where they conflict"
 msgstr ""
 
-#: ../libsvn_client/conflicts.c:9189
+#: ../libsvn_client/conflicts.c:9231
 msgid "Accept merged"
 msgstr ""
 
-#: ../libsvn_client/conflicts.c:9190
+#: ../libsvn_client/conflicts.c:9232
 msgid "accept merged version of property value"
 msgstr ""
 
-#: ../libsvn_client/conflicts.c:9229
+#: ../libsvn_client/conflicts.c:9271
 msgid "accept current working copy state"
 msgstr ""
 
-#: ../libsvn_client/conflicts.c:9256
+#: ../libsvn_client/conflicts.c:9298
 msgid "Update move destination"
 msgstr ""
 
-#: ../libsvn_client/conflicts.c:9257
+#: ../libsvn_client/conflicts.c:9299
 msgid "apply incoming changes to move destination"
 msgstr ""
 
-#: ../libsvn_client/conflicts.c:9291
+#: ../libsvn_client/conflicts.c:9333
 msgid "Update any moved-away children"
 msgstr ""
 
-#: ../libsvn_client/conflicts.c:9292
+#: ../libsvn_client/conflicts.c:9334
 msgid "prepare for updating moved-away children, if any"
 msgstr ""
 
-#: ../libsvn_client/conflicts.c:9337
+#: ../libsvn_client/conflicts.c:9379
 #, c-format
 msgid "ignore and do not add '^/%s@%ld' here"
 msgstr ""
 
-#: ../libsvn_client/conflicts.c:9345
+#: ../libsvn_client/conflicts.c:9387
 #, c-format
 msgid "replace '^/%s@%ld' with the locally added file"
 msgstr ""
 
-#: ../libsvn_client/conflicts.c:9350
+#: ../libsvn_client/conflicts.c:9392
 #, c-format
 msgid "replace '^/%s@%ld' with the locally added directory"
 msgstr ""
 
-#: ../libsvn_client/conflicts.c:9356
+#: ../libsvn_client/conflicts.c:9398
 #, c-format
 msgid "replace '^/%s@%ld' with the locally added item"
 msgstr ""
 
-#: ../libsvn_client/conflicts.c:9361
+#: ../libsvn_client/conflicts.c:9403
 #, c-format
 msgid "unexpected operation code '%d'"
 msgstr ""
 
-#: ../libsvn_client/conflicts.c:9365
+#: ../libsvn_client/conflicts.c:9407
 msgid "Ignore incoming addition"
 msgstr ""
 
-#: ../libsvn_client/conflicts.c:9411 ../libsvn_client/conflicts.c:9540
+#: ../libsvn_client/conflicts.c:9454 ../libsvn_client/conflicts.c:9584
 #, c-format
 msgid "merge '^/%s@%ld' into '%s'"
 msgstr ""
 
-#: ../libsvn_client/conflicts.c:9419 ../libsvn_client/conflicts.c:9549
+#: ../libsvn_client/conflicts.c:9462 ../libsvn_client/conflicts.c:9593
 #, c-format
 msgid "merge local '%s' and '^/%s@%ld'"
 msgstr ""
 
-#: ../libsvn_client/conflicts.c:9429
+#: ../libsvn_client/conflicts.c:9472
 msgid "Merge the files"
 msgstr ""
 
-#: ../libsvn_client/conflicts.c:9478
+#: ../libsvn_client/conflicts.c:9521
 #, c-format
 msgid "delete '%s', copy '^/%s@%ld' here, and merge the files"
 msgstr ""
 
-#: ../libsvn_client/conflicts.c:9488 ../libsvn_client/conflicts.c:9671
+#: ../libsvn_client/conflicts.c:9531 ../libsvn_client/conflicts.c:9715
 msgid "Replace and merge"
 msgstr ""
 
-#: ../libsvn_client/conflicts.c:9558
+#: ../libsvn_client/conflicts.c:9602
 msgid "Merge the directories"
 msgstr ""
 
-#: ../libsvn_client/conflicts.c:9605
+#: ../libsvn_client/conflicts.c:9649
 #, c-format
 msgid "delete '%s' and copy '^/%s@%ld' here"
 msgstr ""
 
-#: ../libsvn_client/conflicts.c:9614
+#: ../libsvn_client/conflicts.c:9658
 msgid "Delete my directory and replace it with incoming directory"
 msgstr ""
 
-#: ../libsvn_client/conflicts.c:9661
+#: ../libsvn_client/conflicts.c:9705
 #, c-format
 msgid "delete '%s', copy '^/%s@%ld' here, and merge the directories"
 msgstr ""
 
-#: ../libsvn_client/conflicts.c:9741
+#: ../libsvn_client/conflicts.c:9785
 #, c-format
 msgid "ignore the deletion of '^/%s@%ld'"
 msgstr ""
 
-#: ../libsvn_client/conflicts.c:9746
+#: ../libsvn_client/conflicts.c:9790
 msgid "Ignore incoming deletion"
 msgstr ""
 
-#: ../libsvn_client/conflicts.c:9799
+#: ../libsvn_client/conflicts.c:9843
 #, c-format
 msgid "accept the deletion of '%s'"
 msgstr ""
 
-#: ../libsvn_client/conflicts.c:9806
+#: ../libsvn_client/conflicts.c:9850
 msgid "Accept incoming deletion"
 msgstr ""
 
-#: ../libsvn_client/conflicts.c:9845
+#: ../libsvn_client/conflicts.c:9889
 #, c-format
 msgid "move '%s' to '%s' and merge"
 msgstr ""
 
-#: ../libsvn_client/conflicts.c:9855
+#: ../libsvn_client/conflicts.c:9899
 #, c-format
 msgid "move and merge local changes from '%s' into '%s'"
 msgstr ""
 
-#: ../libsvn_client/conflicts.c:9916 ../libsvn_client/conflicts.c:9976
+#: ../libsvn_client/conflicts.c:9960 ../libsvn_client/conflicts.c:10020
 msgid "Move and merge"
 msgstr ""
 
-#: ../libsvn_client/conflicts.c:10060
+#: ../libsvn_client/conflicts.c:10104
 #, c-format
 msgid "apply changes to move destination '%s'"
 msgstr ""
 
-#: ../libsvn_client/conflicts.c:10069
+#: ../libsvn_client/conflicts.c:10113
 msgid "Apply to move destination"
 msgstr ""
 
-#: ../libsvn_client/conflicts.c:10102 ../libsvn_client/conflicts.c:10231
+#: ../libsvn_client/conflicts.c:10146 ../libsvn_client/conflicts.c:10275
 #, c-format
 msgid ""
 "Getting a list of possible move targets requires details for tree conflict "
 "at '%s' to be fetched from the repository first"
 msgstr ""
 
-#: ../libsvn_client/conflicts.c:10155 ../libsvn_client/conflicts.c:10279
+#: ../libsvn_client/conflicts.c:10199 ../libsvn_client/conflicts.c:10323
 #, c-format
 msgid ""
 "Setting a move target requires details for tree conflict at '%s' to be "
 "fetched from the repository first"
 msgstr ""
 
-#: ../libsvn_client/conflicts.c:10164 ../libsvn_client/conflicts.c:10292
+#: ../libsvn_client/conflicts.c:10208 ../libsvn_client/conflicts.c:10336
 #, c-format
 msgid "Index '%d' is out of bounds of the possible move target list for '%s'"
 msgstr ""
 
-#: ../libsvn_client/conflicts.c:10202
+#: ../libsvn_client/conflicts.c:10246
 #, c-format
 msgid ""
 "Repository path '%s' not found in list of possible move targets for '%s'"
 msgstr ""
 
-#: ../libsvn_client/conflicts.c:10509 ../libsvn_client/conflicts.c:10558
-#: ../libsvn_client/conflicts.c:10611
+#: ../libsvn_client/conflicts.c:10553 ../libsvn_client/conflicts.c:10602
+#: ../libsvn_client/conflicts.c:10655
 #, c-format
 msgid "Inapplicable conflict resolution option given for conflicted path '%s'"
 msgstr ""
 
-#: ../libsvn_client/conflicts.c:10831
+#: ../libsvn_client/conflicts.c:10875
 #, c-format
 msgid "Property '%s' is not in conflict."
 msgstr ""
 
-#: ../libsvn_client/conflicts.c:11221 ../libsvn_wc/conflicts.c:3292
+#: ../libsvn_client/conflicts.c:11265 ../libsvn_wc/conflicts.c:3292
 #, c-format
 msgid "Unable to resolve pending conflict on '%s'"
 msgstr ""
@@ -3573,7 +3577,7 @@ msgid "Path '%s' exists, but is excluded"
 msgstr ""
 
 #: ../libsvn_client/copy.c:991 ../libsvn_client/copy.c:1715
-#: ../libsvn_client/copy.c:2090 ../libsvn_client/copy.c:2732
+#: ../libsvn_client/copy.c:2090 ../libsvn_client/copy.c:2737
 #: ../libsvn_client/import.c:911 ../libsvn_client/mtcc.c:456
 #: ../libsvn_client/mtcc.c:473 ../libsvn_ra_serf/util.c:1920
 #, c-format
@@ -3591,7 +3595,7 @@ msgid "Directory '%s' is not under version control"
 msgstr ""
 
 #: ../libsvn_client/copy.c:1073 ../libsvn_client/copy.c:1082
-#: ../libsvn_client/copy.c:1092 ../libsvn_client/copy.c:2748
+#: ../libsvn_client/copy.c:1092 ../libsvn_client/copy.c:2763
 #, c-format
 msgid "Path '%s' is not a directory"
 msgstr ""
@@ -3616,47 +3620,47 @@ msgstr ""
 msgid "Path '%s' does not exist in revision %ld"
 msgstr ""
 
-#: ../libsvn_client/copy.c:2716 ../libsvn_client/mtcc.c:550
+#: ../libsvn_client/copy.c:2721 ../libsvn_client/mtcc.c:550
 #, c-format
 msgid "Path '%s' not found in revision %ld"
 msgstr ""
 
-#: ../libsvn_client/copy.c:2721
+#: ../libsvn_client/copy.c:2726
 #, c-format
 msgid "Path '%s' not found in head revision"
 msgstr ""
 
-#: ../libsvn_client/copy.c:2856
+#: ../libsvn_client/copy.c:2871
 msgid "Cannot mix repository and working copy sources"
 msgstr ""
 
-#: ../libsvn_client/copy.c:2909
+#: ../libsvn_client/copy.c:2924
 #, c-format
 msgid "Cannot copy path '%s' into its own child '%s'"
 msgstr ""
 
-#: ../libsvn_client/copy.c:2945
+#: ../libsvn_client/copy.c:2960
 #, c-format
 msgid ""
 "Cannot move the external at '%s'; please edit the svn:externals property on "
 "'%s'."
 msgstr ""
 
-#: ../libsvn_client/copy.c:2960
+#: ../libsvn_client/copy.c:2975
 msgid "Moves between the working copy and the repository are not supported"
 msgstr ""
 
-#: ../libsvn_client/copy.c:2975
+#: ../libsvn_client/copy.c:2990
 #, c-format
 msgid "Cannot move URL '%s' into itself"
 msgstr ""
 
-#: ../libsvn_client/copy.c:2976
+#: ../libsvn_client/copy.c:2991
 #, c-format
 msgid "Cannot move path '%s' into itself"
 msgstr ""
 
-#: ../libsvn_client/copy.c:3043
+#: ../libsvn_client/copy.c:3058
 #, c-format
 msgid "'%s' does not have a URL associated with it"
 msgstr ""
@@ -4299,8 +4303,8 @@ msgid "strip count must be positive"
 msgstr ""
 
 #: ../libsvn_client/patch.c:3757 ../libsvn_fs_base/tree.c:4112
-#: ../libsvn_fs_base/tree.c:4117 ../libsvn_fs_fs/tree.c:3245
-#: ../libsvn_fs_fs/tree.c:3251 ../libsvn_fs_x/tree.c:2188
+#: ../libsvn_fs_base/tree.c:4117 ../libsvn_fs_fs/tree.c:3270
+#: ../libsvn_fs_fs/tree.c:3276 ../libsvn_fs_x/tree.c:2188
 #: ../libsvn_fs_x/tree.c:2194 ../libsvn_ra/compat.c:677
 #: ../libsvn_ra_local/ra_plugin.c:1290
 #, c-format
@@ -4412,7 +4416,12 @@ msgstr ""
 msgid "Path '%s' has no committed revision"
 msgstr ""
 
-#: ../libsvn_client/revisions.c:171
+#: ../libsvn_client/revisions.c:153
+#, c-format
+msgid "Path '%s' has no previous revision"
+msgstr ""
+
+#: ../libsvn_client/revisions.c:178
 #, c-format
 msgid "Unrecognized revision type requested for '%s'"
 msgstr ""
@@ -4690,7 +4699,7 @@ msgstr ""
 msgid "Path '%s' contains '.' or '..' element"
 msgstr ""
 
-#: ../libsvn_fs/fs-loader.c:485 ../libsvn_fs_fs/tree.c:2476
+#: ../libsvn_fs/fs-loader.c:485 ../libsvn_fs_fs/tree.c:2501
 #: ../libsvn_subr/path.c:1240
 #, c-format
 msgid "Invalid control character '0x%02x' in path '%s'"
@@ -5616,7 +5625,7 @@ msgstr ""
 msgid "Failure opening '%s'"
 msgstr ""
 
-#: ../libsvn_fs_base/tree.c:1461 ../libsvn_fs_fs/tree.c:1693
+#: ../libsvn_fs_base/tree.c:1461 ../libsvn_fs_fs/tree.c:1718
 #: ../libsvn_fs_x/tree.c:602
 msgid "Cannot compare property value between two different filesystems"
 msgstr ""
@@ -5630,19 +5639,19 @@ msgstr ""
 msgid "Unexpected immutable node at '%s'"
 msgstr ""
 
-#: ../libsvn_fs_base/tree.c:2075 ../libsvn_fs_fs/tree.c:1723
+#: ../libsvn_fs_base/tree.c:2075 ../libsvn_fs_fs/tree.c:1748
 #: ../libsvn_fs_x/tree.c:638 ../libsvn_repos/commit.c:1303
 #, c-format
 msgid "Conflict at '%s'"
 msgstr ""
 
 #: ../libsvn_fs_base/tree.c:2128 ../libsvn_fs_base/tree.c:2892
-#: ../libsvn_fs_fs/tree.c:1821 ../libsvn_fs_fs/tree.c:2375
+#: ../libsvn_fs_fs/tree.c:1846 ../libsvn_fs_fs/tree.c:2400
 #: ../libsvn_fs_x/tree.c:759 ../libsvn_fs_x/tree.c:1292
 msgid "Bad merge; ancestor, source, and target not all in same fs"
 msgstr ""
 
-#: ../libsvn_fs_base/tree.c:2144 ../libsvn_fs_fs/tree.c:1837
+#: ../libsvn_fs_base/tree.c:2144 ../libsvn_fs_fs/tree.c:1862
 #: ../libsvn_fs_x/tree.c:775
 #, c-format
 msgid "Bad merge; target '%s' has id '%s', same as ancestor"
@@ -5658,29 +5667,29 @@ msgstr ""
 msgid "Cannot deltify revisions prior to r%ld"
 msgstr ""
 
-#: ../libsvn_fs_base/tree.c:3094 ../libsvn_fs_fs/tree.c:2557
+#: ../libsvn_fs_base/tree.c:3094 ../libsvn_fs_fs/tree.c:2582
 #: ../libsvn_fs_x/tree.c:1478
 msgid "The root directory cannot be deleted"
 msgstr ""
 
-#: ../libsvn_fs_base/tree.c:3308 ../libsvn_fs_fs/tree.c:2627
+#: ../libsvn_fs_base/tree.c:3308 ../libsvn_fs_fs/tree.c:2652
 #: ../libsvn_fs_x/tree.c:1548
 #, c-format
 msgid "Cannot copy between two different filesystems ('%s' and '%s')"
 msgstr ""
 
-#: ../libsvn_fs_base/tree.c:3317 ../libsvn_fs_fs/tree.c:2634
+#: ../libsvn_fs_base/tree.c:3317 ../libsvn_fs_fs/tree.c:2659
 #: ../libsvn_fs_x/tree.c:1555
 msgid "Copy from mutable tree not currently supported"
 msgstr ""
 
-#: ../libsvn_fs_base/tree.c:3827 ../libsvn_fs_fs/tree.c:3029
+#: ../libsvn_fs_base/tree.c:3827 ../libsvn_fs_fs/tree.c:3054
 #: ../libsvn_fs_x/tree.c:1964
 #, c-format
 msgid "Base checksum mismatch on '%s'"
 msgstr ""
 
-#: ../libsvn_fs_base/tree.c:4103 ../libsvn_fs_fs/tree.c:3239
+#: ../libsvn_fs_base/tree.c:4103 ../libsvn_fs_fs/tree.c:3264
 #: ../libsvn_fs_x/tree.c:2182
 msgid "Cannot compare file contents between two different filesystems"
 msgstr ""
@@ -6478,31 +6487,31 @@ msgstr ""
 msgid "No such transaction '%s'"
 msgstr ""
 
-#: ../libsvn_fs_fs/tree.c:1161
+#: ../libsvn_fs_fs/tree.c:934
 #, c-format
 msgid "Failure opening '%s' in transaction '%s'"
 msgstr ""
 
-#: ../libsvn_fs_fs/tree.c:1164
+#: ../libsvn_fs_fs/tree.c:937
 #, c-format
 msgid "Failure opening '%s' in revision %ld"
 msgstr ""
 
-#: ../libsvn_fs_fs/tree.c:2639 ../libsvn_fs_x/tree.c:1560
+#: ../libsvn_fs_fs/tree.c:2664 ../libsvn_fs_x/tree.c:1560
 msgid "Copy immutable tree not supported"
 msgstr ""
 
-#: ../libsvn_fs_fs/tree.c:4195 ../libsvn_fs_x/tree.c:2958
+#: ../libsvn_fs_fs/tree.c:4220 ../libsvn_fs_x/tree.c:2958
 #, c-format
 msgid "Node-revision #'%s' claims to have mergeinfo but doesn't"
 msgstr ""
 
-#: ../libsvn_fs_fs/tree.c:4310 ../libsvn_fs_x/tree.c:3050
+#: ../libsvn_fs_fs/tree.c:4335 ../libsvn_fs_x/tree.c:3050
 #, c-format
 msgid "Node-revision '%s@%ld' claims to have mergeinfo but doesn't"
 msgstr ""
 
-#: ../libsvn_fs_fs/tree.c:4509
+#: ../libsvn_fs_fs/tree.c:4534
 #, c-format
 msgid ""
 "Querying mergeinfo requires version %d of the FSFS filesystem schema; "
@@ -10005,7 +10014,7 @@ msgstr ""
 
 #: ../libsvn_subr/version.c:146
 msgid ""
-"Copyright (C) 2018 The Apache Software Foundation.\n"
+"Copyright (C) 2019 The Apache Software Foundation.\n"
 "This software consists of contributions made by many people;\n"
 "see the NOTICE file for more information.\n"
 "Subversion is open source software, see http://subversion.apache.org/\n"
@@ -13496,8 +13505,8 @@ msgstr ""
 
 #: ../svn/svn.c:164 ../svn/svn.c:165 ../svnadmin/svnadmin.c:168
 #: ../svnadmin/svnadmin.c:171 ../svnbench/svnbench.c:83
-#: ../svnbench/svnbench.c:84 ../svndumpfilter/svndumpfilter.c:944
-#: ../svndumpfilter/svndumpfilter.c:947 ../svnfsfs/svnfsfs.c:89
+#: ../svnbench/svnbench.c:84 ../svndumpfilter/svndumpfilter.c:946
+#: ../svndumpfilter/svndumpfilter.c:949 ../svnfsfs/svnfsfs.c:89
 #: ../svnfsfs/svnfsfs.c:92 ../svnlook/svnlook.c:115 ../svnlook/svnlook.c:127
 #: ../svnsync/svnsync.c:284 ../svnsync/svnsync.c:286
 msgid "show help on a subcommand"
@@ -13554,7 +13563,7 @@ msgid "treat value as being in charset encoding ARG"
 msgstr ""
 
 #: ../svn/svn.c:199 ../svnadmin/svnadmin.c:174 ../svnbench/svnbench.c:112
-#: ../svndumpfilter/svndumpfilter.c:950 ../svnfsfs/svnfsfs.c:95
+#: ../svndumpfilter/svndumpfilter.c:952 ../svnfsfs/svnfsfs.c:95
 #: ../svnlook/svnlook.c:179 ../svnrdump/svnrdump.c:134
 #: ../svnserve/svnserve.c:419 ../svnsync/svnsync.c:282
 #: ../svnversion/svnversion.c:144
@@ -15615,13 +15624,13 @@ msgid "--non-interactive and --force-interactive are mutually exclusive"
 msgstr ""
 
 #: ../svn/svn.c:2713 ../svnbench/svnbench.c:750
-#: ../svndumpfilter/svndumpfilter.c:1425 ../svnlook/svnlook.c:2660
+#: ../svndumpfilter/svndumpfilter.c:1427 ../svnlook/svnlook.c:2660
 #, c-format
 msgid "Subcommand argument required\n"
 msgstr ""
 
 #: ../svn/svn.c:2731 ../svnadmin/svnadmin.c:3092 ../svnbench/svnbench.c:768
-#: ../svndumpfilter/svndumpfilter.c:1442 ../svnfsfs/svnfsfs.c:367
+#: ../svndumpfilter/svndumpfilter.c:1444 ../svnfsfs/svnfsfs.c:367
 #: ../svnlook/svnlook.c:2677 ../svnrdump/svnrdump.c:978
 #, c-format
 msgid "Unknown subcommand: '%s'\n"
@@ -17010,46 +17019,46 @@ msgstr ""
 
 #: ../svndumpfilter/svndumpfilter.c:533
 #, c-format
-msgid "Invalid copy source path '%s'"
+msgid "Invalid copy source path '%s' for '%s'"
 msgstr ""
 
-#: ../svndumpfilter/svndumpfilter.c:571
+#: ../svndumpfilter/svndumpfilter.c:572
 #, c-format
 msgid "Missing Node-action for path '%s'"
 msgstr ""
 
-#: ../svndumpfilter/svndumpfilter.c:614
+#: ../svndumpfilter/svndumpfilter.c:615
 #, c-format
-msgid "No valid copyfrom revision in filtered stream"
+msgid "No valid copyfrom revision in filtered stream for '%s'"
 msgstr ""
 
-#: ../svndumpfilter/svndumpfilter.c:682
+#: ../svndumpfilter/svndumpfilter.c:684
 #, c-format
 msgid "Missing merge source path '%s'; try with --skip-missing-merge-sources"
 msgstr ""
 
-#: ../svndumpfilter/svndumpfilter.c:704
+#: ../svndumpfilter/svndumpfilter.c:706
 #, c-format
 msgid "No valid revision range 'start' in filtered stream"
 msgstr ""
 
-#: ../svndumpfilter/svndumpfilter.c:711
+#: ../svndumpfilter/svndumpfilter.c:713
 #, c-format
 msgid "No valid revision range 'end' in filtered stream"
 msgstr ""
 
-#: ../svndumpfilter/svndumpfilter.c:759 ../svndumpfilter/svndumpfilter.c:790
+#: ../svndumpfilter/svndumpfilter.c:761 ../svndumpfilter/svndumpfilter.c:792
 #, c-format
 msgid ""
 "Delta property block detected, but deltas are not enabled for node '%s' in "
 "original revision %ld"
 msgstr ""
 
-#: ../svndumpfilter/svndumpfilter.c:952
+#: ../svndumpfilter/svndumpfilter.c:954
 msgid "Do not display filtering statistics."
 msgstr ""
 
-#: ../svndumpfilter/svndumpfilter.c:954
+#: ../svndumpfilter/svndumpfilter.c:956
 msgid ""
 "Treat the path prefixes as file glob patterns.\n"
 "                             Glob special characters are '*' '?' '[]' and "
@@ -17059,53 +17068,53 @@ msgid ""
 "foo."
 msgstr ""
 
-#: ../svndumpfilter/svndumpfilter.c:959
+#: ../svndumpfilter/svndumpfilter.c:961
 msgid "Remove revisions emptied by filtering."
 msgstr ""
 
-#: ../svndumpfilter/svndumpfilter.c:961
+#: ../svndumpfilter/svndumpfilter.c:963
 msgid ""
 "Remove all empty revisions found in dumpstream\n"
 "                             except revision 0."
 msgstr ""
 
-#: ../svndumpfilter/svndumpfilter.c:964
+#: ../svndumpfilter/svndumpfilter.c:966
 msgid "Renumber revisions left after filtering."
 msgstr ""
 
-#: ../svndumpfilter/svndumpfilter.c:967
+#: ../svndumpfilter/svndumpfilter.c:969
 msgid "Skip missing merge sources."
 msgstr ""
 
-#: ../svndumpfilter/svndumpfilter.c:969
+#: ../svndumpfilter/svndumpfilter.c:971
 msgid "Don't filter revision properties."
 msgstr ""
 
-#: ../svndumpfilter/svndumpfilter.c:971
+#: ../svndumpfilter/svndumpfilter.c:973
 msgid ""
 "Read additional prefixes, one per line, from\n"
 "                             file ARG."
 msgstr ""
 
-#: ../svndumpfilter/svndumpfilter.c:983
+#: ../svndumpfilter/svndumpfilter.c:985
 msgid ""
 "Filter out nodes with given prefixes from dumpstream.\n"
 "usage: svndumpfilter exclude PATH_PREFIX...\n"
 msgstr ""
 
-#: ../svndumpfilter/svndumpfilter.c:992
+#: ../svndumpfilter/svndumpfilter.c:994
 msgid ""
 "Filter out nodes without given prefixes from dumpstream.\n"
 "usage: svndumpfilter include PATH_PREFIX...\n"
 msgstr ""
 
-#: ../svndumpfilter/svndumpfilter.c:1001
+#: ../svndumpfilter/svndumpfilter.c:1003
 msgid ""
 "Describe the usage of this program or its subcommands.\n"
 "usage: svndumpfilter help [SUBCOMMAND...]\n"
 msgstr ""
 
-#: ../svndumpfilter/svndumpfilter.c:1075
+#: ../svndumpfilter/svndumpfilter.c:1077
 msgid ""
 "general usage: svndumpfilter SUBCOMMAND [ARGS & OPTIONS ...]\n"
 "Subversion repository dump filtering tool.\n"
@@ -17115,47 +17124,47 @@ msgid ""
 "Available subcommands:\n"
 msgstr ""
 
-#: ../svndumpfilter/svndumpfilter.c:1134
+#: ../svndumpfilter/svndumpfilter.c:1136
 #, c-format
 msgid "Excluding (and dropping empty revisions for) prefix patterns:\n"
 msgstr ""
 
-#: ../svndumpfilter/svndumpfilter.c:1136
+#: ../svndumpfilter/svndumpfilter.c:1138
 #, c-format
 msgid "Excluding prefix patterns:\n"
 msgstr ""
 
-#: ../svndumpfilter/svndumpfilter.c:1139
+#: ../svndumpfilter/svndumpfilter.c:1141
 #, c-format
 msgid "Including (and dropping empty revisions for) prefix patterns:\n"
 msgstr ""
 
-#: ../svndumpfilter/svndumpfilter.c:1141
+#: ../svndumpfilter/svndumpfilter.c:1143
 #, c-format
 msgid "Including prefix patterns:\n"
 msgstr ""
 
-#: ../svndumpfilter/svndumpfilter.c:1149
+#: ../svndumpfilter/svndumpfilter.c:1151
 #, c-format
 msgid "Excluding (and dropping empty revisions for) prefixes:\n"
 msgstr ""
 
-#: ../svndumpfilter/svndumpfilter.c:1151
+#: ../svndumpfilter/svndumpfilter.c:1153
 #, c-format
 msgid "Excluding prefixes:\n"
 msgstr ""
 
-#: ../svndumpfilter/svndumpfilter.c:1154
+#: ../svndumpfilter/svndumpfilter.c:1156
 #, c-format
 msgid "Including (and dropping empty revisions for) prefixes:\n"
 msgstr ""
 
-#: ../svndumpfilter/svndumpfilter.c:1156
+#: ../svndumpfilter/svndumpfilter.c:1158
 #, c-format
 msgid "Including prefixes:\n"
 msgstr ""
 
-#: ../svndumpfilter/svndumpfilter.c:1184
+#: ../svndumpfilter/svndumpfilter.c:1186
 #, c-format
 msgid ""
 "Dropped %d revision.\n"
@@ -17166,41 +17175,41 @@ msgid_plural ""
 msgstr[0] ""
 msgstr[1] ""
 
-#: ../svndumpfilter/svndumpfilter.c:1192
+#: ../svndumpfilter/svndumpfilter.c:1194
 msgid "Revisions renumbered as follows:\n"
 msgstr ""
 
-#: ../svndumpfilter/svndumpfilter.c:1219
+#: ../svndumpfilter/svndumpfilter.c:1221
 #, c-format
 msgid "   %ld => (dropped)\n"
 msgstr ""
 
-#: ../svndumpfilter/svndumpfilter.c:1234
+#: ../svndumpfilter/svndumpfilter.c:1236
 #, c-format
 msgid "Dropped %d node:\n"
 msgid_plural "Dropped %d nodes:\n"
 msgstr[0] ""
 msgstr[1] ""
 
-#: ../svndumpfilter/svndumpfilter.c:1393
+#: ../svndumpfilter/svndumpfilter.c:1395
 msgid "--drop-empty-revs cannot be used with --drop-all-empty-revs"
 msgstr ""
 
-#: ../svndumpfilter/svndumpfilter.c:1504
+#: ../svndumpfilter/svndumpfilter.c:1506
 #, c-format
 msgid ""
 "\n"
 "Error: no prefixes supplied.\n"
 msgstr ""
 
-#: ../svndumpfilter/svndumpfilter.c:1535
+#: ../svndumpfilter/svndumpfilter.c:1537
 #, c-format
 msgid ""
 "Subcommand '%s' doesn't accept option '%s'\n"
 "Type 'svndumpfilter help %s' for usage.\n"
 msgstr ""
 
-#: ../svndumpfilter/svndumpfilter.c:1553
+#: ../svndumpfilter/svndumpfilter.c:1555
 msgid "Try 'svndumpfilter help' for more info"
 msgstr ""
 

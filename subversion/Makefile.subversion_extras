@@ -118,3 +118,5 @@ post-install:
 	done
 	find $(DSTROOT) -name \*.la -delete
 	find $(DSTROOT)$(DEVELOPER_INSTALL_DIR)/Library/Perl -name .packlist -delete
+	install -m 0755 -d $(DSTROOT)$(CLTOOLS_INSTALL_DIR)
+	ditto $(DSTROOT)$(DEVELOPER_INSTALL_DIR) $(DSTROOT)$(CLTOOLS_INSTALL_DIR)

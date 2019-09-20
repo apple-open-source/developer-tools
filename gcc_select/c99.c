@@ -99,6 +99,7 @@ main(int argc, char *argv[])
 	addarg("-fno-blocks");  /* Radar 13118788 */
 	addarg("-Wno-nullability-completeness"); /* Radar 40179527 */
 	addarg("-Wno-nullability-extension"); /* Radar 40179527 */
+	addarg("-iworkdir=os"); /* Radar 53901949 */
 
 	for (;;)
 	  {

@@ -46,3 +46,5 @@ post-install:
 	done
 	find $(DSTROOT) -name \*.la -delete
 	rm -rf $(DSTROOT)$(SVN_INSTALL_DIR)/share/pkgconfig
+	install -m 0755 -d $(DSTROOT)$(CLTOOLS_INSTALL_DIR)
+	ditto $(DSTROOT)$(DEVELOPER_INSTALL_DIR) $(DSTROOT)$(CLTOOLS_INSTALL_DIR)

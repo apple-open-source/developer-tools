@@ -10,10 +10,14 @@ ifndef DEVELOPER_INSTALL_DIR
 DEVELOPER_INSTALL_DIR := $(shell xcode-select -p)
 endif
 
+ifndef CLTOOLS_INSTALL_DIR
+CLTOOLS_INSTALL_DIR= /Library/Developer/CommandLineTools
+endif
+
 APR_TOOLCHAIN_DIR=$(dir $(shell xcrun --toolchain $(TOOLCHAINS) -f apr-1-config))/..
 
 Project               = subversion
-ProjectVersion        = 1.10.3
+ProjectVersion        = 1.10.4
 
 #-------------------------------------------------------------------------
 # build/get-py-info.py appends "-framework Python" to its --link and --libs
@@ -46,6 +50,7 @@ endif
 ifndef XCODE_SDKROOT
 XCODE_SDKROOT := $(shell xcrun --sdk com.apple.dt.xcode.macosx.support.internal --show-sdk-path)
 endif
+export XCODE_SDKROOT
 
 include $(DEVELOPER_DIR)/AppleInternal/Makefiles/DT_Signing.mk
 export CODESIGN_ALLOCATE :=  $(shell xcrun -find -sdk $(SDKROOT) codesign_allocate)
