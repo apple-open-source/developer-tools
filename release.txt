@@ -1,17 +1,14 @@
-# Developer Tools 11.3.1 YellowstoneC11C505
-bison	14	Other
-bootstrap_cmds	116	Other
-cctools	949.0.1	Other
-CoreOSMakefiles	79	Other
-developer_cmds	66	Other
-gcc_select	136	Other
-Git	122.3	Other
-gm4	16	Other
-gnumake	132	Other
-gperf	13	Other
-headerdoc	8.9.28	Other
-ld64	530	Other
-libgit2	25	Other
-pb_makefiles	1005	Other
-subversion	86	Other
-tapi	1100.0.11	Other
+# Developer Tools 12.0
+CoreOSMakefiles	79
+Git	128
+bison	14
+bootstrap_cmds	117
+cctools	973.0.1
+developer_cmds	66
+gm4	16
+gnumake	132
+gperf	13
+headerdoc	8.9.28
+ld64	609
+libgit2	25
+pb_makefiles	1006
