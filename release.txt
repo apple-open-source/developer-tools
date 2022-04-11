@@ -1,15 +1,15 @@
-# Developer Tools 13.2.1
+# Developer Tools 13.3.1
 CoreOSMakefiles	79
 Git	132
 bison	14
 bootstrap_cmds	122
-cctools	986
+cctools	994.1
 developer_cmds	66
 gm4	16
 gnumake	133.0.0.100.1
 gperf	13
 headerdoc	8.9.29
-ld64	711
-libgit2	26
+ld64	762
+libgit2	27
 pb_makefiles	1006
 tapi	1300.0.6.5
