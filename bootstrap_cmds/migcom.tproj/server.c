@@ -1394,9 +1394,7 @@ WriteDestroyPortArg(FILE *file, argument_t *arg)
    */
   if ((it->itInTrans != strNULL) &&
       (it->itOutName == MACH_MSG_TYPE_PORT_SEND)) {
-    fprintf(file, "\n");
-    fprintf(file, "\tif (IP_VALID((ipc_port_t)%s))\n", InArgMsgField(arg, ""));
-    fprintf(file, "\t\tipc_port_release_send((ipc_port_t)%s);\n", InArgMsgField(arg, ""));
+    fprintf(file, "\tipc_port_release_send((ipc_port_t)%s);\n", InArgMsgField(arg, ""));
   }
 }
 

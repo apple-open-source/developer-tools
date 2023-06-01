@@ -20,6 +20,7 @@
  * @APPLE_LICENSE_HEADER_END@
  */
 
+#import <stdlib.h>
 #import <stdio.h>
 #import <string.h>
 
@@ -78,5 +79,5 @@ int main(int argc, char *argv[])
       usage(PROGRAM_NAME);
    }
    putc('\n',stdout);      
-   exit(0);
+   return 0;
 }
