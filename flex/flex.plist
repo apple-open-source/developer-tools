@@ -1,0 +1,32 @@
+<plist version="1.0">
+<array>
+<dict>
+        <key>OpenSourceProject</key>
+        <string>flex</string>
+        <key>OpenSourceWebsiteURL</key>
+        <string>http://flex.sourceforge.net</string>
+        <key>OpenSourceVersion</key>
+        <string>2.6.4</string>
+        <key>OpenSourceURL</key>
+	<string>https://github.com/westes/flex/releases/download/v2.6.4/flex-2.6.4.tar.gz</string>
+	<key>OpenSourceSHA1</key>
+	<string>fafece095a0d9890ebd618adb1f242d8908076e1</string>
+        <key>OpenSourceImportDate</key>
+        <string>2021-02-18</string>
+        <key>OpenSourceModifications</key>
+        <array>
+		<string>Clear stdin error when rewiring for child</string>
+		<string>libmain's main() must exit</string>
+		<string>find M4 in $PATH</string>
+		<string>Fix warnings when compiling lexer with -Wall</string>
+		<string>Fix warnings when compiling lexer with -Wshorten-64-to-32</string>
+		<string>Fix -Wdocumentation issues</string>
+        </array>
+        <key>OpenSourceLicense</key>
+        <string>Other</string>
+        <key>OpenSourceLicenseFile</key>
+        <string>flex.txt</string>
+</dict>
+</array>
+</plist>
+
